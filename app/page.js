@@ -3,16 +3,16 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const GOLD = '#c8a84b'
-const GOLD_DIM = 'rgba(200,168,75,0.12)'
-const GOLD_BORDER = 'rgba(200,168,75,0.22)'
 
 function fmt_crc(val) {
   if (!val && val !== 0) return '—'
   const n = parseFloat(val)
   if (isNaN(n)) return '—'
-  if (n >= 1_000_000) return `₡${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `₡${(n/1_000).toFixed(0)}K`
-  return `₡${n.toFixed(0)}`
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}₡${(abs/1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}₡${(abs/1_000).toFixed(0)}K`
+  return `${sign}₡${abs.toFixed(0)}`
 }
 
 function KpiCard({ icon, label, value, sub, color, loading }) {
@@ -67,7 +67,6 @@ function ContenedorRow({ envio }) {
   }
   const color = estados[envio.estado] || '#888'
   const eta = envio.eta ? new Date(envio.eta).toLocaleDateString('es-CR', { day: 'numeric', month: 'short' }) : '—'
-
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 9, background: '#f7f8fa', border: '1px solid #e8eaed', marginBottom: 8 }}>
       <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
@@ -102,7 +101,7 @@ export default function CosmosPage() {
   useEffect(() => {
     async function cargar() {
       try {
-        // 1. Stock crítico (bajo mínimo)
+        // 1. Stock crítico
         const { data: stock } = await supabase
           .from('neo_minimos_maximos')
           .select('nombre, existencias, minimo, promedio_mensual')
@@ -134,20 +133,25 @@ export default function CosmosPage() {
         // 4. Cuentas por pagar
         const { data: pagos } = await supabase
           .from('fin_cuentas_pagar')
-          .select('Saldo actual')
-          .limit(1000)
+          .select('*')
+          .limit(2000)
 
-        const totalPagar = (pagos || []).reduce((sum, r) => sum + (parseFloat(r['Saldo actual']) || 0), 0)
+        const totalPagar = (pagos || []).reduce((sum, r) => {
+          const v = parseFloat(r['saldo_actual'] || r['Saldo actual'] || 0)
+          return sum + (isNaN(v) ? 0 : v)
+        }, 0)
 
         // 5. Cuentas por cobrar
         const { data: cobros } = await supabase
           .from('fin_cuentas_cobrar')
-          .select('Saldo actual')
-          .limit(1000)
+          .select('*')
+          .limit(2000)
 
-        const totalCobrar = (cobros || []).reduce((sum, r) => sum + (parseFloat(r['Saldo actual']) || 0), 0)
+        const totalCobrar = (cobros || []).reduce((sum, r) => {
+          const v = parseFloat(r['saldo_actual'] || r['Saldo actual'] || 0)
+          return sum + (isNaN(v) ? 0 : v)
+        }, 0)
 
-        // Alertas de stock crítico
         const alertasStock = criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
           text: `${i.nombre} — Existencias: ${i.existencias} (mín. ${i.minimo})`,
@@ -178,7 +182,6 @@ export default function CosmosPage() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD, marginBottom: 4, display: 'block' }}>
           Dashboard ejecutivo
@@ -186,18 +189,15 @@ export default function CosmosPage() {
         <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: '#1a1d24', letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 4 }}>
           🌌 Cosmos
         </h1>
-        <p style={{ fontSize: '0.875rem', color: '#6a7288' }}>
-          Visión consolidada del negocio en tiempo real.
-        </p>
+        <p style={{ fontSize: '0.875rem', color: '#6a7288' }}>Visión consolidada del negocio en tiempo real.</p>
       </div>
 
-      {/* KPI Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
-        <KpiCard icon="⚠️" label="Stock crítico" value={kpis.stockCritico ?? '—'} sub="ítems bajo mínimo" color="#f43f5e" loading={loading} />
-        <KpiCard icon="🚢" label="Contenedores" value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos" color="#0284c7" loading={loading} />
-        <KpiCard icon="✨" label="Tareas" value={kpis.tareasPendientes ?? '—'} sub="pendientes hoy" color="#7c3aed" loading={loading} />
-        <KpiCard icon="💸" label="Por pagar" value={fmt_crc(kpis.totalPagar)} sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
-        <KpiCard icon="📥" label="Por cobrar" value={fmt_crc(kpis.totalCobrar)} sub="cuentas a clientes" color="#0d9488" loading={loading} />
+        <KpiCard icon="⚠️" label="Stock crítico"      value={kpis.stockCritico ?? '—'}        sub="ítems bajo mínimo"       color="#f43f5e" loading={loading} />
+        <KpiCard icon="🚢" label="Contenedores"       value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"     color="#0284c7" loading={loading} />
+        <KpiCard icon="✨" label="Tareas"             value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"          color="#7c3aed" loading={loading} />
+        <KpiCard icon="💸" label="Por pagar"          value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores"   color="#f43f5e" loading={loading} />
+        <KpiCard icon="📥" label="Por cobrar"         value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"      color="#0d9488" loading={loading} />
         <KpiCard
           icon={posPositiva ? '🟢' : '🔴'}
           label="Posición neta"
@@ -208,40 +208,37 @@ export default function CosmosPage() {
         />
       </div>
 
-      {/* Alertas + Contenedores + Tareas */}
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
 
-        {/* Alertas de stock */}
         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚠️ Stock crítico</div>
-          {loading ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
             : alertas.length === 0
               ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>✅ Sin alertas de stock</div>
               : alertas.map((a, i) => <AlertRow key={i} {...a} />)
           }
           {!loading && kpis.stockCritico > 5 && (
-            <div style={{ fontSize: '0.72rem', color: '#9ba3b5', marginTop: 8 }}>
-              +{kpis.stockCritico - 5} ítems más en Saturno
-            </div>
+            <div style={{ fontSize: '0.72rem', color: '#9ba3b5', marginTop: 8 }}>+{kpis.stockCritico - 5} ítems más en Saturno</div>
           )}
         </div>
 
-        {/* Contenedores */}
         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>🚢 Contenedores activos</div>
-          {loading ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
             : contenedores.length === 0
               ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay contenedores activos</div>
               : contenedores.map((e, i) => <ContenedorRow key={i} envio={e} />)
           }
         </div>
 
-        {/* Tareas */}
         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>✨ Tareas pendientes</div>
-          {loading ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
             : tareas.length === 0
               ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
@@ -250,7 +247,6 @@ export default function CosmosPage() {
 
       </div>
 
-      {/* Timestamp */}
       <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
         Actualizado: {new Date().toLocaleString('es-CR')}
       </div>
