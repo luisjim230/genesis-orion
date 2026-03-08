@@ -1,311 +1,484 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://xeeieqjqmtoiutfnltqu.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs';
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(
+  'https://xeeieqjqmtoiutfnltqu.supabase.co',
+  'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs'
+);
 
+// ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
-  page: { background: '#0f1115', minHeight: '100vh', padding: '28px', fontFamily: 'DM Sans, sans-serif', color: '#c9d1e0' },
-  title: { fontSize: '1.7em', fontWeight: 700, color: '#ffffff', margin: 0 },
-  sub: { fontSize: '0.82em', color: '#5a6a80', marginTop: '4px', marginBottom: '24px' },
-  card: { background: '#161920', border: '1px solid #1e2330', borderRadius: '12px', padding: '20px', marginBottom: '16px' },
-  tabBar: { display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '1px solid #1e2330' },
-  tab: (a) => ({ padding: '10px 18px', cursor: 'pointer', border: 'none', background: 'none', color: a ? '#c8a84b' : '#5a6a80', fontWeight: a ? 700 : 400, borderBottom: a ? '2px solid #c8a84b' : '2px solid transparent', fontSize: '0.88em', fontFamily: 'inherit' }),
-  btn: (c='#c8a84b') => ({ background: c, color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 18px', cursor: 'pointer', fontSize: '0.85em', fontWeight: 600, fontFamily: 'inherit' }),
-  btnSm: (c='#252a35') => ({ background: c, color: '#c9d1e0', border: '1px solid #1e2330', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', fontSize: '0.78em', fontFamily: 'inherit' }),
-  input: { background: '#0f1115', border: '1px solid #1e2330', borderRadius: '8px', padding: '9px 12px', color: '#c9d1e0', fontSize: '0.87em', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' },
-  label: { fontSize: '0.75em', color: '#5a6a80', display: 'block', marginBottom: '4px', fontWeight: 500 },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' },
-  divider: { border: 'none', borderTop: '1px solid #1e2330', margin: '20px 0' },
-  badge: (c) => ({ background: c+'22', color: c, border: `1px solid ${c}55`, borderRadius: '20px', padding: '3px 10px', fontSize: '0.72em', fontWeight: 600 }),
+  page:      { background:'#0f1115', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'#c9d1e0' },
+  header:    { marginBottom:'24px' },
+  title:     { fontSize:'1.7rem', fontWeight:700, color:'#fff', margin:0 },
+  caption:   { fontSize:'0.82rem', color:'#5a6a80', marginTop:'4px' },
+  tabs:      { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid #1e2530', paddingBottom:'0' },
+  tab:       { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, transition:'all .2s', background:'transparent', color:'#5a6a80', marginBottom:'-1px' },
+  tabActive: { background:'#1c1f26', color:'#c8a84b', borderBottom:'2px solid #c8a84b' },
+  card:      { background:'#161920', borderRadius:'12px', padding:'20px', marginBottom:'12px', border:'1px solid #1e2530' },
+  expander:  { background:'#161920', borderRadius:'12px', border:'1px solid #1e2530', marginBottom:'16px', overflow:'hidden' },
+  expanderHeader: { padding:'12px 16px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#c8a84b', fontWeight:600, fontSize:'0.9rem' },
+  expanderBody: { padding:'16px', borderTop:'1px solid #1e2530' },
+  input:     { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
+  textarea:  { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', resize:'vertical', minHeight:'70px', boxSizing:'border-box' },
+  select:    { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
+  btnPrimary:{ background:'#c8a84b', color:'#0f1115', border:'none', borderRadius:'8px', padding:'9px 18px', fontWeight:700, cursor:'pointer', fontSize:'0.9rem', width:'100%' },
+  btnDanger: { background:'#3a1a1a', color:'#ff6b6b', border:'1px solid #5a2a2a', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', fontSize:'0.85rem' },
+  btnGhost:  { background:'transparent', border:'none', cursor:'pointer', fontSize:'1.1rem', padding:'4px 8px' },
+  label:     { fontSize:'0.82rem', color:'#5a6a80', marginBottom:'4px', display:'block' },
+  divider:   { border:'none', borderTop:'1px solid #1e2530', margin:'16px 0' },
+  badge:     (color) => ({ background:color, color:'#fff', padding:'2px 8px', borderRadius:'10px', fontSize:'0.78rem', fontWeight:600, display:'inline-block' }),
+  row:       { display:'flex', gap:'12px', alignItems:'flex-start' },
+  calCell:   (bg, border, color) => ({ background:bg, border:`2px solid ${border}`, borderRadius:'8px', padding:'6px', textAlign:'center', minHeight:'70px', color, margin:'2px', fontSize:'0.8rem' }),
+  info:      { background:'#1a2535', border:'1px solid #2a3a55', borderRadius:'8px', padding:'12px 16px', color:'#7ec8e3', fontSize:'0.88rem', marginTop:'8px' },
 };
 
-const PRIORIDAD = { Alta: '#fc8181', Media: '#f6ad55', Baja: '#68d391' };
-const PRIORIDAD_ICON = { Alta: '🔴', Media: '🟡', Baja: '🟢' };
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const PRIORIDADES = ['🔴 Alta', '🟡 Media', '🟢 Baja'];
+const PRIOR_COLOR = { '🔴 Alta':'#FF4B4B', '🟡 Media':'#FFA500', '🟢 Baja':'#21C354' };
+const PRIOR_ORDEN = { '🔴 Alta':0, '🟡 Media':1, '🟢 Baja':2 };
 
-function diasRestantes(fecha) {
-  if (!fecha) return null;
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const f = new Date(fecha + 'T00:00:00');
-  return Math.ceil((f - hoy) / 86400000);
+function Badge({ prioridad }) {
+  return <span style={S.badge(PRIOR_COLOR[prioridad] || '#888')}>{prioridad}</span>;
 }
 
-function colorDias(d) {
-  if (d === null) return '#5a6a80';
-  if (d < 0) return '#fc8181';
-  if (d <= 3) return '#f6ad55';
-  return '#68d391';
+function Expander({ titulo, children, defaultOpen=false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={S.expander}>
+      <div style={S.expanderHeader} onClick={()=>setOpen(!open)}>
+        <span>{titulo}</span>
+        <span style={{ fontSize:'0.8rem' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && <div style={S.expanderBody}>{children}</div>}
+    </div>
+  );
 }
 
-const TAREA_INIT = { titulo: '', descripcion: '', prioridad: 'Media', fecha_vencimiento: '', responsable: '', categoria: '' };
-const RECUR_INIT = { titulo: '', descripcion: '', dia_mes: '1', responsable: '' };
+// ── Tab 1: Pendientes ──────────────────────────────────────────────────────
+function TabPendientes() {
+  const [tareas, setTareas]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [filtro, setFiltro]       = useState('Todas');
+  const [titulo, setTitulo]       = useState('');
+  const [notas, setNotas]         = useState('');
+  const [prior, setPrior]         = useState('🔴 Alta');
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg]             = useState('');
 
-export default function Tareas() {
-  const [tab, setTab] = useState(0);
-  const [tareas, setTareas] = useState([]);
-  const [completadas, setCompletadas] = useState([]);
-  const [recurrentes, setRecurrentes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(TAREA_INIT);
-  const [editId, setEditId] = useState(null);
-  const [showRecurForm, setShowRecurForm] = useState(false);
-  const [recurForm, setRecurForm] = useState(RECUR_INIT);
-  const [editRecurId, setEditRecurId] = useState(null);
-  const [msg, setMsg] = useState(null);
-  const [calMes, setCalMes] = useState(new Date().getMonth());
-  const [calAnio, setCalAnio] = useState(new Date().getFullYear());
-
-  useEffect(() => { cargar(); }, []);
-
-  async function cargar() {
+  const cargar = useCallback(async () => {
     setLoading(true);
-    const [{ data: pend }, { data: comp }, { data: recur }] = await Promise.all([
-      supabase.from('vega_tareas').select('*').eq('completada', false).order('fecha_vencimiento', { ascending: true, nullsFirst: false }),
-      supabase.from('vega_tareas').select('*').eq('completada', true).order('updated_at', { ascending: false }).limit(30),
-      supabase.from('vega_recurrentes').select('*').order('dia_mes', { ascending: true }),
-    ]);
-    setTareas(pend || []); setCompletadas(comp || []); setRecurrentes(recur || []);
+    const { data } = await supabase.from('vega_tareas').select('*').eq('estado','activa');
+    const sorted = (data||[]).sort((a,b)=>(PRIOR_ORDEN[a.prioridad]||9)-(PRIOR_ORDEN[b.prioridad]||9));
+    setTareas(sorted);
     setLoading(false);
-  }
+  }, []);
 
-  function mostrarMsg(texto, tipo='ok') { setMsg({ texto, tipo }); setTimeout(() => setMsg(null), 3000); }
-  function setF(k, v) { setForm(f => ({ ...f, [k]: v })); }
-  function setR(k, v) { setRecurForm(f => ({ ...f, [k]: v })); }
+  useEffect(()=>{ cargar(); }, [cargar]);
 
-  async function guardarTarea() {
-    if (!form.titulo) { mostrarMsg('El título es requerido.', 'err'); return; }
-    if (editId) {
-      await supabase.from('vega_tareas').update({ ...form }).eq('id', editId);
-      mostrarMsg('Tarea actualizada.');
-    } else {
-      await supabase.from('vega_tareas').insert([{ ...form, completada: false }]);
-      mostrarMsg('Tarea creada.');
-    }
-    setForm(TAREA_INIT); setEditId(null); setShowForm(false); cargar();
-  }
+  const ahora = () => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  };
 
-  async function completar(id) {
-    await supabase.from('vega_tareas').update({ completada: true }).eq('id', id);
-    mostrarMsg('✅ Tarea completada.');
+  const agregar = async () => {
+    if (!titulo.trim()) { setMsg('⚠️ La tarea necesita un nombre.'); return; }
+    setGuardando(true);
+    const id = Date.now().toString();
+    await supabase.from('vega_tareas').upsert({
+      id, titulo:titulo.trim(), prioridad:prior, notas:notas.trim(),
+      estado:'activa', creada:ahora(), completada:null
+    });
+    setTitulo(''); setNotas(''); setPrior('🔴 Alta');
+    setMsg('✅ Tarea agregada.'); setGuardando(false);
     cargar();
-  }
+    setTimeout(()=>setMsg(''), 3000);
+  };
 
-  async function reabrir(id) {
-    await supabase.from('vega_tareas').update({ completada: false }).eq('id', id);
-    mostrarMsg('Tarea reabierta.');
+  const completar = async (tarea) => {
+    await supabase.from('vega_tareas').update({ estado:'completada', completada:ahora() }).eq('id', tarea.id);
     cargar();
-  }
+  };
 
-  async function eliminarTarea(id) {
-    if (!confirm('¿Eliminar esta tarea?')) return;
+  const eliminar = async (id) => {
     await supabase.from('vega_tareas').delete().eq('id', id);
     cargar();
-  }
+  };
 
-  async function guardarRecur() {
-    if (!recurForm.titulo) { mostrarMsg('El título es requerido.', 'err'); return; }
-    if (editRecurId) {
-      await supabase.from('vega_recurrentes').update({ ...recurForm }).eq('id', editRecurId);
-    } else {
-      await supabase.from('vega_recurrentes').insert([{ ...recurForm }]);
-    }
-    setRecurForm(RECUR_INIT); setEditRecurId(null); setShowRecurForm(false);
-    mostrarMsg('Tarea recurrente guardada.'); cargar();
-  }
-
-  async function eliminarRecur(id) {
-    if (!confirm('¿Eliminar tarea recurrente?')) return;
-    await supabase.from('vega_recurrentes').delete().eq('id', id);
-    cargar();
-  }
-
-  // Calendario
-  const primerDia = new Date(calAnio, calMes, 1).getDay();
-  const diasEnMes = new Date(calAnio, calMes + 1, 0).getDate();
-  const tareasDelMes = tareas.filter(t => {
-    if (!t.fecha_vencimiento) return false;
-    const f = new Date(t.fecha_vencimiento + 'T00:00:00');
-    return f.getMonth() === calMes && f.getFullYear() === calAnio;
-  });
-  function tareasDelDia(dia) { return tareasDelMes.filter(t => new Date(t.fecha_vencimiento + 'T00:00:00').getDate() === dia); }
+  const filtradas = filtro === 'Todas' ? tareas : tareas.filter(t=>t.prioridad===filtro);
 
   return (
-    <div style={S.page}>
-      <div style={S.title}>✨ Matusalén – Tareas</div>
-      <div style={S.sub}>Gestión de tareas y recordatorios · Corporación Rojimo S.A.</div>
+    <div>
+      <h3 style={{ color:'#fff', marginTop:0 }}>📖 Tareas pendientes</h3>
 
-      {msg && <div style={{ background: msg.tipo==='ok'?'#68d39122':'#fc818122', border: `1px solid ${msg.tipo==='ok'?'#68d391':'#fc8181'}55`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', color: msg.tipo==='ok'?'#68d391':'#fc8181', fontSize: '0.85em' }}>{msg.tipo==='ok'?'✅':'❌'} {msg.texto}</div>}
+      <Expander titulo="✍️ Agregar nueva tarea">
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:'16px' }}>
+          <div>
+            <label style={S.label}>Tarea</label>
+            <input style={S.input} placeholder="¿Qué hay que hacer?" value={titulo} onChange={e=>setTitulo(e.target.value)}/>
+            <div style={{ marginTop:'10px' }}>
+              <label style={S.label}>Notas (opcional)</label>
+              <textarea style={S.textarea} placeholder="Contexto, detalles..." value={notas} onChange={e=>setNotas(e.target.value)}/>
+            </div>
+          </div>
+          <div>
+            <label style={S.label}>Prioridad</label>
+            <select style={S.select} value={prior} onChange={e=>setPrior(e.target.value)}>
+              {PRIORIDADES.map(p=><option key={p}>{p}</option>)}
+            </select>
+            <div style={{ marginTop:'32px' }}>
+              <button style={S.btnPrimary} onClick={agregar} disabled={guardando}>
+                {guardando ? 'Guardando...' : '➕ Agregar'}
+              </button>
+            </div>
+          </div>
+        </div>
+        {msg && <div style={{ marginTop:'10px', color: msg.startsWith('⚠️') ? '#FFA500' : '#21C354', fontSize:'0.88rem' }}>{msg}</div>}
+      </Expander>
 
-      <div style={S.tabBar}>
-        {['📋 Pendientes', '🔁 Recurrentes', '📅 Calendario', '✅ Completadas'].map((t, i) => (
-          <button key={i} style={S.tab(tab===i)} onClick={() => setTab(i)}>{t}</button>
+      <hr style={S.divider}/>
+      <div style={{ display:'flex', gap:'8px', marginBottom:'16px', flexWrap:'wrap' }}>
+        {['Todas','🔴 Alta','🟡 Media','🟢 Baja'].map(f=>(
+          <button key={f}
+            style={{ ...S.tab, ...(filtro===f ? S.tabActive : {}), borderRadius:'20px', marginBottom:0 }}
+            onClick={()=>setFiltro(f)}>
+            {f}
+          </button>
         ))}
       </div>
 
-      {tab === 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ fontSize: '0.85em', color: '#5a6a80' }}>{tareas.length} tareas pendientes</div>
-            <button style={S.btn()} onClick={() => { setForm(TAREA_INIT); setEditId(null); setShowForm(!showForm); }}>➕ Nueva tarea</button>
+      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      : filtradas.length===0
+        ? <div style={S.info}>🕊️ No hay tareas pendientes.</div>
+        : <>
+          <div style={{ color:'#5a6a80', fontSize:'0.85rem', marginBottom:'12px' }}>
+            <strong style={{ color:'#c9d1e0' }}>{filtradas.length}</strong> tarea(s) pendiente(s)
           </div>
-
-          {showForm && (
-            <div style={S.card}>
-              <div style={{ fontWeight: 700, color: '#fff', marginBottom: '16px' }}>{editId ? '✏️ Editar tarea' : '➕ Nueva tarea'}</div>
-              <div style={{ marginBottom: '12px' }}><label style={S.label}>Título *</label><input style={S.input} value={form.titulo} onChange={e => setF('titulo', e.target.value)} /></div>
-              <div style={{ marginBottom: '12px' }}><label style={S.label}>Descripción</label><textarea style={{ ...S.input, minHeight: '70px', resize: 'vertical' }} value={form.descripcion} onChange={e => setF('descripcion', e.target.value)} /></div>
-              <div style={S.grid2}>
-                <div><label style={S.label}>Prioridad</label>
-                  <select style={S.input} value={form.prioridad} onChange={e => setF('prioridad', e.target.value)}>
-                    {Object.keys(PRIORIDAD).map(p => <option key={p}>{p}</option>)}
-                  </select>
+          {filtradas.map(t=>(
+            <div key={t.id} style={{ ...S.card, display:'flex', gap:'12px', alignItems:'flex-start' }}>
+              <input type="checkbox" style={{ marginTop:'4px', cursor:'pointer', accentColor:'#c8a84b' }}
+                onChange={()=>completar(t)}/>
+              <div style={{ flex:1 }}>
+                <div style={{ marginBottom:'4px' }}>
+                  <Badge prioridad={t.prioridad}/>&nbsp;&nbsp;
+                  <strong style={{ color:'#fff' }}>{t.titulo}</strong>
                 </div>
-                <div><label style={S.label}>Fecha de vencimiento</label><input style={S.input} type="date" value={form.fecha_vencimiento} onChange={e => setF('fecha_vencimiento', e.target.value)} /></div>
-                <div><label style={S.label}>Responsable</label><input style={S.input} value={form.responsable} onChange={e => setF('responsable', e.target.value)} /></div>
-                <div><label style={S.label}>Categoría</label><input style={S.input} value={form.categoria} onChange={e => setF('categoria', e.target.value)} /></div>
+                {t.notas && <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'4px' }}>📝 {t.notas}</div>}
+                <div style={{ fontSize:'0.78rem', color:'#3a4a5a' }}>Creada el {t.creada}</div>
               </div>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                <button style={S.btn()} onClick={guardarTarea}>💾 Guardar</button>
-                <button style={S.btnSm()} onClick={() => { setShowForm(false); setForm(TAREA_INIT); setEditId(null); }}>Cancelar</button>
-              </div>
-            </div>
-          )}
-
-          {loading ? <div style={{ textAlign: 'center', padding: '40px', color: '#5a6a80' }}>Cargando...</div> : tareas.length === 0 ? (
-            <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '40px' }}>🎉 Sin tareas pendientes</div>
-          ) : tareas.map(t => {
-            const d = diasRestantes(t.fecha_vencimiento);
-            const dc = colorDias(d);
-            return (
-              <div key={t.id} style={{ ...S.card, borderLeft: `3px solid ${PRIORIDAD[t.prioridad] || '#5a6a80'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 700, color: '#fff' }}>{t.titulo}</span>
-                      <span style={S.badge(PRIORIDAD[t.prioridad] || '#5a6a80')}>{PRIORIDAD_ICON[t.prioridad]} {t.prioridad}</span>
-                      {t.categoria && <span style={S.badge('#63b3ed')}>{t.categoria}</span>}
-                    </div>
-                    {t.descripcion && <div style={{ fontSize: '0.84em', color: '#8899aa', marginBottom: '6px' }}>{t.descripcion}</div>}
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.78em' }}>
-                      {t.fecha_vencimiento && <span style={{ color: dc }}>📅 {t.fecha_vencimiento} {d !== null && `· ${d < 0 ? `Vencida hace ${Math.abs(d)}d` : d === 0 ? 'Vence hoy' : `${d}d restantes`}`}</span>}
-                      {t.responsable && <span style={{ color: '#5a6a80' }}>👤 {t.responsable}</span>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button style={S.btnSm('#1a3a1a')} onClick={() => completar(t.id)}>✅</button>
-                    <button style={S.btnSm()} onClick={() => { setForm({ titulo: t.titulo, descripcion: t.descripcion||'', prioridad: t.prioridad, fecha_vencimiento: t.fecha_vencimiento||'', responsable: t.responsable||'', categoria: t.categoria||'' }); setEditId(t.id); setShowForm(true); }}>✏️</button>
-                    <button style={S.btnSm('#3d1515')} onClick={() => eliminarTarea(t.id)}>🗑️</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {tab === 1 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ fontSize: '0.85em', color: '#5a6a80' }}>{recurrentes.length} tareas recurrentes</div>
-            <button style={S.btn()} onClick={() => { setRecurForm(RECUR_INIT); setEditRecurId(null); setShowRecurForm(!showRecurForm); }}>➕ Nueva recurrente</button>
-          </div>
-
-          {showRecurForm && (
-            <div style={S.card}>
-              <div style={{ fontWeight: 700, color: '#fff', marginBottom: '16px' }}>{editRecurId ? '✏️ Editar' : '➕ Nueva tarea recurrente'}</div>
-              <div style={{ marginBottom: '12px' }}><label style={S.label}>Título *</label><input style={S.input} value={recurForm.titulo} onChange={e => setR('titulo', e.target.value)} /></div>
-              <div style={{ marginBottom: '12px' }}><label style={S.label}>Descripción</label><textarea style={{ ...S.input, minHeight: '60px', resize: 'vertical' }} value={recurForm.descripcion} onChange={e => setR('descripcion', e.target.value)} /></div>
-              <div style={S.grid2}>
-                <div><label style={S.label}>Día del mes (1-31)</label><input style={S.input} type="number" min="1" max="31" value={recurForm.dia_mes} onChange={e => setR('dia_mes', e.target.value)} /></div>
-                <div><label style={S.label}>Responsable</label><input style={S.input} value={recurForm.responsable} onChange={e => setR('responsable', e.target.value)} /></div>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                <button style={S.btn()} onClick={guardarRecur}>💾 Guardar</button>
-                <button style={S.btnSm()} onClick={() => { setShowRecurForm(false); setRecurForm(RECUR_INIT); }}>Cancelar</button>
-              </div>
-            </div>
-          )}
-
-          {recurrentes.length === 0 ? (
-            <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '40px' }}>Sin tareas recurrentes registradas.</div>
-          ) : recurrentes.map(r => {
-            const hoy = new Date().getDate();
-            const dia = parseInt(r.dia_mes);
-            const diff = dia - hoy;
-            const color = diff < 0 ? '#fc8181' : diff <= 3 ? '#f6ad55' : '#68d391';
-            const label = diff < 0 ? `Venció hace ${Math.abs(diff)}d` : diff === 0 ? 'Vence hoy' : `${diff}d restantes`;
-            return (
-              <div key={r.id} style={{ ...S.card, borderLeft: `3px solid ${color}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#fff', marginBottom: '4px' }}>🔁 {r.titulo}</div>
-                    {r.descripcion && <div style={{ fontSize: '0.84em', color: '#8899aa', marginBottom: '6px' }}>{r.descripcion}</div>}
-                    <div style={{ fontSize: '0.78em', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                      <span style={{ color }}>📅 Día {r.dia_mes} de cada mes · {label}</span>
-                      {r.responsable && <span style={{ color: '#5a6a80' }}>👤 {r.responsable}</span>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button style={S.btnSm()} onClick={() => { setRecurForm({ titulo: r.titulo, descripcion: r.descripcion||'', dia_mes: r.dia_mes, responsable: r.responsable||'' }); setEditRecurId(r.id); setShowRecurForm(true); }}>✏️</button>
-                    <button style={S.btnSm('#3d1515')} onClick={() => eliminarRecur(r.id)}>🗑️</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {tab === 2 && (
-        <div style={S.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <button style={S.btnSm()} onClick={() => { if (calMes === 0) { setCalMes(11); setCalAnio(y => y-1); } else setCalMes(m => m-1); }}>◀</button>
-            <div style={{ fontWeight: 700, color: '#fff', fontSize: '1.05em' }}>{MESES[calMes]} {calAnio}</div>
-            <button style={S.btnSm()} onClick={() => { if (calMes === 11) { setCalMes(0); setCalAnio(y => y+1); } else setCalMes(m => m+1); }}>▶</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '4px', marginBottom: '8px' }}>
-            {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => <div key={d} style={{ textAlign: 'center', fontSize: '0.72em', color: '#5a6a80', fontWeight: 600, padding: '4px' }}>{d}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '4px' }}>
-            {Array.from({ length: primerDia }).map((_, i) => <div key={'e'+i} />)}
-            {Array.from({ length: diasEnMes }).map((_, i) => {
-              const dia = i + 1;
-              const tds = tareasDelDia(dia);
-              const hoy = new Date(); const esHoy = hoy.getDate()===dia && hoy.getMonth()===calMes && hoy.getFullYear()===calAnio;
-              return (
-                <div key={dia} style={{ background: esHoy ? '#252a35' : '#0f1115', border: `1px solid ${esHoy ? '#c8a84b' : '#1e2330'}`, borderRadius: '6px', padding: '6px', minHeight: '64px' }}>
-                  <div style={{ fontSize: '0.78em', fontWeight: esHoy ? 700 : 400, color: esHoy ? '#c8a84b' : '#5a6a80', marginBottom: '4px' }}>{dia}</div>
-                  {tds.map(t => <div key={t.id} style={{ fontSize: '0.65em', background: (PRIORIDAD[t.prioridad]||'#5a6a80')+'33', color: PRIORIDAD[t.prioridad]||'#5a6a80', borderRadius: '3px', padding: '2px 4px', marginBottom: '2px', lineHeight: 1.3 }}>{t.titulo.substring(0,18)}</div>)}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {tab === 3 && (
-        <div>
-          <div style={{ fontSize: '0.85em', color: '#5a6a80', marginBottom: '14px' }}>{completadas.length} tareas completadas</div>
-          {completadas.length === 0 ? <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '30px' }}>Sin tareas completadas.</div> : completadas.map(t => (
-            <div key={t.id} style={{ ...S.card, opacity: 0.7 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: '#c9d1e0', textDecoration: 'line-through' }}>✅ {t.titulo}</div>
-                  {t.fecha_vencimiento && <div style={{ fontSize: '0.78em', color: '#5a6a80', marginTop: '3px' }}>📅 {t.fecha_vencimiento}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button style={S.btnSm()} onClick={() => reabrir(t.id)}>↩️ Reabrir</button>
-                  <button style={S.btnSm('#3d1515')} onClick={() => eliminarTarea(t.id)}>🗑️</button>
-                </div>
-              </div>
+              <button style={S.btnGhost} onClick={()=>eliminar(t.id)} title="Eliminar">🗑️</button>
             </div>
           ))}
+        </>
+      }
+    </div>
+  );
+}
+
+// ── Tab 2: Recurrentes ────────────────────────────────────────────────────
+function TabRecurrentes() {
+  const [recs, setRecs]           = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [dia, setDia]             = useState(1);
+  const [titulo, setTitulo]       = useState('');
+  const [notas, setNotas]         = useState('');
+  const [msg, setMsg]             = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const hoy = new Date();
+  const diasMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const nombreMes = hoy.toLocaleString('es-CR', { month:'long', year:'numeric' });
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('vega_recurrentes').select('*');
+    const sorted = (data||[]).sort((a,b)=>a.dia-b.dia);
+    setRecs(sorted);
+    setLoading(false);
+  }, []);
+
+  useEffect(()=>{ cargar(); }, [cargar]);
+
+  const guardar = async () => {
+    if (!titulo.trim()) { setMsg('⚠️ La tarea necesita un nombre.'); return; }
+    setGuardando(true);
+    await supabase.from('vega_recurrentes').upsert({
+      id: Date.now().toString(), dia: parseInt(dia), titulo:titulo.trim(), notas:notas.trim()
+    });
+    setTitulo(''); setNotas(''); setDia(1);
+    setMsg('✅ Tarea recurrente guardada.'); setGuardando(false);
+    cargar();
+    setTimeout(()=>setMsg(''), 3000);
+  };
+
+  const eliminar = async (id) => {
+    await supabase.from('vega_recurrentes').delete().eq('id', id);
+    cargar();
+  };
+
+  const hoyDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+  return (
+    <div>
+      <h3 style={{ color:'#fff', marginTop:0 }}>📜 Tareas recurrentes</h3>
+      <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>Las tareas que se repiten cada mes.</div>
+
+      <Expander titulo="⚡ Agregar tarea mensual recurrente">
+        <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:'16px' }}>
+          <div>
+            <label style={S.label}>Día del mes</label>
+            <input style={S.input} type="number" min={1} max={31} value={dia} onChange={e=>setDia(e.target.value)}/>
+          </div>
+          <div>
+            <label style={S.label}>Tarea recurrente</label>
+            <input style={S.input} placeholder="Ej: Pagar leasing Toyota" value={titulo} onChange={e=>setTitulo(e.target.value)}/>
+            <div style={{ marginTop:'10px' }}>
+              <label style={S.label}>Notas</label>
+              <input style={S.input} placeholder="Detalles adicionales..." value={notas} onChange={e=>setNotas(e.target.value)}/>
+            </div>
+          </div>
         </div>
-      )}
+        <div style={{ marginTop:'14px' }}>
+          <button style={{ ...S.btnPrimary, width:'auto', padding:'9px 24px' }} onClick={guardar} disabled={guardando}>
+            {guardando ? 'Guardando...' : '⚡ Guardar recurrente'}
+          </button>
+        </div>
+        {msg && <div style={{ marginTop:'10px', color: msg.startsWith('⚠️') ? '#FFA500' : '#21C354', fontSize:'0.88rem' }}>{msg}</div>}
+      </Expander>
+
+      <hr style={S.divider}/>
+      <h4 style={{ color:'#c8a84b', textTransform:'capitalize' }}>📅 {nombreMes}</h4>
+
+      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      : recs.length===0
+        ? <div style={S.info}>📭 No hay tareas recurrentes todavía.</div>
+        : recs.map(rec => {
+            const diaEfectivo = Math.min(rec.dia, diasMes);
+            const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), diaEfectivo);
+            const pasado = fecha < hoyDate;
+            const esHoy  = fecha.getTime() === hoyDate.getTime();
+            const diasFaltan = Math.round((fecha - hoyDate) / 86400000);
+
+            let bg='#1a2a35', border='#3d8ef8', color='#e0e0e0', icono='⏳';
+            if (esHoy)  { bg='#3a2e00'; border='#FFA500'; color='#ffe08a'; icono='🔥'; }
+            if (pasado) { bg='#2a2a2a'; border='#555';    color='#888';    icono='✅'; }
+
+            return (
+              <div key={rec.id} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'10px' }}>
+                <div style={{ flex:1, background:bg, border:`1px solid ${border}`, borderRadius:'8px', padding:'10px 14px', color, borderLeft:`4px solid ${border}` }}>
+                  <div>
+                    {icono} <strong>Día {rec.dia}</strong> — {rec.titulo}
+                    {esHoy  && <span style={{ color:'#FFA500', fontWeight:'bold', marginLeft:'8px' }}>¡HOY!</span>}
+                    {!pasado && !esHoy && <span style={{ color:'#7ec8e3', fontWeight:'bold', marginLeft:'8px' }}>faltan {diasFaltan} día(s)</span>}
+                  </div>
+                  {rec.notas && <div style={{ fontSize:'0.8rem', color:'#8899aa', marginTop:'4px' }}>📝 {rec.notas}</div>}
+                </div>
+                <button style={S.btnGhost} onClick={()=>eliminar(rec.id)}>🗑️</button>
+              </div>
+            );
+          })
+      }
+    </div>
+  );
+}
+
+// ── Tab 3: Calendario ─────────────────────────────────────────────────────
+function TabCalendario() {
+  const [recs, setRecs]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [diaVer, setDiaVer]   = useState(new Date().getDate());
+
+  const hoy = new Date();
+  const hoyDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const diasMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const nombreMes = hoy.toLocaleString('es-CR', { month:'long', year:'numeric' });
+  const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).getDay();
+  const offsetLun = (primerDia + 6) % 7;
+
+  useEffect(()=>{
+    supabase.from('vega_recurrentes').select('*').then(({data})=>{
+      setRecs(data||[]);
+      setLoading(false);
+    });
+  }, []);
+
+  const mapaDias = {};
+  recs.forEach(r => {
+    const d = Math.min(r.dia, diasMes);
+    if (!mapaDias[d]) mapaDias[d] = [];
+    mapaDias[d].push(r);
+  });
+
+  const diasSemana = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+  const renderCelda = (dia) => {
+    if (!dia) return <div style={{ minHeight:'70px' }}/>;
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+    const esHoy = fecha.getTime() === hoyDate.getTime();
+    const pasado = fecha < hoyDate;
+    const tareasD = mapaDias[dia] || [];
+    const n = tareasD.length;
+
+    let bg='#1e2530', border='#333', color='#8899aa';
+    if (esHoy)        { bg='#3a2e00'; border='#FFA500'; color='#ffe08a'; }
+    else if (pasado)  { bg='#1e1e1e'; border='#555';    color='#666'; }
+    else if (n > 0)   { bg='#1a2a35'; border='#3d8ef8'; color='#e0e0e0'; }
+
+    return (
+      <div style={S.calCell(bg, border, color)}>
+        <div style={{ fontWeight:'bold', fontSize:'1rem' }}>{dia}</div>
+        {n > 0 && <div style={{ fontSize:'0.6rem', color:'#3d8ef8' }}>{'● '.repeat(Math.min(n,3))}</div>}
+        {tareasD.slice(0,2).map((t,i)=>(
+          <div key={i} style={{ fontSize:'0.6rem', color:'#7ec8e3', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+            {t.titulo.length>12 ? t.titulo.slice(0,12)+'…' : t.titulo}
+          </div>
+        ))}
+        {n > 2 && <div style={{ fontSize:'0.6rem', color:'#888' }}>+más</div>}
+      </div>
+    );
+  };
+
+  // construir semanas
+  const celdas = [...Array(offsetLun).fill(null), ...Array.from({length:diasMes},(_,i)=>i+1)];
+  while (celdas.length % 7 !== 0) celdas.push(null);
+  const semanas = [];
+  for (let i=0; i<celdas.length; i+=7) semanas.push(celdas.slice(i,i+7));
+
+  const tareasDelDia = mapaDias[diaVer] || [];
+
+  return (
+    <div>
+      <h3 style={{ color:'#fff', marginTop:0 }}>📅 Calendario de Pagos</h3>
+      <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>Vista mensual compacta de tus tareas recurrentes.</div>
+      <h4 style={{ color:'#c8a84b', textTransform:'capitalize', marginBottom:'12px' }}>{nombreMes}</h4>
+
+      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div> : <>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:'2px', marginBottom:'4px' }}>
+          {diasSemana.map(d=>(
+            <div key={d} style={{ textAlign:'center', fontWeight:'bold', color:'#8899aa', fontSize:'0.82rem', padding:'4px 0' }}>{d}</div>
+          ))}
+        </div>
+        {semanas.map((sem,i)=>(
+          <div key={i} style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:'2px', marginBottom:'2px' }}>
+            {sem.map((dia,j)=><div key={j}>{renderCelda(dia)}</div>)}
+          </div>
+        ))}
+
+        <hr style={S.divider}/>
+        <h4 style={{ color:'#fff' }}>🔍 Detalle del día</h4>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
+          <label style={S.label}>Ver tareas del día:</label>
+          <input style={{ ...S.input, width:'80px' }} type="number" min={1} max={diasMes} value={diaVer} onChange={e=>setDiaVer(parseInt(e.target.value))}/>
+        </div>
+
+        {tareasDelDia.length > 0
+          ? tareasDelDia.map((t,i)=>(
+            <div key={i} style={{ background:'#1a2a35', borderRadius:'8px', padding:'12px', margin:'6px 0', borderLeft:'4px solid #3d8ef8' }}>
+              <div style={{ fontWeight:'bold', color:'#e0e0e0' }}>⏰ Día {t.dia} — {t.titulo}</div>
+              {t.notas && <div style={{ fontSize:'0.83rem', color:'#8899aa', marginTop:'4px' }}>📝 {t.notas}</div>}
+            </div>
+          ))
+          : <div style={S.info}>📭 El día {diaVer} no tiene tareas recurrentes.</div>
+        }
+      </>}
+    </div>
+  );
+}
+
+// ── Tab 4: Completadas ────────────────────────────────────────────────────
+function TabCompletadas() {
+  const [completadas, setCompletadas] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [buscar, setBuscar]           = useState('');
+  const [confirmando, setConfirmando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('vega_tareas').select('*').eq('estado','completada');
+    const sorted = (data||[]).sort((a,b)=>(b.completada||'').localeCompare(a.completada||''));
+    setCompletadas(sorted);
+    setLoading(false);
+  }, []);
+
+  useEffect(()=>{ cargar(); }, [cargar]);
+
+  const borrarTodas = async () => {
+    await supabase.from('vega_tareas').delete().eq('estado','completada');
+    setConfirmando(false);
+    cargar();
+  };
+
+  const filtradas = buscar
+    ? completadas.filter(t => t.titulo.toLowerCase().includes(buscar.toLowerCase()) || (t.notas||'').toLowerCase().includes(buscar.toLowerCase()))
+    : completadas;
+
+  return (
+    <div>
+      <h3 style={{ color:'#fff', marginTop:0 }}>🍞 Tareas completadas</h3>
+
+      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      : completadas.length===0
+        ? <div style={S.info}>🕊️ Ninguna tarea completada todavía.</div>
+        : <>
+          <div style={{ color:'#5a6a80', fontSize:'0.85rem', marginBottom:'12px' }}>
+            <strong style={{ color:'#c9d1e0' }}>{completadas.length}</strong> tarea(s) completada(s)
+          </div>
+          <input style={{ ...S.input, maxWidth:'350px', marginBottom:'16px' }}
+            placeholder="🔍 Buscar..." value={buscar} onChange={e=>setBuscar(e.target.value)}/>
+
+          {filtradas.map(t=>(
+            <div key={t.id} style={{ ...S.card, opacity:0.75 }}>
+              <div style={{ marginBottom:'6px' }}>
+                <s style={{ color:'#5a6a80' }}>{t.titulo}</s>&nbsp;&nbsp;
+                <Badge prioridad={t.prioridad}/>
+              </div>
+              <div style={{ display:'flex', gap:'20px', fontSize:'0.78rem', color:'#3a4a5a' }}>
+                <span>📅 Creada: {t.creada}</span>
+                <span>✅ Completada: {t.completada || '—'}</span>
+              </div>
+              {t.notas && <div style={{ fontSize:'0.8rem', color:'#3a4a5a', marginTop:'4px' }}>📝 {t.notas}</div>}
+            </div>
+          ))}
+
+          <hr style={S.divider}/>
+          {!confirmando
+            ? <button style={{ ...S.btnDanger }} onClick={()=>setConfirmando(true)}>🔥 Borrar historial de completadas</button>
+            : <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
+                <span style={{ color:'#ff6b6b', fontSize:'0.88rem' }}>¿Estás seguro? Esto borrará todas las completadas.</span>
+                <button style={{ ...S.btnDanger }} onClick={borrarTodas}>Sí, borrar</button>
+                <button style={{ background:'#1e2530', border:'1px solid #2a3142', color:'#c9d1e0', borderRadius:'8px', padding:'6px 12px', cursor:'pointer' }} onClick={()=>setConfirmando(false)}>Cancelar</button>
+              </div>
+          }
+        </>
+      }
+    </div>
+  );
+}
+
+// ── Vista principal ───────────────────────────────────────────────────────
+export default function VegaTareas() {
+  const [tab, setTab] = useState(0);
+  const tabs = ['📖 Pendientes', '📜 Recurrentes', '📅 Calendario', '🍞 Completadas'];
+
+  const ahora = new Date().toLocaleString('es-CR');
+
+  return (
+    <div style={S.page}>
+      <div style={S.header}>
+        <h1 style={S.title}>⭐ Vega – Tareas</h1>
+        <div style={S.caption}>☁️ Sincronizado en la nube · {ahora} · Génesis Suite</div>
+      </div>
+
+      <div style={S.tabs}>
+        {tabs.map((t,i)=>(
+          <button key={i} style={{ ...S.tab, ...(tab===i ? S.tabActive : {}) }} onClick={()=>setTab(i)}>{t}</button>
+        ))}
+      </div>
+
+      {tab===0 && <TabPendientes/>}
+      {tab===1 && <TabRecurrentes/>}
+      {tab===2 && <TabCalendario/>}
+      {tab===3 && <TabCompletadas/>}
     </div>
   );
 }
