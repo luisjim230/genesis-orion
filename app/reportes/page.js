@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
 const supabase = createClient(
-  'https://xeeieqjqmtoiutfmltqu.supabase.co',
+  'https://xeeieqjqmtoiutfnltqu.supabase.co',
   'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs'
 );
 
