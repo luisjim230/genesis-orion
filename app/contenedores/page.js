@@ -1,10 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = 'https://xeeieqjqmtoiutfnltqu.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs';
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from '../../lib/supabase';
 
 const S = {
   page: { background: '#0f1115', minHeight: '100vh', padding: '28px', fontFamily: 'DM Sans, sans-serif', color: '#c9d1e0' },
@@ -61,8 +57,16 @@ export default function Contenedores() {
   const [expandido, setExpandido] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [tcBAC, setTcBAC] = useState(null);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    cargar();
+    // Cargar TC compra BAC para conversión USD→CRC
+    fetch('/api/mercado?fuente=bac')
+      .then(r => r.json())
+      .then(j => { if (j.ok && j.data?.compra) setTcBAC(j.data); })
+      .catch(() => {});
+  }, []);
 
   async function cargar() {
     setLoading(true);
@@ -122,6 +126,8 @@ export default function Contenedores() {
 
   const totalFlete = envios.reduce((s, e) => s + (parseFloat(e.flete_usd) || 0), 0);
   const totalAdelanto = envios.reduce((s, e) => s + (parseFloat(e.adelanto_usd) || 0), 0);
+  const tcCompra = tcBAC?.compra || null;
+  const aCRC = (usd) => tcCompra ? `  ·  ₡${(usd * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}` : '';
 
   return (
     <div style={S.page}>
@@ -143,10 +149,11 @@ export default function Contenedores() {
       {tab === 0 && (
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
-            {[['📦 Envíos activos', envios.length, '#63b3ed'], ['💵 Flete total activo', fmtUSD(totalFlete), '#c8a84b'], ['💰 Adelantos pagados', fmtUSD(totalAdelanto), '#68d391']].map(([l, v, c]) => (
+            {[['📦 Envíos activos', envios.length, '#63b3ed', ''], ['💵 Flete total activo', fmtUSD(totalFlete), '#c8a84b', aCRC(totalFlete)], ['💰 Adelantos pagados', fmtUSD(totalAdelanto), '#68d391', aCRC(totalAdelanto)]].map(([l, v, c, crc]) => (
               <div key={l} style={{ background: '#161920', border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: '10px', padding: '14px 16px' }}>
                 <div style={{ fontSize: '0.72em', color: '#5a6a80', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
                 <div style={{ fontSize: '1.6em', fontWeight: 700, color: '#fff', marginTop: '4px' }}>{v}</div>
+                {crc && <div style={{ fontSize: '0.75em', color: '#4ec9b0', marginTop: '2px' }}>{crc}{tcBAC?.esFallback ? ' ~' : ''}</div>}
               </div>
             ))}
           </div>
@@ -173,10 +180,11 @@ export default function Contenedores() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '8px', marginTop: '14px' }}>
-                {[['🚢 Embarque', fmtFecha(env.fecha_embarque)], ['📅 ETA', fmtFecha(env.fecha_eta)], ['🏳️ Llegada CR', fmtFecha(env.fecha_llegada_cr)], ['🚛 Retiro', fmtFecha(env.fecha_retiro)], ['💵 Flete', fmtUSD(env.flete_usd)], ['💰 Adelanto', fmtUSD(env.adelanto_usd)]].map(([l, v]) => (
+                {[['🚢 Embarque', fmtFecha(env.fecha_embarque), null], ['📅 ETA', fmtFecha(env.fecha_eta), null], ['🏳️ Llegada CR', fmtFecha(env.fecha_llegada_cr), null], ['🚛 Retiro', fmtFecha(env.fecha_retiro), null], ['💵 Flete', fmtUSD(env.flete_usd), env.flete_usd], ['💰 Adelanto', fmtUSD(env.adelanto_usd), env.adelanto_usd]].map(([l, v, usd]) => (
                   <div key={l} style={{ background: '#0f1115', borderRadius: '8px', padding: '8px 10px' }}>
                     <div style={{ fontSize: '0.65em', color: '#5a6a80' }}>{l}</div>
                     <div style={{ fontSize: '0.9em', fontWeight: 600, color: '#fff', marginTop: '2px' }}>{v}</div>
+                    {usd && tcCompra && <div style={{ fontSize: '0.7em', color: '#4ec9b0', marginTop: '1px' }}>₡{(parseFloat(usd) * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>}
                   </div>
                 ))}
               </div>
@@ -184,10 +192,11 @@ export default function Contenedores() {
               {expandido === env.id && (
                 <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #1e2330' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: '8px', marginBottom: '10px' }}>
-                    {[['BL Número', env.bl_numero], ['Pago final', fmtUSD(env.pago_final_usd)], ['Impuestos', env.impuestos_crc ? `₡${Number(env.impuestos_crc).toLocaleString()}` : '—'], ['Transporte CR', env.transporte_crc ? `₡${Number(env.transporte_crc).toLocaleString()}` : '—'], ['Otros', env.otros_crc ? `₡${Number(env.otros_crc).toLocaleString()}` : '—'], ['Tipo de cambio', env.tipo_cambio ? `₡${env.tipo_cambio}` : '—']].map(([l, v]) => (
+                    {[['BL Número', env.bl_numero, null], ['Pago final', fmtUSD(env.pago_final_usd), env.pago_final_usd], ['Impuestos', env.impuestos_crc ? `₡${Number(env.impuestos_crc).toLocaleString()}` : '—', null], ['Transporte CR', env.transporte_crc ? `₡${Number(env.transporte_crc).toLocaleString()}` : '—', null], ['Otros', env.otros_crc ? `₡${Number(env.otros_crc).toLocaleString()}` : '—', null], ['TC BAC (compra)', tcCompra ? `₡${tcCompra.toFixed(2)}` : (env.tipo_cambio ? `₡${env.tipo_cambio}` : '—'), null]].map(([l, v, usd]) => (
                       <div key={l} style={{ background: '#0f1115', borderRadius: '8px', padding: '8px 10px' }}>
                         <div style={{ fontSize: '0.65em', color: '#5a6a80' }}>{l}</div>
                         <div style={{ fontSize: '0.87em', color: '#fff' }}>{v || '—'}</div>
+                        {usd && tcCompra && <div style={{ fontSize: '0.72em', color: '#4ec9b0', marginTop: '2px' }}>₡{(parseFloat(usd) * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>}
                       </div>
                     ))}
                   </div>

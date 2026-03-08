@@ -1,11 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  'https://xeeieqjqmtoiutfnltqu.supabase.co',
-  'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs'
-);
+import { supabase } from '../../lib/supabase';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {

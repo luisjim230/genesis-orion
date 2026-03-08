@@ -1,11 +1,6 @@
 'use client';
-import { useState, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  'https://xeeieqjqmtoiutfnltqu.supabase.co',
-  'sb_publishable_TX8OYawDu3vjd1Upet2GbQ_SURnQqRs'
-);
+import { useState, useCallback, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
@@ -200,8 +195,23 @@ function FilaProducto({ fila, idx, esManual, onChange, onEliminar }) {
 function TabCalculadora() {
   const [nombreImp, setNombreImp]   = useState('');
   const [tipoCambio, setTipoCambio] = useState(520);
-  const [metodoClave, setMetodoClave] = useState('⚖️ Por peso (kg)');
-  const metodo = METODOS[metodoClave];
+  const [tcFuente, setTcFuente] = useState('');
+
+  // Autocargar TC BAC al montar
+  useEffect(() => {
+    fetch('/api/mercado?fuente=bac')
+      .then(r => r.json())
+      .then(j => {
+        if (j.ok && j.data?.compra) {
+          setTipoCambio(Math.round(j.data.compra * 100) / 100);
+          setTcFuente(j.data.fuente || 'BAC San José');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const [metodoClave2, setMetodoClave2] = useState('⚖️ Por peso (kg)');
+  const metodo = METODOS[metodoClave2];
 
   const [flete,   setFlete]   = useState(0);
   const [seguro,  setSeguro]  = useState(0);
@@ -250,7 +260,7 @@ function TabCalculadora() {
     const { error } = await supabase.from('halley_historial').insert({
       nombre: nombreImp.trim(),
       fecha,
-      metodo: metodoClave,
+      metodo: metodoClave2,
       contenedor: tipoCont,
       vol_total:       parseFloat(volTotal.toFixed(3)),
       peso_total_t:    parseFloat(pesoTotalT.toFixed(3)),
@@ -302,12 +312,13 @@ function TabCalculadora() {
             <label style={S.label}>Nombre de la importación</label>
             <input style={S.input} placeholder="Ej: Contenedor Marzo 2025" value={nombreImp} onChange={e=>setNombreImp(e.target.value)}/>
             <div style={{ marginTop:'10px' }}>
-              <label style={S.label}>Tipo de cambio (₡ por USD)</label>
+              <label style={S.label}>Tipo de cambio (₡ por USD) — Compra BAC</label>
               <input style={S.input} type="number" step="1" value={tipoCambio} onChange={e=>setTipoCambio(parseFloat(e.target.value)||0)}/>
+              {tcFuente&&<div style={{fontSize:'0.72rem',color:'#4ec9b0',marginTop:'4px'}}>✓ Autocargado desde {tcFuente}</div>}
             </div>
             <div style={{ marginTop:'10px' }}>
               <label style={S.label}>Método de prorrateo del flete</label>
-              <select style={S.select} value={metodoClave} onChange={e=>setMetodoClave(e.target.value)}>
+              <select style={S.select} value={metodoClave2} onChange={e=>setMetodoClave2(e.target.value)}>
                 {Object.keys(METODOS).map(m=><option key={m}>{m}</option>)}
               </select>
               <div style={{ fontSize:'0.78rem', color:'#5a6a80', marginTop:'6px' }}>{AYUDAS[metodo]}</div>
@@ -407,7 +418,7 @@ function TabCalculadora() {
           <hr style={S.divider}/>
           <h3 style={{ color:'#fff' }}>📊 La Revelación — Costos Aterrizados</h3>
           <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>
-            Método: <strong style={{ color:'#c9d1e0' }}>{metodoClave}</strong> · Contenedor: <strong style={{ color:'#c9d1e0' }}>{tipoCont}</strong>
+            Método: <strong style={{ color:'#c9d1e0' }}>{metodoClave2}</strong> · Contenedor: <strong style={{ color:'#c9d1e0' }}>{tipoCont}</strong>
           </div>
 
           <div style={S.grid4}>
