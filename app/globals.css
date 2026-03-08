@@ -1,15 +1,202 @@
 @import "tailwindcss";
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* ─── BRAND TOKENS ─────────────────────────────── */
+:root {
+  --orange:    #ED6E2E;
+  --burgundy:  #5E2733;
+  --teal:      #225F74;
+  --cream:     #FDF4F4;
+  --cream-dark:#F5EAEA;
+
+  --text-primary:   #1a1a1a;
+  --text-secondary: #666;
+  --text-muted:     #999;
+
+  --border:      #EAE0E0;
+  --border-soft: #F0E8E8;
+
+  --card-bg:     #FFFFFF;
+  --card-shadow: 0 1px 4px rgba(94,39,51,0.06);
+  --card-radius: 12px;
+
+  --font-display: 'Bungee', var(--font-bungee), cursive;
+  --font-body:    'Rubik', 'DM Sans', sans-serif;
+}
+
+/* ─── RESET ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100%;
-  font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
-  background: #f0f2f5;
-  color: #1a1d24;
+  font-family: var(--font-body);
+  background: var(--cream);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 5px; }
+/* ─── SCROLLBAR ─────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: #D4C4C4; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--orange); }
+
+/* ─── TYPOGRAPHY ─────────────────────────────────── */
+.page-title {
+  font-family: var(--font-display);
+  color: var(--burgundy);
+  font-size: 1.4rem;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.page-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 300;
+  margin-top: 4px;
+}
+
+/* ─── CARDS ──────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--card-shadow);
+}
+
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--burgundy);
+}
+
+/* ─── KPI CARDS ──────────────────────────────────── */
+.kpi-card {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  padding: 18px 20px;
+  border: 1px solid var(--border-soft);
+  border-top: 3px solid var(--orange);
+  box-shadow: var(--card-shadow);
+}
+
+.kpi-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.kpi-change { font-size: 0.72rem; margin-top: 6px; display: flex; align-items: center; gap: 3px; }
+.kpi-change.up   { color: #2d8a4e; }
+.kpi-change.down { color: #c0392b; }
+
+/* ─── BADGES ──────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+/* ─── BUTTONS ─────────────────────────────────────── */
+.btn-primary {
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+
+.btn-outline {
+  background: none;
+  color: var(--orange);
+  border: 1px solid var(--orange);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 0.15s;
+}
+.btn-outline:hover { background: var(--orange); color: #fff; }
+
+/* ─── TABLES ──────────────────────────────────────── */
+.orion-table { width: 100%; border-collapse: collapse; }
+.orion-table thead tr { background: var(--cream); }
+.orion-table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.orion-table tbody tr { border-top: 1px solid var(--border-soft); transition: background 0.1s; }
+.orion-table tbody tr:hover { background: #FDF8F8; }
+.orion-table td { padding: 11px 16px; font-size: 0.83rem; }
+
+/* ─── TOPBAR ──────────────────────────────────────── */
+.topbar {
+  position: sticky;
+  top: 0;
+  background: rgba(253,244,244,0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 50;
+}
+
+/* ─── SECTION DIVIDER ────────────────────────────── */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 16px;
+}
+.section-divider::before, .section-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border-soft);
+}
+.section-divider span {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ─── FOCUS / SELECTION ───────────────────────────── */
+button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+::selection { background: rgba(237,110,46,0.2); color: var(--burgundy); }
