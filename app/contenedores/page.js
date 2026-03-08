@@ -26,17 +26,25 @@ const S = {
   td: { padding: '9px 12px', borderBottom: '1px solid #1e2330', color: '#c9d1e0', verticalAlign: 'middle' },
 };
 
-const ESTADOS = { 'En tránsito': '#63b3ed', 'En puerto': '#f6ad55', 'En bodega': '#68d391', 'Cerrado': '#5a6a80' };
+const ESTADOS = {
+  '🏭 En producción': '#f6ad55',
+  '🚢 En el mar': '#63b3ed',
+  '🛳️ En puerto': '#b794f4',
+  '🚛 En tránsito CR': '#68d391',
+  '🏬 En bodega': '#68d391',
+  '✅ Cerrado': '#5a6a80',
+};
+
+const ESTADOS_ACTIVOS = ['🏭 En producción', '🚢 En el mar', '🛳️ En puerto', '🚛 En tránsito CR', '🏬 En bodega'];
 const TIPOS_CONT = ['20 pies', '40 pies', '40 pies HC', '45 pies'];
 
 function fmtFecha(s) { return s ? s.substring(0, 10) : '—'; }
-function fmtNum(n) { return n != null ? Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 }) : '—'; }
 function fmtUSD(n) { return n ? `$${Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 })}` : '—'; }
 
 const FORM_INIT = {
   proveedor: '', numero_contenedor: '', tipo_contenedor: '40 pies',
   fecha_embarque: '', fecha_eta: '', fecha_llegada_cr: '', fecha_retiro: '',
-  estado: 'En tránsito', puerto_origen: '', naviera: '', bl_numero: '',
+  estado: '🚢 En el mar', puerto_origen: '', naviera: '', bl_numero: '',
   adelanto_usd: '', pago_final_usd: '', flete_usd: '', impuestos_crc: '',
   transporte_crc: '', otros_crc: '', tipo_cambio: '',
   documentos_recibidos: false, despacho_aduanal: false, exonerado: false,
@@ -58,8 +66,8 @@ export default function Contenedores() {
 
   async function cargar() {
     setLoading(true);
-    const { data: activos } = await supabase.from('neptuno_envios').select('*').neq('estado', 'Cerrado').order('fecha_eta', { ascending: true });
-    const { data: hist } = await supabase.from('neptuno_envios').select('*').eq('estado', 'Cerrado').order('fecha_llegada_cr', { ascending: false }).limit(50);
+    const { data: activos } = await supabase.from('neptuno_envios').select('*').neq('estado', '✅ Cerrado').order('created_at', { ascending: false });
+    const { data: hist } = await supabase.from('neptuno_envios').select('*').eq('estado', '✅ Cerrado').order('created_at', { ascending: false }).limit(50);
     setEnvios(activos || []);
     setHistorial(hist || []);
     setLoading(false);
@@ -93,14 +101,14 @@ export default function Contenedores() {
     setTab(1);
   }
 
-  async function archivar(id) {
-    await supabase.from('neptuno_envios').update({ estado: 'Cerrado' }).eq('id', id);
+  async function cerrar(id) {
+    await supabase.from('neptuno_envios').update({ estado: '✅ Cerrado' }).eq('id', id);
     mostrarMsg('Contenedor cerrado y movido a historial.');
     cargar();
   }
 
-  async function desarchivar(id) {
-    await supabase.from('neptuno_envios').update({ estado: 'En bodega' }).eq('id', id);
+  async function reactivar(id) {
+    await supabase.from('neptuno_envios').update({ estado: '🏬 En bodega' }).eq('id', id);
     mostrarMsg('Contenedor reactivado.');
     cargar();
   }
@@ -150,9 +158,9 @@ export default function Contenedores() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, color: '#fff', fontSize: '1em' }}>{env.numero_contenedor}</span>
+                    <span style={{ fontWeight: 700, color: '#fff', fontSize: '1em' }}>{env.numero_contenedor || env.proveedor}</span>
                     <span style={S.badge(ESTADOS[env.estado] || '#5a6a80')}>{env.estado}</span>
-                    <span style={{ fontSize: '0.78em', color: '#5a6a80' }}>{env.tipo_contenedor}</span>
+                    {env.tipo_contenedor && <span style={{ fontSize: '0.78em', color: '#5a6a80' }}>{env.tipo_contenedor}</span>}
                   </div>
                   <div style={{ fontSize: '0.85em', color: '#c9d1e0', marginTop: '4px' }}>{env.proveedor}</div>
                   {env.naviera && <div style={{ fontSize: '0.78em', color: '#5a6a80' }}>{env.naviera} · {env.puerto_origen}</div>}
@@ -160,7 +168,7 @@ export default function Contenedores() {
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button style={S.btnSm()} onClick={() => setExpandido(expandido === env.id ? null : env.id)}>🔍 {expandido === env.id ? 'Menos' : 'Ver'}</button>
                   <button style={S.btnSm()} onClick={() => editar(env)}>✏️ Editar</button>
-                  <button style={S.btnSm('#1e2330')} onClick={() => archivar(env.id)}>📁 Cerrar</button>
+                  <button style={S.btnSm('#1e2330')} onClick={() => cerrar(env.id)}>📁 Cerrar</button>
                 </div>
               </div>
 
@@ -183,7 +191,7 @@ export default function Contenedores() {
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
                     {[['📄 Docs recibidos', env.documentos_recibidos], ['🛃 Despacho aduanal', env.despacho_aduanal], ['✅ Exonerado', env.exonerado]].map(([l, v]) => (
                       <span key={l} style={{ fontSize: '0.78em', color: v ? '#68d391' : '#5a6a80' }}>{v ? '✅' : '⬜'} {l}</span>
                     ))}
@@ -223,7 +231,7 @@ export default function Contenedores() {
           <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Fechas</div>
           <div style={S.grid2}>
             {[['fecha_embarque', 'Fecha de embarque'], ['fecha_eta', 'ETA (fecha estimada llegada)'], ['fecha_llegada_cr', 'Fecha llegada a CR'], ['fecha_retiro', 'Fecha de retiro']].map(([k, l]) => (
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="date" value={form[k]} onChange={e => setF(k, e.target.value)} /></div>
+              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="date" value={form[k] || ''} onChange={e => setF(k, e.target.value)} /></div>
             ))}
           </div>
 
@@ -231,7 +239,7 @@ export default function Contenedores() {
           <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Pagos y costos</div>
           <div style={S.grid3}>
             {[['adelanto_usd', 'Adelanto (USD)'], ['pago_final_usd', 'Pago final (USD)'], ['flete_usd', 'Flete (USD)'], ['impuestos_crc', 'Impuestos (CRC)'], ['transporte_crc', 'Transporte CR (CRC)'], ['otros_crc', 'Otros costos (CRC)'], ['tipo_cambio', 'Tipo de cambio']].map(([k, l]) => (
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="number" value={form[k]} onChange={e => setF(k, e.target.value)} /></div>
+              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="number" value={form[k] || ''} onChange={e => setF(k, e.target.value)} /></div>
             ))}
           </div>
 
@@ -240,12 +248,12 @@ export default function Contenedores() {
           <div style={{ display: 'flex', gap: '24px', marginBottom: '16px', flexWrap: 'wrap' }}>
             {[['documentos_recibidos', '📄 Documentos recibidos'], ['despacho_aduanal', '🛃 Despacho aduanal completo'], ['exonerado', '✅ Exonerado']].map(([k, l]) => (
               <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.87em', color: '#c9d1e0' }}>
-                <input type="checkbox" checked={form[k]} onChange={e => setF(k, e.target.checked)} style={{ accentColor: '#c8a84b', width: '16px', height: '16px' }} />
+                <input type="checkbox" checked={!!form[k]} onChange={e => setF(k, e.target.checked)} style={{ accentColor: '#c8a84b', width: '16px', height: '16px' }} />
                 {l}
               </label>
             ))}
           </div>
-          <div><label style={S.label}>Notas</label><textarea style={{ ...S.input, minHeight: '80px', resize: 'vertical' }} value={form.notas} onChange={e => setF('notas', e.target.value)} /></div>
+          <div><label style={S.label}>Notas</label><textarea style={{ ...S.input, minHeight: '80px', resize: 'vertical' }} value={form.notas || ''} onChange={e => setF('notas', e.target.value)} /></div>
 
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
             <button style={S.btn()} onClick={guardar} disabled={saving}>{saving ? 'Guardando...' : editId ? '💾 Actualizar' : '💾 Guardar'}</button>
@@ -256,7 +264,7 @@ export default function Contenedores() {
 
       {tab === 2 && (
         <div>
-          <div style={{ fontSize: '0.82em', color: '#5a6a80', marginBottom: '14px' }}>Contenedores cerrados — últimos 50 registros</div>
+          <div style={{ fontSize: '0.82em', color: '#5a6a80', marginBottom: '14px' }}>{historial.length} contenedores cerrados</div>
           {historial.length === 0 ? <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '30px' }}>Sin historial aún.</div> : (
             <div style={{ overflowX: 'auto' }}>
               <table style={S.table}>
@@ -264,15 +272,15 @@ export default function Contenedores() {
                 <tbody>
                   {historial.map(env => (
                     <tr key={env.id}>
-                      <td style={S.td}><span style={{ fontWeight: 600 }}>{env.numero_contenedor}</span></td>
+                      <td style={S.td}><span style={{ fontWeight: 600 }}>{env.numero_contenedor || '—'}</span></td>
                       <td style={S.td}>{env.proveedor}</td>
-                      <td style={S.td}>{env.tipo_contenedor}</td>
+                      <td style={S.td}>{env.tipo_contenedor || '—'}</td>
                       <td style={S.td}>{fmtFecha(env.fecha_embarque)}</td>
                       <td style={S.td}>{fmtFecha(env.fecha_llegada_cr)}</td>
                       <td style={S.td}>{fmtUSD(env.flete_usd)}</td>
                       <td style={S.td}>
                         <div style={{ display: 'flex', gap: '6px' }}>
-                          <button style={S.btnSm()} onClick={() => desarchivar(env.id)}>↩️ Reactivar</button>
+                          <button style={S.btnSm()} onClick={() => reactivar(env.id)}>↩️ Reactivar</button>
                           <button style={S.btnSm('#3d1515')} onClick={() => eliminar(env.id)}>🗑️</button>
                         </div>
                       </td>
