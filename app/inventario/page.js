@@ -315,10 +315,23 @@ export default function Inventario() {
         }));
       }
 
+      // ── Dividir cada proveedor en lotes de máx 20 líneas ──────────────────
+      const MAX_LINEAS = 20;
+      const payloadLotes = {};
+      for (const [prov, items] of Object.entries(payload)) {
+        if (!items.length) continue;
+        const totalLotes = Math.ceil(items.length / MAX_LINEAS);
+        for (let l = 0; l < totalLotes; l++) {
+          const loteItems = items.slice(l * MAX_LINEAS, (l + 1) * MAX_LINEAS);
+          const loteName = totalLotes > 1 ? `${prov} (${l+1}/${totalLotes})` : prov;
+          payloadLotes[loteName] = loteItems;
+        }
+      }
+
       const res = await fetch('/api/exportar-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proveedores: payload }),
+        body: JSON.stringify({ proveedores: payloadLotes }),
       });
 
       if (!res.ok) { const e = await res.json(); mostrarMsg(e.error || 'Error al generar ZIP', 'err'); setZipGenerando(false); return; }
@@ -326,15 +339,18 @@ export default function Inventario() {
       const blob = await res.blob();
       const fecha = new Date().toISOString().slice(0, 10);
       const url = URL.createObjectURL(blob);
+      const totalArchivos = Object.keys(payloadLotes).length;
       const a = document.createElement('a'); a.href = url; a.download = `Ordenes_Compra_${fecha}.zip`; a.click();
       URL.revokeObjectURL(url);
 
-      // ── Guardar historial en Supabase: una orden por proveedor ──────────────
+      // ── Guardar historial en Supabase: un registro por lote ──────────────
       try {
         const ahora = new Date().toISOString();
-        for (const [prov, items] of Object.entries(payload)) {
+        for (const [loteName, items] of Object.entries(payloadLotes)) {
           if (!items.length) continue;
-          const nombreLote = `OC_${prov}_${fecha}`;
+          // Extraer proveedor base (sin sufijo de lote)
+          const provBase = loteName.replace(/ \(\d+\/\d+\)$/, '');
+          const nombreLote = `OC_${loteName}_${fecha}`;
           const { data: cab, error: errCab } = await supabase
             .from('ordenes_compra')
             .insert([{ fecha_orden: ahora, nombre_lote: nombreLote, dias_tribucion: dias, total_productos: items.length, creado_en: ahora }])
@@ -342,13 +358,12 @@ export default function Inventario() {
           if (errCab || !cab?.length) continue;
           const oid = cab[0].id;
           const rows = items.map(i => {
-            // buscar nombre del producto en porProveedor
-            const prodInfo = (porProveedor[prov] || []).find(p => String(p.codigo) === String(i.codigo)) || {};
+            const prodInfo = (porProveedor[provBase] || []).find(p => String(p.codigo) === String(i.codigo)) || {};
             return {
               orden_id: oid,
               codigo: String(i.codigo || '').trim(),
               nombre: String(prodInfo.nombre || i.nombre || ''),
-              proveedor: prov,
+              proveedor: provBase,
               cantidad_ordenada: parseFloat(i.cantidad) || 0,
               costo_unitario: parseFloat(i.costo) || 0,
               descuento: parseFloat(i.descuento) || 0,
@@ -362,7 +377,7 @@ export default function Inventario() {
         }
       } catch (eSupa) { console.error('Error guardando historial masivo:', eSupa); }
 
-      mostrarMsg(`✅ ZIP con ${proveedoresSeleccionados.size} órdenes descargado y guardado en historial.`);
+      mostrarMsg(`✅ ZIP con ${totalArchivos} archivo(s) descargado y guardado en historial.`);
     } catch (e) { mostrarMsg('Error: ' + e.message, 'err'); }
     setZipGenerando(false);
   }
@@ -370,24 +385,57 @@ export default function Inventario() {
   async function cerrarOrden() {
     if (!ordenItems.length) { mostrarMsg('No hay productos en la orden.', 'err'); return; }
     const nom = nombreOrden.trim() || new Date().toISOString().slice(0, 16).replace('T', '_');
+    const MAX_LINEAS = 20;
+    const totalLotes = Math.ceil(ordenItems.length / MAX_LINEAS);
+    const ahora = new Date().toISOString();
+    const fecha = ahora.slice(0, 10);
+    const ts = ahora.slice(0, 19).replace('T', '_').replace(/:/g, '-');
+
+    // ── Dividir en lotes de máx 20 líneas ──
+    const lotes = [];
+    for (let l = 0; l < totalLotes; l++) {
+      const loteItems = ordenItems.slice(l * MAX_LINEAS, (l + 1) * MAX_LINEAS);
+      const loteName = totalLotes > 1 ? `${nom}_lote${l+1}de${totalLotes}` : nom;
+      lotes.push({ nombre: loteName, items: loteItems });
+    }
+
+    // ── Guardar cada lote en Supabase ──
     try {
-      const ahora = new Date().toISOString();
-      const { data: cab } = await supabase.from('ordenes_compra').insert([{ fecha_orden: ahora, nombre_lote: nom, dias_tribucion: dias, total_productos: ordenItems.length, creado_en: ahora }]).select();
-      if (cab?.length) {
-        const oid = cab[0].id;
-        await supabase.from('ordenes_compra_items').insert(ordenItems.map(i => ({ orden_id: oid, codigo: i.codigo, nombre: i.nombre, proveedor: i.proveedor, cantidad_ordenada: i.cantidad, costo_unitario: i.costo, descuento: i.descuento, dias_tribucion: dias, cantidad_recibida: 0, estado_item: 'pendiente', creado_en: ahora })));
+      for (const lote of lotes) {
+        const { data: cab } = await supabase.from('ordenes_compra').insert([{ fecha_orden: ahora, nombre_lote: lote.nombre, dias_tribucion: dias, total_productos: lote.items.length, creado_en: ahora }]).select();
+        if (cab?.length) {
+          const oid = cab[0].id;
+          await supabase.from('ordenes_compra_items').insert(lote.items.map(i => ({ orden_id: oid, codigo: i.codigo, nombre: i.nombre, proveedor: i.proveedor, cantidad_ordenada: i.cantidad, costo_unitario: i.costo, descuento: i.descuento, dias_tribucion: dias, cantidad_recibida: 0, estado_item: 'pendiente', creado_en: ahora })));
+        }
       }
-    } catch (e) { }
+    } catch (e) { console.error('Error guardando lotes:', e); }
+
+    // ── Generar archivos Excel: 1 Excel si es 1 lote, ZIP si son varios ──
     try {
-      const res = await fetch('/api/exportar-excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: ordenItems.map(i => ({ codigo: i.codigo, cantidad: i.cantidad, ultimo_costo: i.costo, descuento: i.descuento })), proveedor: nom }) });
-      if (!res.ok) { const e = await res.json(); mostrarMsg(e.error || 'Error al generar Excel', 'err'); return; }
-      const blob = await res.blob();
-      const ts = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `Orden_${nom}_${ts}.xlsx`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { mostrarMsg('Error generando Excel: ' + e.message, 'err'); return; }
-    mostrarMsg(`Orden "${nom}" cerrada y descargada.`);
+      if (totalLotes === 1) {
+        // Un solo Excel igual que antes
+        const res = await fetch('/api/exportar-excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: ordenItems.map(i => ({ codigo: i.codigo, cantidad: i.cantidad, ultimo_costo: i.costo, descuento: i.descuento })), proveedor: nom }) });
+        if (!res.ok) { const e = await res.json(); mostrarMsg(e.error || 'Error al generar Excel', 'err'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `Orden_${nom}_${ts}.xlsx`; a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Varios lotes → ZIP con un Excel por lote
+        const proveedoresLotes = {};
+        for (const lote of lotes) {
+          proveedoresLotes[lote.nombre] = lote.items.map(i => ({ codigo: i.codigo, cantidad: i.cantidad, costo: i.costo, descuento: i.descuento || 0 }));
+        }
+        const res = await fetch('/api/exportar-zip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proveedores: proveedoresLotes }) });
+        if (!res.ok) { const e = await res.json(); mostrarMsg(e.error || 'Error al generar ZIP', 'err'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `Orden_${nom}_${totalLotes}lotes_${ts}.zip`; a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) { mostrarMsg('Error generando archivo: ' + e.message, 'err'); return; }
+
+    mostrarMsg(`✅ Orden "${nom}" cerrada en ${totalLotes} lote(s) de máx 20 líneas.`);
     setOrdenItems([]);
     setNombreOrden('');
     setTab(0);
