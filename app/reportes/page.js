@@ -171,26 +171,40 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   });
   console.log(`[Ezequiel] renameMap keys:`, Object.keys(renameMap).length, 'de', cfg.columnas_originales.length);
 
+  // Función robusta para limpiar valores del Excel
+  // XLSX.js puede devolver strings con trailing spaces, tabs, etc.
+  const limpiar = (val) => {
+    if (val === null || val === undefined) return null;
+    // Convertir a string y limpiar TODOS los whitespace (incluyendo non-breaking spaces)
+    const s = String(val).replace(/^[\s ​]+|[\s ​]+$/g, '');
+    if (s === '' || s === 'nan' || s === 'null' || s === 'undefined') return null;
+    return s;
+  };
+
   const records = [];
   for (const row of dataRows) {
     if (!row || row.every(v => v === null || v === undefined || String(v).trim() === '')) continue;
 
     // Primera columna: filtrar totales y vacíos
-    const primerVal = String(row[0] || '').trim();
-    if (!primerVal || primerVal === 'nan' || primerVal.startsWith('Total:')) continue;
+    const primerVal = limpiar(row[0]);
+    if (!primerVal || primerVal.startsWith('Total:')) continue;
 
     const record = { fecha_carga: fechaCarga, periodo_reporte: periodo };
     for (const [idxStr, norm] of Object.entries(renameMap)) {
       const idx = parseInt(idxStr);
-      let val = row[idx];
-      if (val === null || val === undefined || String(val).trim() === '' || String(val).trim() === 'nan') {
-        record[norm] = null;
-      } else {
-        record[norm] = String(val).trim();
-      }
+      record[norm] = limpiar(row[idx]);
     }
     records.push(record);
   }
+  
+  // DEBUG: mostrar muestra de valores procesados
+  if (records.length > 0) {
+    const sample = records.find(r => r.ultimo_proveedor !== null) || records[0];
+    console.log(`[Ezequiel] Muestra de record procesado:`, JSON.stringify(sample));
+    const conProv = records.filter(r => r.ultimo_proveedor !== null).length;
+    console.log(`[Ezequiel] Records con ultimo_proveedor: ${conProv} / ${records.length}`);
+  }
+  
   return records;
 }
 
