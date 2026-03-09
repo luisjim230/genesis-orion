@@ -305,15 +305,16 @@ export default function Inventario() {
     const rows=[headers];
     Object.keys(porProv).sort().forEach((prov,idx)=>{
       if(idx>0) for(let k=0;k<4;k++) rows.push(new Array(headers.length).fill(''));
-      rows.push([`── ${prov} ──`,...new Array(headers.length-1).fill('')]);
+      rows.push([`Proveedor: ${prov}`,...new Array(headers.length-1).fill('')]);
       porProv[prov].forEach(i=>rows.push([i._alerta,i.codigo,i.nombre,parseFloat(i.promedio_mensual)||0,parseFloat(i.existencias)||0,i._transito>0?`🚢 ${i._transito}`:'–',i._cantComprar,parseFloat(i.ultimo_costo)||0,fmtF(i.ultima_compra),i.ultimo_proveedor||'']));
     });
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Inventario por Proveedor');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Filtrado agrupado');
     const rRows=[['Proveedor','Productos','A comprar']];
     Object.keys(porProv).sort().forEach(p=>rRows.push([p,porProv[p].length,porProv[p].reduce((s,i)=>s+i._cantComprar,0)]));
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rRows),'Resumen por Proveedor');
-    XLSX.writeFile(wb,`${nombre||'Inventario'}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    const ts=new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
+    XLSX.writeFile(wb,`filtrado_por_proveedor_${ts}.xlsx`);
     mostrarMsg('Excel descargado.');
   }
 
@@ -616,18 +617,12 @@ export default function Inventario() {
           {/* ── TAB 2: EXPORTAR ── */}
           {tab===2 && (
             <div className="card" style={{padding:24}}>
-              <div style={{fontWeight:600,color:'var(--burgundy)',marginBottom:8,fontSize:'1rem'}}>📊 Exportar tabla agrupada por proveedor</div>
-              <p style={{fontSize:'0.82rem',color:'#666',marginBottom:18}}>Exporta los productos filtrados con alertas, agrupados y ordenados por proveedor.</p>
-              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
-                <input className="module-input" style={{flex:1,minWidth:200}} placeholder="🔍 Filtrar lo que se exporta..." value={busqueda} onChange={e=>setBusqueda(e.target.value)}/>
-                <select className="module-input" value={filtroAlerta} onChange={e=>setFiltroAlerta(e.target.value)}>
-                  {alertasUnicas.map(a=><option key={a}>{a}</option>)}
-                </select>
-              </div>
-              <p style={{fontSize:'0.82rem',color:'#666',marginBottom:16}}>Se exportarán <strong>{calcFiltrado.length.toLocaleString()}</strong> productos de <strong>{new Set(calcFiltrado.map(i=>i.ultimo_proveedor||'Sin proveedor')).size}</strong> proveedores.</p>
-              <button className="btn-primary" style={{fontSize:'0.9rem',padding:'10px 24px'}} onClick={()=>exportarExcel(calcFiltrado,'Inventario_Alertas')}>📄 Generar y Descargar Excel agrupado</button>
+              <div style={{fontWeight:600,color:"var(--burgundy)",marginBottom:8,fontSize:"1rem"}}>📊 Exportar tabla agrupada por proveedor</div>
+              <p style={{fontSize:"0.82rem",color:"#666",marginBottom:18}}>Exporta <strong>todos</strong> los productos con sus alertas, agrupados por proveedor — igual que antes.</p>
+              <p style={{fontSize:"0.82rem",color:"#666",marginBottom:16}}>Se exportarán <strong>{calc.length.toLocaleString()}</strong> productos de <strong>{new Set(calc.map(i=>i.ultimo_proveedor||"Sin proveedor")).size}</strong> proveedores.</p>
+              <button className="btn-primary" style={{fontSize:"0.9rem",padding:"10px 24px"}} onClick={()=>exportarExcel(calc,"filtrado_por_proveedor")}>📄 Generar y Descargar Excel agrupado</button>
               <div className="info-banner" style={{marginTop:16}}>
-                <strong>El Excel incluye:</strong> Hoja "Inventario por Proveedor" con alertas + columna 🚢 En tránsito. Hoja "Resumen por Proveedor" con conteo y cantidad a comprar.
+                <strong>El Excel incluye:</strong> Hoja "Filtrado agrupado" con alertas + columna 🚢 En tránsito, agrupado por proveedor. Hoja "Resumen por Proveedor".
               </div>
             </div>
           )}
