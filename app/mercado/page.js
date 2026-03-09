@@ -40,8 +40,9 @@ function useMercado() {
   const fetch_=async(url)=>{try{const r=await fetch(url);const j=await r.json();return j.ok?j.data:null;}catch{return null;}};
   const cargar=useCallback(async()=>{
     setCargando(true);
-    const [refData,cobre_,aluminio_,petroleo_,aceroHRC_,aceroReb_,pvc_,fletes_]=await Promise.allSettled([
+    const [refData,bancosData,cobre_,aluminio_,petroleo_,aceroHRC_,aceroReb_,pvc_,fletes_]=await Promise.allSettled([
       fetch_('/api/mercado?fuente=bccr_ref'),
+      fetch_('/api/mercado?fuente=bccr_bancos'),
       fetch_('/api/mercado?fuente=yahoo&ticker=HG%3DF'),
       fetch_('/api/mercado?fuente=yahoo&ticker=ALI%3DF'),
       fetch_('/api/mercado?fuente=yahoo&ticker=CL%3DF'),
@@ -50,7 +51,8 @@ function useMercado() {
       fetch_('/api/mercado?fuente=tradingeconomics&slug=polyvinyl'),
       fetch_('/api/mercado?fuente=fletes'),
     ]);
-    setData({tcRef:refData.value||null,cobre:cobre_.value||null,aluminio:aluminio_.value||null,petroleo:petroleo_.value||null,aceroHRC:aceroHRC_.value||null,aceroReb:aceroReb_.value||null,pvc:pvc_.value||null,fletes:fletes_.value||null});
+    const bancos = bancosData.value || {};
+    setData({tcRef:refData.value||null,bancos,cobre:cobre_.value||null,aluminio:aluminio_.value||null,petroleo:petroleo_.value||null,aceroHRC:aceroHRC_.value||null,aceroReb:aceroReb_.value||null,pvc:pvc_.value||null,fletes:fletes_.value||null});
     const now=new Date();
     setUltima(String(now.getDate()).padStart(2,'0')+'/'+String(now.getMonth()+1).padStart(2,'0')+'/'+now.getFullYear()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'));
     setCargando(false);
@@ -59,7 +61,7 @@ function useMercado() {
   return {...data,cargando,ultima,recargar:cargar};
 }
 export default function IsaiasMercado() {
-  const {tcRef,fletes,cobre,aluminio,petroleo,aceroHRC,aceroReb,pvc,cargando,ultima,recargar}=useMercado();
+  const {tcRef,bancos,fletes,cobre,aluminio,petroleo,aceroHRC,aceroReb,pvc,cargando,ultima,recargar}=useMercado();
   const [montoUSD,setMontoUSD]=useState(1000);
   const [fleteActual,setFleteActual]=useState(2500);
   const [fleteRef,setFleteRef]=useState(2000);
@@ -82,9 +84,9 @@ export default function IsaiasMercado() {
       <div style={S.subCap}>Compra y venta en ventanilla · Fuente: BCCR</div>
       <div style={S.grid4}>
         <TarjetaTC nombre="BCCR Referencia" emoji="🏛️" compra={tcRef?.compra} venta={tcRef?.venta} cargando={cargando}/>
-        <TarjetaTC nombre="BAC San José" emoji="🏦" compra={null} venta={null} cargando={false}/>
-        <TarjetaTC nombre="Davivienda" emoji="🔴" compra={null} venta={null} cargando={false}/>
-        <TarjetaTC nombre="BCR" emoji="🇨🇷" compra={null} venta={null} cargando={false}/>
+        <TarjetaTC nombre="BAC San José" emoji="🏦" compra={bancos?.bac?.compra} venta={bancos?.bac?.venta} cargando={cargando}/>
+        <TarjetaTC nombre="Davivienda" emoji="🔴" compra={bancos?.davivienda?.compra} venta={bancos?.davivienda?.venta} cargando={cargando}/>
+        <TarjetaTC nombre="BCR" emoji="🇨🇷" compra={bancos?.bcr?.compra} venta={bancos?.bcr?.venta} cargando={cargando}/>
       </div>
       <div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'8px'}}>📌 Fuente oficial: <a href="https://gee.bccr.fi.cr/IndicadoresEconomicos/Cuadros/frmConsultaTCVentanilla.aspx" target="_blank" rel="noreferrer" style={{color:'#63b3ed'}}>BCCR Ventanilla en tiempo real</a></div>
       <hr style={S.divider}/>
