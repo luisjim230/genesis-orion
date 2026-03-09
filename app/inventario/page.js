@@ -175,6 +175,7 @@ export default function Inventario() {
         <>
           {fechaCarga && <p style={{fontSize:'0.78rem',color:'#999',marginBottom:10}}>☁️ Última carga: <strong style={{color:'var(--burgundy)'}}>{fechaCarga?.slice(0,16).replace('T',' ')}</strong></p>}
           {totalTCods>0 && <div className="info-banner">🚢 <strong>{totalTCods} productos en tránsito</strong> ({totalTUnids.toLocaleString()} unidades). La columna <strong>🚢 En tránsito</strong> ya descuenta automáticamente de <strong>Cantidad a comprar</strong>.</div>}
+          {proveedoresPausados.size>0 && <div className="warn-banner">⚠️ Tenés <strong>{proveedoresPausados.size} proveedores pausados</strong> — no aparecerán en la sugerencia del día. Andá al tab <strong>📋 Sugerencia</strong> y bajá al final para reactivarlos, o usá <strong>🔓 Reactivar todos</strong>.</div>}
 
           {/* KPIs */}
           <div className="kpi-grid kpi-grid-6" style={{marginBottom:20}}>
@@ -265,7 +266,17 @@ export default function Inventario() {
 
               {proveedoresPausados.size>0 && (
                 <div style={{marginTop:16}}>
-                  <p style={{fontSize:'0.78rem',color:'#999',marginBottom:8}}>⏸️ Proveedores pausados ({proveedoresPausados.size})</p>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <p style={{fontSize:'0.78rem',color:'#999',margin:0}}>⏸️ Proveedores pausados ({proveedoresPausados.size})</p>
+                    <button className="btn-primary" style={{fontSize:'0.75rem',padding:'5px 12px',background:'#E53E3E'}} onClick={async()=>{
+                      if(!confirm(`¿Reactivar los ${proveedoresPausados.size} proveedores pausados?`)) return;
+                      try{
+                        await supabase.from('proveedores_pausados').delete().neq('proveedor','__never__');
+                        setProveedoresPausados(new Set());
+                        mostrarMsg(`✅ Todos los proveedores reactivados.`);
+                      }catch(e){ mostrarMsg('Error al limpiar: '+e.message,'err'); }
+                    }}>🔓 Reactivar todos</button>
+                  </div>
                   {[...proveedoresPausados].sort().map(p=>(
                     <div key={p} className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 14px',marginBottom:6,fontSize:'0.84rem'}}>
                       <span style={{color:'#666'}}>{p}</span>
