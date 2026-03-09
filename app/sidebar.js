@@ -9,43 +9,43 @@ const navGroups = [
   {
     label: 'Principal',
     items: [
-      { href: '/',             icon: '⊞',  name: 'Cosmos',    sub: 'Dashboard' },
+      { href: '/',             icon: '⊞',  name: 'Dashboard' },
     ],
   },
   {
     label: 'Inventario',
     items: [
-      { href: '/inventario',   icon: '📦', name: 'Saturno',   sub: 'Compras' },
-      { href: '/trazabilidad', icon: '🔴', name: 'Nehemías',  sub: 'Trazabilidad de inventario y compras' },
-      { href: '/reportes',     icon: '📊', name: 'Ezequiel',  sub: 'Carga de reportes' },
-      // { href: '/helios',    icon: '💡', name: 'Helios',    sub: 'Inteligencia Comercial' },  // oculto
+      { href: '/inventario',   icon: '📦', name: 'Compras' },
+      { href: '/trazabilidad', icon: '🔴', name: 'Trazabilidad de inventario y compras' },
+      { href: '/reportes',     icon: '📊', name: 'Carga de reportes' },
+      // { href: '/helios',    icon: '💡', name: 'Inteligencia Comercial' },  // oculto
     ],
   },
   {
     label: 'Importaciones',
     items: [
-      { href: '/cif',          icon: '🧮', name: 'Halley',    sub: 'Calculadora de importación' },
-      { href: '/contenedores', icon: '🚢', name: 'Jonás',     sub: 'Cargas en tránsito' },
-      { href: '/mercado',      icon: '⚡', name: 'Isaías',    sub: 'Mercado' },
+      { href: '/cif',          icon: '🧮', name: 'Calculadora de importación' },
+      { href: '/contenedores', icon: '🚢', name: 'Cargas en tránsito' },
+      { href: '/mercado',      icon: '⚡', name: 'Mercado' },
     ],
   },
   {
     label: 'Gestión',
     items: [
-      { href: '/finanzas',     icon: '💰', name: 'Números',   sub: 'Finanzas' },
-      { href: '/tareas',       icon: '✅', name: 'Matusalén', sub: 'Tareas' },
-      // { href: '/redes',     icon: '📱', name: 'Crónicas',  sub: 'Redes Sociales' },  // oculto
+      { href: '/finanzas',     icon: '💰', name: 'Finanzas' },
+      { href: '/tareas',       icon: '✅', name: 'Tareas' },
+      // { href: '/redes',     icon: '📱', name: 'Redes Sociales' },  // oculto
     ],
   },
   {
     label: 'Herramientas',
     items: [
-      { href: '/ponderacion',  icon: '⚖️', name: 'Esdras',    sub: 'Promedios ponderados' },
+      { href: '/ponderacion',  icon: '⚖️', name: 'Promedios ponderados' },
     ],
   },
 ];
 
-function NavItem({ href, icon, name, sub, collapsed }) {
+function NavItem({ href, icon, name, collapsed }) {
   const pathname = usePathname();
   const isActive = pathname === href || (href !== '/' && pathname?.startsWith(href));
 
@@ -55,7 +55,7 @@ function NavItem({ href, icon, name, sub, collapsed }) {
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        padding: collapsed ? '10px 16px' : '9px 16px',
+        padding: '10px 16px',
         cursor: 'pointer',
         borderRadius: 8,
         margin: '1px 8px',
@@ -68,23 +68,16 @@ function NavItem({ href, icon, name, sub, collapsed }) {
       >
         <span style={{ fontSize: '1rem', flexShrink: 0, width: 20, textAlign: 'center' }}>{icon}</span>
         {!collapsed && (
-          <div style={{ overflow: 'hidden' }}>
-            <div style={{
-              fontSize: '0.83rem',
-              fontWeight: isActive ? 600 : 400,
-              color: isActive ? '#ED6E2E' : 'rgba(253,244,244,0.80)',
-              lineHeight: 1.2,
-              fontFamily: "'Rubik', sans-serif",
-            }}>{name}</div>
-            <div style={{
-              fontSize: '0.68rem',
-              color: isActive ? 'rgba(237,110,46,0.7)' : 'rgba(253,244,244,0.35)',
-              marginTop: 1,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>{sub}</div>
-          </div>
+          <div style={{
+            fontSize: '0.83rem',
+            fontWeight: isActive ? 600 : 400,
+            color: isActive ? '#ED6E2E' : 'rgba(253,244,244,0.80)',
+            lineHeight: 1.3,
+            fontFamily: "'Rubik', sans-serif",
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>{name}</div>
         )}
       </div>
     </Link>
