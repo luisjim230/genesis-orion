@@ -15,17 +15,17 @@ const navGroups = [
   {
     label: 'Inventario',
     items: [
-      { href: '/inventario',   icon: '📦', name: 'Saturno',   sub: 'Inventario' },
-      { href: '/trazabilidad', icon: '🔴', name: 'Nehemías',  sub: 'Trazabilidad' },
-      { href: '/reportes',     icon: '📊', name: 'Ezequiel',  sub: 'Centro de Datos' },
+      { href: '/inventario',   icon: '📦', name: 'Saturno',   sub: 'Compras' },
+      { href: '/trazabilidad', icon: '🔴', name: 'Nehemías',  sub: 'Trazabilidad de inventario y compras' },
+      { href: '/reportes',     icon: '📊', name: 'Ezequiel',  sub: 'Carga de reportes' },
       // { href: '/helios',    icon: '💡', name: 'Helios',    sub: 'Inteligencia Comercial' },  // oculto
     ],
   },
   {
     label: 'Importaciones',
     items: [
-      { href: '/cif',          icon: '🧮', name: 'Halley',    sub: 'Calculadora CIF' },
-      { href: '/contenedores', icon: '🚢', name: 'Jonás',     sub: 'Contenedores' },
+      { href: '/cif',          icon: '🧮', name: 'Halley',    sub: 'Calculadora de importación' },
+      { href: '/contenedores', icon: '🚢', name: 'Jonás',     sub: 'Cargas en tránsito' },
       { href: '/mercado',      icon: '⚡', name: 'Isaías',    sub: 'Mercado' },
     ],
   },
@@ -40,7 +40,7 @@ const navGroups = [
   {
     label: 'Herramientas',
     items: [
-      { href: '/ponderacion',  icon: '⚖️', name: 'Esdras',    sub: 'Ponderación' },
+      { href: '/ponderacion',  icon: '⚖️', name: 'Esdras',    sub: 'Promedios ponderados' },
     ],
   },
 ];
@@ -80,6 +80,9 @@ function NavItem({ href, icon, name, sub, collapsed }) {
               fontSize: '0.68rem',
               color: isActive ? 'rgba(237,110,46,0.7)' : 'rgba(253,244,244,0.35)',
               marginTop: 1,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}>{sub}</div>
           </div>
         )}
@@ -127,7 +130,6 @@ export default function Sidebar() {
             <rect x="0"  y="24" width="10" height="8"  rx="2" fill="#ED6E2E"/>
             <rect x="13" y="24" width="23" height="8"  rx="2" fill="#ED6E2E"/>
           </svg>
-
           {!collapsed && (
             <div style={{ lineHeight: 1 }}>
               <div style={{
@@ -204,7 +206,6 @@ export default function Sidebar() {
             <span style={{ fontSize: 14 }}>{collapsed ? '→' : '←'}</span>
             {!collapsed && <span>Colapsar</span>}
           </button>
-
           {!collapsed && (
             <div style={{ padding: '10px 12px 0', fontSize: '0.62rem', color: 'rgba(253,244,244,0.20)', fontFamily: "'Rubik', sans-serif" }}>
               Génesis Orión v3.0 · 2026
