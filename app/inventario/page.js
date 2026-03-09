@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 
+// ── Lógica de alertas (igual que el original) ─────────────────────────────────
 function calcularAlertas(items, transitoMap, dias) {
   return items.map(item => {
     const existencias  = parseFloat(item.existencias||0)||0;
@@ -45,6 +46,110 @@ function AlertaBadge({ alerta }) {
 const fmtN = (v,d=2)=>{ const n=parseFloat(v); return isNaN(n)?'—':n.toLocaleString('es-CR',{minimumFractionDigits:d,maximumFractionDigits:d}); };
 const fmtF = (v)=>v?String(v).slice(0,10):'—';
 
+// ── Dropdown filtro tipo Excel ─────────────────────────────────────────────────
+function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const isFiltered = selected.size < values.length;
+  const isActive = isFiltered || activeSort;
+  const visibleValues = values.filter(v => String(v).toLowerCase().includes(search.toLowerCase()));
+
+  const toggleAll = () => {
+    if (selected.size === values.length) onSelect(new Set());
+    else onSelect(new Set(values));
+  };
+  const toggle = (v) => {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v); else next.add(v);
+    onSelect(next);
+  };
+
+  return (
+    <div ref={ref} style={{ position:'relative', display:'inline-flex', alignItems:'center', gap:4 }}>
+      <span style={{ fontWeight:700, fontSize:12, letterSpacing:0.3 }}>{label}</span>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: isActive ? 'var(--orange, #f97316)' : '#e5e7eb',
+          border:'none', borderRadius:4, width:20, height:20,
+          cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize:10, color: isActive ? 'white' : '#6b7280', flexShrink:0,
+        }}
+        title="Filtrar / Ordenar"
+      >
+        {isActive ? '▼' : '▾'}
+      </button>
+
+      {open && (
+        <div style={{
+          position:'absolute', top:'calc(100% + 6px)', left:0, zIndex:9999,
+          background:'white', border:'1.5px solid #e5e7eb', borderRadius:10,
+          boxShadow:'0 8px 24px rgba(0,0,0,0.14)', minWidth:200, padding:8,
+        }}>
+          {/* Ordenar */}
+          <div style={{ borderBottom:'1px solid #f3f4f6', paddingBottom:6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', letterSpacing:0.5, marginBottom:4, paddingLeft:4 }}>ORDENAR</div>
+            {[{dir:'asc',icon:'↑',text:'Ascendente'},{dir:'desc',icon:'↓',text:'Descendente'}].map(({dir,icon,text}) => (
+              <button key={dir} onClick={() => { onSort(dir); setOpen(false); }} style={{
+                display:'flex', alignItems:'center', gap:8, width:'100%',
+                padding:'5px 8px', borderRadius:6, border:'none', cursor:'pointer',
+                background: activeSort===dir ? '#fff7ed' : 'transparent',
+                color: activeSort===dir ? 'var(--orange,#f97316)' : '#374151',
+                fontWeight: activeSort===dir ? 700 : 400, fontSize:13,
+              }}>
+                <span style={{fontSize:14}}>{icon}</span>{text}
+              </button>
+            ))}
+          </div>
+
+          {/* Buscar en valores */}
+          <div style={{ borderBottom:'1px solid #f3f4f6', paddingBottom:6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', letterSpacing:0.5, marginBottom:4, paddingLeft:4 }}>FILTRAR</div>
+            <input
+              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width:'100%', boxSizing:'border-box', padding:'5px 8px', border:'1px solid #e5e7eb', borderRadius:6, fontSize:12, outline:'none' }}
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Checkboxes */}
+          <div style={{ maxHeight:180, overflowY:'auto' }}>
+            <label style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 6px', cursor:'pointer', fontSize:12, fontWeight:600, color:'#374151' }}>
+              <input type="checkbox" checked={selected.size === values.length} onChange={toggleAll} style={{ cursor:'pointer' }} />
+              (Seleccionar todo)
+            </label>
+            {visibleValues.map(v => (
+              <label key={String(v)} style={{ display:'flex', alignItems:'center', gap:8, padding:'3px 6px', cursor:'pointer', fontSize:12, color:'#4b5563' }}>
+                <input type="checkbox" checked={selected.has(v)} onChange={() => toggle(v)} style={{ cursor:'pointer' }} />
+                {String(v) || '(vacío)'}
+              </label>
+            ))}
+          </div>
+
+          <button onClick={() => setOpen(false)} style={{
+            marginTop:8, width:'100%', padding:'7px 0',
+            background:'var(--orange,#f97316)', color:'white', border:'none',
+            borderRadius:6, fontWeight:700, fontSize:13, cursor:'pointer',
+          }}>
+            Aplicar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Componente principal ───────────────────────────────────────────────────────
 export default function Inventario() {
   const [tab, setTab]           = useState(0);
   const [datos, setDatos]       = useState([]);
@@ -63,10 +168,26 @@ export default function Inventario() {
   const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState(new Set());
   const [expandProv, setExpandProv] = useState({});
 
+  // ── Estado filtros tipo Excel (solo para Tab 1) ──
+  const [colSort, setColSort] = useState({ col: '_alerta', dir: 'asc' });
+  const [colFilters, setColFilters] = useState(null); // null = sin inicializar
+
   const mostrarMsg = (t,tipo='ok')=>{ setMsg({t,tipo}); setTimeout(()=>setMsg(null),5000); };
 
   useEffect(()=>{ cargarDatos(); },[]);
   useEffect(()=>{ if(datos.length) setCalc(calcularAlertas(datos,transitoMap,dias)); },[datos,transitoMap,dias]);
+
+  // Inicializar filtros de columna cuando calc cambia
+  useEffect(() => {
+    if (calc.length > 0) {
+      setColFilters({
+        _alerta:         new Set(calc.map(p => p._alerta)),
+        codigo:          new Set(calc.map(p => p.codigo||'')),
+        nombre:          new Set(calc.map(p => p.nombre||'')),
+        ultimo_proveedor:new Set(calc.map(p => p.ultimo_proveedor||'Sin proveedor')),
+      });
+    }
+  }, [calc.length]);
 
   async function cargarDatos() {
     setLoading(true);
@@ -79,11 +200,6 @@ export default function Inventario() {
       if(!data?.length) break; todos=todos.concat(data); if(data.length<1000) break; offset+=1000;
     }
     setDatos(todos);
-    if (todos.length === 0) {
-      console.warn('Saturno: 0 registros cargados. Verificá que Ezequiel haya subido el archivo correctamente.');
-    } else {
-      console.log(`Saturno: ${todos.length} registros cargados desde fecha_carga=${fc}`);
-    }
     const {data:tData}=await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item',['pendiente','parcial']);
     const tMap={};
     (tData||[]).forEach(i=>{ const c=(i.codigo||'').trim(); const p=Math.max((parseFloat(i.cantidad_ordenada)||0)-(parseFloat(i.cantidad_recibida)||0),0); if(c&&p>0) tMap[c]=(tMap[c]||0)+p; });
@@ -92,11 +208,73 @@ export default function Inventario() {
     setLoading(false);
   }
 
-  const calcFiltrado = calc.filter(item=>{
-    const txt=busqueda.toLowerCase();
-    const ok=!txt||[item.codigo,item.nombre,item.ultimo_proveedor,item._alerta].some(v=>(v||'').toLowerCase().includes(txt));
-    return ok && (filtroAlerta==='Todos'||item._alerta===filtroAlerta);
-  });
+  // ── Valores únicos para los filtros de columna ──
+  const allColValues = useMemo(() => {
+    if (!calc.length) return {};
+    const alertaOrder = {'🔴 Bajo stock':1,'🔴 Bajo stock 🚢':2,'🟠 En tránsito':3,'🟡 Prestar atención':4,'🟢 Óptimo':5,'🔵 Sobrestock':6};
+    return {
+      _alerta:          [...new Set(calc.map(p => p._alerta))].sort((a,b)=>(alertaOrder[a]||9)-(alertaOrder[b]||9)),
+      codigo:           [...new Set(calc.map(p => p.codigo||''))].sort(),
+      nombre:           [...new Set(calc.map(p => p.nombre||''))].sort(),
+      ultimo_proveedor: [...new Set(calc.map(p => p.ultimo_proveedor||'Sin proveedor'))].sort(),
+    };
+  }, [calc]);
+
+  const setFilter = (col, val) => setColFilters(f => ({ ...f, [col]: val }));
+  const setSort   = (col, dir) => setColSort({ col, dir });
+
+  // ── Filtrado con búsqueda + filtro alerta dropdown + filtros de columna ──
+  const calcFiltrado = useMemo(() => {
+    let result = [...calc];
+
+    // Buscador global
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase();
+      result = result.filter(item =>
+        [item.codigo, item.nombre, item.ultimo_proveedor, item._alerta].some(v=>(v||'').toLowerCase().includes(q))
+      );
+    }
+
+    // Filtro alerta dropdown (tab 2 exportar lo usa también)
+    if (filtroAlerta !== 'Todos') result = result.filter(item => item._alerta === filtroAlerta);
+
+    // Filtros de columna Excel
+    if (colFilters) {
+      result = result.filter(item =>
+        colFilters._alerta.has(item._alerta) &&
+        colFilters.codigo.has(item.codigo||'') &&
+        colFilters.nombre.has(item.nombre||'') &&
+        colFilters.ultimo_proveedor.has(item.ultimo_proveedor||'Sin proveedor')
+      );
+    }
+
+    // Ordenar
+    result.sort((a, b) => {
+      const alertaOrder = {'🔴 Bajo stock':1,'🔴 Bajo stock 🚢':2,'🟠 En tránsito':3,'🟡 Prestar atención':4,'🟢 Óptimo':5,'🔵 Sobrestock':6};
+      let va = a[colSort.col], vb = b[colSort.col];
+      if (colSort.col === '_alerta') { va = alertaOrder[va]||9; vb = alertaOrder[vb]||9; }
+      if (typeof va === 'string') return colSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return colSort.dir === 'asc' ? (va||0)-(vb||0) : (vb||0)-(va||0);
+    });
+
+    return result;
+  }, [calc, busqueda, filtroAlerta, colFilters, colSort]);
+
+  const hasColFilter = colFilters && allColValues._alerta &&
+    Object.keys(colFilters).some(k => allColValues[k] && colFilters[k].size < allColValues[k].length);
+
+  const resetColFilters = () => {
+    if (!allColValues._alerta) return;
+    setColFilters({
+      _alerta:          new Set(allColValues._alerta),
+      codigo:           new Set(allColValues.codigo),
+      nombre:           new Set(allColValues.nombre),
+      ultimo_proveedor: new Set(allColValues.ultimo_proveedor),
+    });
+    setColSort({ col: '_alerta', dir: 'asc' });
+    setBusqueda('');
+    setFiltroAlerta('Todos');
+  };
 
   const stats=calc.reduce((a,i)=>{a[i._alerta]=(a[i._alerta]||0)+1;return a;},{});
   const totalTCods=Object.keys(transitoMap).length;
@@ -184,11 +362,10 @@ export default function Inventario() {
               <span style={{fontSize:'0.78rem',background:datos.length>=4000?'#F0FFF4':datos.length>=1000?'#FFFBEB':'#FFF5F5',color:datos.length>=4000?'#276749':datos.length>=1000?'#7B341E':'#C53030',border:'1px solid',borderColor:datos.length>=4000?'#9AE6B4':datos.length>=1000?'#FAD776':'#FEB2B2',borderRadius:12,padding:'2px 10px',fontWeight:600}}>
                 {datos.length.toLocaleString()} registros en BD
               </span>
-              {datos.length < 1000 && <span style={{fontSize:'0.78rem',color:'#C53030',fontWeight:600}}>⚠️ Parece incompleto — volvé a subir el archivo en Ezequiel</span>}
             </div>
           )}
           {totalTCods>0 && <div className="info-banner">🚢 <strong>{totalTCods} productos en tránsito</strong> ({totalTUnids.toLocaleString()} unidades). La columna <strong>🚢 En tránsito</strong> ya descuenta automáticamente de <strong>Cantidad a comprar</strong>.</div>}
-          {proveedoresPausados.size>0 && <div className="warn-banner">⚠️ Tenés <strong>{proveedoresPausados.size} proveedores pausados</strong> — no aparecerán en la sugerencia del día. Andá al tab <strong>📋 Sugerencia</strong> y bajá al final para reactivarlos, o usá <strong>🔓 Reactivar todos</strong>.</div>}
+          {proveedoresPausados.size>0 && <div className="warn-banner">⚠️ Tenés <strong>{proveedoresPausados.size} proveedores pausados</strong>.</div>}
 
           {/* KPIs */}
           <div className="kpi-grid kpi-grid-6" style={{marginBottom:20}}>
@@ -200,7 +377,7 @@ export default function Inventario() {
             ))}
           </div>
 
-          {/* Controles */}
+          {/* Controles días */}
           <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <label style={{fontSize:'0.82rem',color:'#666',whiteSpace:'nowrap'}}>⚔️ Días a cubrir:</label>
@@ -219,7 +396,7 @@ export default function Inventario() {
           {/* ── TAB 0: SUGERENCIA ── */}
           {tab===0 && (
             <div>
-              <p style={{fontSize:'0.82rem',color:'#666',marginBottom:16}}>Productos que deben reordenarse, agrupados por proveedor. Revisá y ajustá cantidades antes de exportar.</p>
+              <p style={{fontSize:'0.82rem',color:'#666',marginBottom:16}}>Productos que deben reordenarse, agrupados por proveedor.</p>
               <div className="kpi-grid kpi-grid-4" style={{marginBottom:16}}>
                 {[['Productos a ordenar',calcAComprar.filter(i=>!proveedoresPausados.has((i.ultimo_proveedor||'').trim())).length,'#E53E3E'],['Proveedores activos',proveedoresList.length,'var(--orange)'],['Proveedores pausados',proveedoresPausados.size,'#999'],['Seleccionados',proveedoresSeleccionados.size,'var(--teal)']].map(([l,v,c])=>(
                   <div key={l} className="kpi-card" style={{borderTopColor:c,padding:'12px 16px'}}>
@@ -283,11 +460,7 @@ export default function Inventario() {
                     <p style={{fontSize:'0.78rem',color:'#999',margin:0}}>⏸️ Proveedores pausados ({proveedoresPausados.size})</p>
                     <button className="btn-primary" style={{fontSize:'0.75rem',padding:'5px 12px',background:'#E53E3E'}} onClick={async()=>{
                       if(!confirm(`¿Reactivar los ${proveedoresPausados.size} proveedores pausados?`)) return;
-                      try{
-                        await supabase.from('proveedores_pausados').delete().neq('proveedor','__never__');
-                        setProveedoresPausados(new Set());
-                        mostrarMsg(`✅ Todos los proveedores reactivados.`);
-                      }catch(e){ mostrarMsg('Error al limpiar: '+e.message,'err'); }
+                      try{ await supabase.from('proveedores_pausados').delete().neq('proveedor','__never__'); setProveedoresPausados(new Set()); mostrarMsg('✅ Todos los proveedores reactivados.'); }catch(e){ mostrarMsg('Error: '+e.message,'err'); }
                     }}>🔓 Reactivar todos</button>
                   </div>
                   {[...proveedoresPausados].sort().map(p=>(
@@ -301,40 +474,101 @@ export default function Inventario() {
             </div>
           )}
 
-          {/* ── TAB 1: ORDEN MANUAL ── */}
+          {/* ── TAB 1: ORDEN MANUAL con filtros Excel ── */}
           {tab===1 && (
             <div>
-              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
-                <input className="module-input" style={{flex:1,minWidth:240}} placeholder="🔍 Buscar por código, nombre, proveedor, alerta..." value={busqueda} onChange={e=>setBusqueda(e.target.value)}/>
+              {/* Barra de búsqueda + filtros rápidos */}
+              <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
+                <input
+                  className="module-input"
+                  style={{flex:1,minWidth:240}}
+                  placeholder="🔍 Buscar por código, nombre, proveedor, alerta..."
+                  value={busqueda}
+                  onChange={e=>setBusqueda(e.target.value)}
+                />
                 <select className="module-input" value={filtroAlerta} onChange={e=>setFiltroAlerta(e.target.value)}>
                   {alertasUnicas.map(a=><option key={a}>{a}</option>)}
                 </select>
-                <span style={{fontSize:'0.78rem',color:'#999',whiteSpace:'nowrap'}}>{calcFiltrado.length.toLocaleString()} productos</span>
+                {(hasColFilter || busqueda || filtroAlerta !== 'Todos') && (
+                  <button
+                    onClick={resetColFilters}
+                    style={{padding:'8px 14px',borderRadius:8,border:'1.5px solid #E53E3E',background:'#FFF5F5',color:'#E53E3E',fontWeight:600,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                )}
+                <span style={{fontSize:'0.78rem',color:'#999',whiteSpace:'nowrap'}}>
+                  <strong style={{color:'#1a1a2e'}}>{calcFiltrado.length.toLocaleString()}</strong> de {calc.length.toLocaleString()} productos
+                </span>
               </div>
 
+              {/* Tabla con headers filtrables */}
               <div style={{overflowX:'auto',borderRadius:10,border:'1px solid var(--border)',marginBottom:14}}>
                 <table className="module-table">
-                  <thead><tr>
-                    <th>☑</th>
-                    {['Alerta','Código','Nombre','Prom. mensual','Existencias','🚢 Tránsito','Cant. a comprar','Último costo','Proveedor'].map(h=><th key={h}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>{calcFiltrado.slice(0,300).map((item,i)=>{
-                    const sel=seleccionados.has(item.codigo);
-                    return (
-                      <tr key={i} style={{background:sel?'rgba(237,110,46,0.06)':undefined,cursor:'pointer'}} onClick={()=>{ const s=new Set(seleccionados); sel?s.delete(item.codigo):s.add(item.codigo); setSeleccionados(s); }}>
-                        <td><input type="checkbox" checked={sel} readOnly style={{accentColor:'var(--orange)'}}/></td>
-                        <td><AlertaBadge alerta={item._alerta}/></td>
-                        <td style={{fontFamily:'monospace',fontSize:'0.78em',color:'var(--orange)'}}>{item.codigo}</td>
-                        <td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.nombre}</td>
-                        <td style={{textAlign:'right'}}>{fmtN(item.promedio_mensual,0)}</td>
-                        <td style={{textAlign:'right',color:parseFloat(item.existencias)<=0?'#E53E3E':undefined}}>{fmtN(item.existencias,0)}</td>
-                        <td style={{textAlign:'center',color:'#3182CE'}}>{item._transito>0?`🚢 ${item._transito}`:'–'}</td>
-                        <td style={{textAlign:'right',fontWeight:item._cantComprar>0?700:400,color:item._cantComprar>0?'#E53E3E':'#ccc'}}>{item._cantComprar||'–'}</td>
-                        <td style={{textAlign:'right'}}>{fmtN(item.ultimo_costo)}</td>
-                        <td style={{maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:'0.78em'}}>{item.ultimo_proveedor||'—'}</td>
-                      </tr>
-                    );
-                  })}</tbody>
+                  <thead>
+                    <tr>
+                      <th style={{padding:'10px 12px'}}>☑</th>
+                      {/* Columnas con filtro Excel */}
+                      {[
+                        { key:'_alerta',          label:'Alerta' },
+                        { key:'codigo',           label:'Código' },
+                        { key:'nombre',           label:'Nombre' },
+                        { key:'ultimo_proveedor', label:'Proveedor' },
+                      ].map(col => (
+                        <th key={col.key} style={{padding:'10px 12px'}}>
+                          {colFilters && allColValues[col.key] ? (
+                            <ColFilter
+                              label={col.label}
+                              values={allColValues[col.key]}
+                              selected={colFilters[col.key]}
+                              onSelect={(v) => setFilter(col.key, v)}
+                              onSort={(dir) => setSort(col.key, dir)}
+                              activeSort={colSort.col === col.key ? colSort.dir : null}
+                            />
+                          ) : col.label}
+                        </th>
+                      ))}
+                      {/* Columnas sin filtro (numéricas) con solo ordenar */}
+                      {[
+                        { key:'promedio_mensual', label:'Prom. mensual' },
+                        { key:'existencias',      label:'Existencias' },
+                        { key:'_transito',        label:'🚢 Tránsito' },
+                        { key:'_cantComprar',     label:'Cant. a comprar' },
+                        { key:'ultimo_costo',     label:'Último costo' },
+                      ].map(col => (
+                        <th key={col.key} style={{padding:'10px 12px', cursor:'pointer', userSelect:'none'}}
+                          onClick={() => setSort(col.key, colSort.col===col.key && colSort.dir==='asc' ? 'desc' : 'asc')}>
+                          <span style={{fontWeight:700,fontSize:12,letterSpacing:0.3}}>
+                            {col.label}
+                            {colSort.col === col.key ? (colSort.dir==='asc'?' ↑':' ↓') : ' ↕'}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calcFiltrado.slice(0,300).map((item,i)=>{
+                      const sel=seleccionados.has(item.codigo);
+                      return (
+                        <tr key={i} style={{background:sel?'rgba(237,110,46,0.06)':undefined,cursor:'pointer'}}
+                          onClick={()=>{ const s=new Set(seleccionados); sel?s.delete(item.codigo):s.add(item.codigo); setSeleccionados(s); }}>
+                          <td><input type="checkbox" checked={sel} readOnly style={{accentColor:'var(--orange)'}}/></td>
+                          <td><AlertaBadge alerta={item._alerta}/></td>
+                          <td style={{fontFamily:'monospace',fontSize:'0.78em',color:'var(--orange)'}}>{item.codigo}</td>
+                          <td style={{maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.nombre}</td>
+                          <td style={{maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:'0.78em'}}>{item.ultimo_proveedor||'—'}</td>
+                          <td style={{textAlign:'right'}}>{fmtN(item.promedio_mensual,0)}</td>
+                          <td style={{textAlign:'right',color:parseFloat(item.existencias)<=0?'#E53E3E':undefined}}>{fmtN(item.existencias,0)}</td>
+                          <td style={{textAlign:'center',color:'#3182CE'}}>{item._transito>0?`🚢 ${item._transito}`:'–'}</td>
+                          <td style={{textAlign:'right',fontWeight:item._cantComprar>0?700:400,color:item._cantComprar>0?'#E53E3E':'#ccc'}}>{item._cantComprar||'–'}</td>
+                          <td style={{textAlign:'right'}}>{fmtN(item.ultimo_costo)}</td>
+                        </tr>
+                      );
+                    })}
+                    {calcFiltrado.length === 0 && (
+                      <tr><td colSpan={11} style={{padding:40,textAlign:'center',color:'#9ca3af'}}>😕 No hay productos con esos filtros</td></tr>
+                    )}
+                  </tbody>
                 </table>
                 {calcFiltrado.length>300 && <div style={{padding:10,textAlign:'center',color:'#999',fontSize:'0.8rem'}}>Mostrando primeros 300. Usá los filtros para acotar.</div>}
               </div>
@@ -370,7 +604,7 @@ export default function Inventario() {
                     </table>
                   </div>
                   <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-                    <input className="module-input" style={{flex:1,minWidth:200}} placeholder="📝 Nombre de la orden (ej: Gran Orden de Marzo)" value={nombreOrden} onChange={e=>setNombreOrden(e.target.value)}/>
+                    <input className="module-input" style={{flex:1,minWidth:200}} placeholder="📝 Nombre de la orden" value={nombreOrden} onChange={e=>setNombreOrden(e.target.value)}/>
                     <button className="btn-primary" onClick={cerrarOrden}>🔱 Cerrar Orden – Descargar Excel</button>
                     <button className="btn-outline" style={{color:'#E53E3E',borderColor:'#E53E3E'}} onClick={()=>{if(confirm('¿Limpiar la orden?'))setOrdenItems([]);}}>🗑 Limpiar</button>
                   </div>
@@ -393,7 +627,7 @@ export default function Inventario() {
               <p style={{fontSize:'0.82rem',color:'#666',marginBottom:16}}>Se exportarán <strong>{calcFiltrado.length.toLocaleString()}</strong> productos de <strong>{new Set(calcFiltrado.map(i=>i.ultimo_proveedor||'Sin proveedor')).size}</strong> proveedores.</p>
               <button className="btn-primary" style={{fontSize:'0.9rem',padding:'10px 24px'}} onClick={()=>exportarExcel(calcFiltrado,'Inventario_Alertas')}>📄 Generar y Descargar Excel agrupado</button>
               <div className="info-banner" style={{marginTop:16}}>
-                <strong>El Excel incluye:</strong> Hoja "Inventario por Proveedor" con alertas + columna 🚢 En tránsito, agrupado con 4 filas de separación entre proveedores. Hoja "Resumen por Proveedor" con conteo y cantidad a comprar.
+                <strong>El Excel incluye:</strong> Hoja "Inventario por Proveedor" con alertas + columna 🚢 En tránsito. Hoja "Resumen por Proveedor" con conteo y cantidad a comprar.
               </div>
             </div>
           )}
