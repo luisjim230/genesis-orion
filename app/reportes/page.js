@@ -154,13 +154,22 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   const headers = filas[headerRow].map(v => String(v||'').trim());
   const dataRows = filas.slice(headerRow + 1);
 
+  // DEBUG: mostrar primeras filas para diagnosticar
+  console.log(`[Ezequiel] procesarExcel tabla=${tabla} header_row=${headerRow}`);
+  console.log(`[Ezequiel] filas[0]:`, JSON.stringify(filas[0]?.slice(0,4)));
+  console.log(`[Ezequiel] filas[1] (headers):`, JSON.stringify(filas[1]?.slice(0,6)));
+  console.log(`[Ezequiel] filas[2] (primer dato):`, JSON.stringify(filas[2]?.slice(0,6)));
+  console.log(`[Ezequiel] headers procesados:`, JSON.stringify(headers.slice(0,6)));
+
   // Construir rename map: original → normalizado
   const renameMap = {};
   cfg.columnas_originales.forEach((orig, i) => {
     const norm = cfg.columnas[i];
     const colIdx = headers.findIndex(h => h.trim() === orig.trim());
     if (colIdx >= 0) renameMap[colIdx] = norm;
+    else console.warn(`[Ezequiel] NO mapeado: "${orig}"`);
   });
+  console.log(`[Ezequiel] renameMap keys:`, Object.keys(renameMap).length, 'de', cfg.columnas_originales.length);
 
   const records = [];
   for (const row of dataRows) {
