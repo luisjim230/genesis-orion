@@ -187,18 +187,30 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 
 async function cargarASupabase(tabla, records) {
   if (!records.length) return 0;
-  const BATCH = 200; // batches pequeños para evitar timeouts
+  const BATCH = 200;
   const fechaCarga = records[0].fecha_carga;
 
-  // Limpiar TODOS los datos anteriores de esta tabla antes de insertar
-  // Esto evita cargas parciales antiguas que confunden a Saturno
-  const { error: delErr } = await supabase.from(tabla).delete().lt('fecha_carga', fechaCarga);
-  if (delErr && delErr.code !== 'PGRST116') {
-    console.warn('Advertencia al limpiar registros viejos:', delErr.message);
-  }
-  // También limpiar registros con la misma fecha (por si hay reintento)
-  await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
+  // Paso 1: obtener TODAS las fechas_carga existentes en esta tabla
+  // y borrarlas una por una (el RLS de Supabase permite delete con eq exacto)
+  try {
+    const { data: fechasExistentes } = await supabase
+      .from(tabla)
+      .select('fecha_carga')
+      .order('fecha_carga', { ascending: false });
 
+    if (fechasExistentes?.length) {
+      const fechasUnicas = [...new Set(fechasExistentes.map(r => r.fecha_carga))];
+      for (const fc of fechasUnicas) {
+        await supabase.from(tabla).delete().eq('fecha_carga', fc);
+      }
+    }
+  } catch(e) {
+    console.warn('Advertencia limpiando tabla:', e.message);
+    // Si falla, intentar limpiar al menos la fecha actual
+    await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
+  }
+
+  // Paso 2: insertar todos los registros nuevos en batches con retry
   let total = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
@@ -207,8 +219,8 @@ async function cargarASupabase(tabla, records) {
       const { error } = await supabase.from(tabla).insert(batch);
       if (!error) { total += batch.length; break; }
       intentos++;
-      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} fallido tras 3 intentos: ${error.message}`);
-      await new Promise(r => setTimeout(r, 800 * intentos));
+      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} falló (${error.message})`);
+      await new Promise(r => setTimeout(r, 1000 * intentos));
     }
   }
   return total;
@@ -376,8 +388,16 @@ function TabVerDatos() {
     const res = {};
     for (const tabla of Object.keys(REPORTES)) {
       try {
+        // Obtener la fecha más reciente
         const { data } = await supabase.from(tabla).select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending:false }).limit(1);
-        res[tabla] = data?.[0] || null;
+        if (data?.[0]) {
+          const fc = data[0].fecha_carga;
+          // Contar cuántos registros tiene esa fecha_carga
+          const { count } = await supabase.from(tabla).select('*', { count:'exact', head:true }).eq('fecha_carga', fc);
+          res[tabla] = { ...data[0], count };
+        } else {
+          res[tabla] = null;
+        }
       } catch { res[tabla] = null; }
     }
     setResumen(res);
@@ -455,6 +475,14 @@ function TabVerDatos() {
                     <div style={{ fontSize:'1.4rem' }}>{cfg.emoji}</div>
                     <div style={{ color:'var(--text-primary)', fontWeight:600, fontSize:'0.88rem', margin:'4px 0 2px' }}>{cfg.nombre}</div>
                     <div style={{ color:'#63b3ed', fontSize:'0.75rem' }}>✅ {utcACR(info.fecha_carga)}</div>
+                    {info.count != null && (
+                      <div style={{ fontSize:'0.72rem', fontWeight:700, marginTop:2,
+                        color: info.count > 3000 ? '#276749' : info.count > 500 ? '#7B341E' : '#C53030',
+                        background: info.count > 3000 ? '#F0FFF4' : info.count > 500 ? '#FFFBEB' : '#FFF5F5',
+                        borderRadius:8, padding:'1px 7px', display:'inline-block' }}>
+                        {info.count?.toLocaleString()} registros
+                      </div>
+                    )}
                     <div style={{ color:'var(--text-muted)', fontSize:'0.72rem' }}>{info.periodo_reporte||'—'}</div>
                   </div>
                 : <div key={tabla} style={S.cardEmpty}>
