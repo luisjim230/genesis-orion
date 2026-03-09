@@ -226,13 +226,15 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   const headers = filas[headerRow].map(v => String(v||'').trim());
   const dataRows = filas.slice(headerRow + 1);
 
-  // DEBUG: mostrar primeras filas para diagnosticar
-  console.log(`[Ezequiel] procesarExcel tabla=${tabla} header_row=${headerRow}`);
-  console.log(`[Ezequiel] filas[0]:`, JSON.stringify(filas[0]?.slice(0,4)));
-  console.log(`[Ezequiel] filas[1] (headers):`, JSON.stringify(filas[1]?.slice(0,6)));
-  console.log(`[Ezequiel] filas[2] (primer dato):`, JSON.stringify(filas[2]?.slice(0,6)));
-  console.log(`[Ezequiel] headers procesados:`, JSON.stringify(headers.slice(0,6)));
-
+  // Función robusta para limpiar valores del Excel
+  // XLSX.js puede devolver strings con trailing spaces, tabs, etc.
+  // También puede devolver fechas como número serial de Excel (ej: 46090.62...)
+  const excelSerialToDate = (n) => {
+    // Excel serial date: días desde 1900-01-01 (con bug de 1900-02-29)
+    const d = new Date((n - 25569) * 86400 * 1000);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  };
   // Construir rename map: original → normalizado
   const renameMap = {};
   cfg.columnas_originales.forEach((orig, i) => {
@@ -245,8 +247,13 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 
   // Función robusta para limpiar valores del Excel
   // XLSX.js puede devolver strings con trailing spaces, tabs, etc.
-  const limpiar = (val) => {
+  const limpiar = (val, colName) => {
     if (val === null || val === undefined) return null;
+    // Número serial de Excel en columna de fecha → convertir a YYYY-MM-DD
+    if (typeof val === 'number' && colName && colName.toLowerCase().includes('fecha')) {
+      const d = new Date((val - 25569) * 86400 * 1000);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
     // Convertir a string y limpiar TODOS los whitespace (incluyendo non-breaking spaces)
     const s = String(val).replace(/^[\s ​]+|[\s ​]+$/g, '');
     if (s === '' || s === 'nan' || s === 'null' || s === 'undefined') return null;
@@ -264,7 +271,7 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
     const record = { fecha_carga: fechaCarga, periodo_reporte: periodo };
     for (const [idxStr, norm] of Object.entries(renameMap)) {
       const idx = parseInt(idxStr);
-      record[norm] = limpiar(row[idx]);
+      record[norm] = limpiar(row[idx], norm);
     }
     records.push(record);
   }
