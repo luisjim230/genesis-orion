@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-// Cargar Nunito Black para el logo (igual que la imagen del logo real)
 const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
 
 const navGroups = [
@@ -19,7 +18,7 @@ const navGroups = [
       { href: '/inventario',   icon: '📦', name: 'Saturno',   sub: 'Inventario' },
       { href: '/trazabilidad', icon: '🔴', name: 'Nehemías',  sub: 'Trazabilidad' },
       { href: '/reportes',     icon: '📊', name: 'Ezequiel',  sub: 'Centro de Datos' },
-      { href: '/helios',       icon: '💡', name: 'Helios',    sub: 'Inteligencia Comercial' },
+      // { href: '/helios',    icon: '💡', name: 'Helios',    sub: 'Inteligencia Comercial' },  // oculto
     ],
   },
   {
@@ -35,7 +34,7 @@ const navGroups = [
     items: [
       { href: '/finanzas',     icon: '💰', name: 'Números',   sub: 'Finanzas' },
       { href: '/tareas',       icon: '✅', name: 'Matusalén', sub: 'Tareas' },
-      { href: '/redes',        icon: '📱', name: 'Crónicas',  sub: 'Redes Sociales' },
+      // { href: '/redes',     icon: '📱', name: 'Crónicas',  sub: 'Redes Sociales' },  // oculto
     ],
   },
   {
@@ -120,15 +119,11 @@ export default function Sidebar() {
           gap: 10,
           flexShrink: 0,
         }}>
-          {/* Brick SVG */}
           <svg width={collapsed ? 30 : 36} height={collapsed ? 26 : 32} viewBox="0 0 36 32" style={{ flexShrink: 0 }}>
-            {/* Fila 1: blanco pequeño + naranja grande */}
             <rect x="0"  y="0"  width="10" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
             <rect x="13" y="0"  width="23" height="9"  rx="2" fill="#ED6E2E"/>
-            {/* Fila 2: naranja grande + blanco pequeño */}
             <rect x="0"  y="12" width="22" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
             <rect x="25" y="12" width="11" height="9"  rx="2" fill="#ED6E2E"/>
-            {/* Fila 3: todo naranja */}
             <rect x="0"  y="24" width="10" height="8"  rx="2" fill="#ED6E2E"/>
             <rect x="13" y="24" width="23" height="8"  rx="2" fill="#ED6E2E"/>
           </svg>
