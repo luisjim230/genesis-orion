@@ -328,7 +328,41 @@ export default function Inventario() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `Ordenes_Compra_${fecha}.zip`; a.click();
       URL.revokeObjectURL(url);
-      mostrarMsg(`✅ ZIP con ${proveedoresSeleccionados.size} órdenes descargado.`);
+
+      // ── Guardar historial en Supabase: una orden por proveedor ──────────────
+      try {
+        const ahora = new Date().toISOString();
+        for (const [prov, items] of Object.entries(payload)) {
+          if (!items.length) continue;
+          const nombreLote = `OC_${prov}_${fecha}`;
+          const { data: cab, error: errCab } = await supabase
+            .from('ordenes_compra')
+            .insert([{ fecha_orden: ahora, nombre_lote: nombreLote, dias_tribucion: dias, total_productos: items.length, creado_en: ahora }])
+            .select();
+          if (errCab || !cab?.length) continue;
+          const oid = cab[0].id;
+          const rows = items.map(i => {
+            // buscar nombre del producto en porProveedor
+            const prodInfo = (porProveedor[prov] || []).find(p => String(p.codigo) === String(i.codigo)) || {};
+            return {
+              orden_id: oid,
+              codigo: String(i.codigo || '').trim(),
+              nombre: String(prodInfo.nombre || i.nombre || ''),
+              proveedor: prov,
+              cantidad_ordenada: parseFloat(i.cantidad) || 0,
+              costo_unitario: parseFloat(i.costo) || 0,
+              descuento: parseFloat(i.descuento) || 0,
+              dias_tribucion: dias,
+              cantidad_recibida: 0,
+              estado_item: 'pendiente',
+              creado_en: ahora,
+            };
+          });
+          await supabase.from('ordenes_compra_items').insert(rows);
+        }
+      } catch (eSupa) { console.error('Error guardando historial masivo:', eSupa); }
+
+      mostrarMsg(`✅ ZIP con ${proveedoresSeleccionados.size} órdenes descargado y guardado en historial.`);
     } catch (e) { mostrarMsg('Error: ' + e.message, 'err'); }
     setZipGenerando(false);
   }
