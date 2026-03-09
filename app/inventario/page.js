@@ -300,19 +300,39 @@ export default function Inventario() {
   async function exportarExcel(fuente,nombre){
     const XLSX=(await import('xlsx')).default||(await import('xlsx'));
     const headers=['Alerta','Código','Nombre','Promedio mensual','Existencias','🚢 En tránsito','Cantidad a comprar','Último costo','Fecha última compra','Último proveedor'];
+    // Orden de alertas igual que el archivo original
+    const alertaOrder={'🔴 Bajo stock':1,'🔴 Bajo stock 🚢':2,'🟠 En tránsito':3,'🟡 Prestar atención':4,'🟢 Óptimo':5,'🔵 Sobrestock':6};
+    // Agrupar por proveedor
     const porProv={};
     fuente.forEach(i=>{ const p=(i.ultimo_proveedor||'Sin proveedor').trim(); if(!porProv[p])porProv[p]=[]; porProv[p].push(i); });
     const rows=[headers];
     Object.keys(porProv).sort().forEach((prov,idx)=>{
-      if(idx>0) for(let k=0;k<4;k++) rows.push(new Array(headers.length).fill(''));
-      rows.push([`Proveedor: ${prov}`,...new Array(headers.length-1).fill('')]);
-      porProv[prov].forEach(i=>rows.push([i._alerta,i.codigo,i.nombre,parseFloat(i.promedio_mensual)||0,parseFloat(i.existencias)||0,i._transito>0?`🚢 ${i._transito}`:'–',i._cantComprar,parseFloat(i.ultimo_costo)||0,fmtF(i.ultima_compra),i.ultimo_proveedor||'']));
+      // 4 filas vacías entre proveedores (igual que el original)
+      if(idx>0) for(let k=0;k<4;k++) rows.push(new Array(headers.length).fill(null));
+      // Separador: "Proveedor: NOMBRE" solo en col 1, resto null
+      rows.push([`Proveedor: ${prov}`,null,null,null,null,null,null,null,null,null]);
+      // Productos ordenados por alerta dentro del grupo
+      const itemsOrdenados=[...porProv[prov]].sort((a,b)=>(alertaOrder[a._alerta]||9)-(alertaOrder[b._alerta]||9));
+      itemsOrdenados.forEach(i=>rows.push([
+        i._alerta,
+        i.codigo,
+        i.nombre,
+        parseFloat(i.promedio_mensual)||0,
+        parseFloat(i.existencias)||0,
+        i._transito>0?`🚢 ${i._transito}`:'–',
+        i._cantComprar,
+        parseFloat(i.ultimo_costo)||0,
+        fmtF(i.ultima_compra),
+        i.ultimo_proveedor||''
+      ]));
     });
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Filtrado agrupado');
+    // Hoja resumen
     const rRows=[['Proveedor','Productos','A comprar']];
     Object.keys(porProv).sort().forEach(p=>rRows.push([p,porProv[p].length,porProv[p].reduce((s,i)=>s+i._cantComprar,0)]));
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rRows),'Resumen por Proveedor');
+    // Nombre de archivo igual que el original
     const ts=new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
     XLSX.writeFile(wb,`filtrado_por_proveedor_${ts}.xlsx`);
     mostrarMsg('Excel descargado.');
