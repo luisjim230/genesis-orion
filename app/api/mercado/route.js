@@ -60,31 +60,41 @@ export async function GET(request) {
       }
 
       case 'bccr_bancos': {
-        // Tipos de cambio de bancos vía BCCR ventanilla (indicadores 318-327 aprox)
-        // BAC=500, BCR=802, Davivienda=877 según catálogo BCCR
-        const entidades = [
-          { codigo: '672', nombre: 'BAC San José',  key: 'bac' },
-          { codigo: '802', nombre: 'BCR',            key: 'bcr' },
-          { codigo: '877', nombre: 'Davivienda',     key: 'davivienda' },
-        ];
-        const hoy = new Date();
-        const dd = String(hoy.getDate()).padStart(2,'0');
-        const mm = String(hoy.getMonth()+1).padStart(2,'0');
-        const yyyy = hoy.getFullYear();
-        const fecha = dd+'/'+mm+'/'+yyyy;
-        const resultados = {};
-        // Indicadores ventanilla por banco: compra ~3-5 puntos debajo de venta BCCR
-        // Usamos la API de ventanilla con indicadores específicos
-        for (const ent of entidades) {
-          try {
-            const url = `https://gee.bccr.fi.cr/Indicadores/Suscripciones/WS/wsindicadoreseconomicos.asmx/ObtenerIndicadoresEconomicos?Indicador=3140&FechaInicio=${fecha}&FechaFinal=${fecha}&Nombre=Genesis&SubNiveles=N&CorreoElectronico=genesis@rojimo.com&Token=OJXUWSTM2J&Entidad=${ent.codigo}`;
-            const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-            const text = await r.text();
-            const vals = [...text.matchAll(/<NUM_VALOR>([\d.]+)<\/NUM_VALOR>/g)].map(m => parseFloat(m[1]));
-            if (vals.length >= 2) resultados[ent.key] = { compra: vals[0], venta: vals[1] };
-          } catch(e) {}
+        // Scraping de página oficial BCCR ventanilla - tiene todos los bancos
+        try {
+          const r = await fetch('https://gee.bccr.fi.cr/IndicadoresEconomicos/Cuadros/frmConsultaTCVentanilla.aspx', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: AbortSignal.timeout(12000)
+          });
+          const html = await r.text();
+          const resultados = {};
+
+          // Extraer filas de la tabla con los bancos
+          // La tabla tiene formato: Banco Nombre | compra | venta | diferencial | fecha
+          const bancosMapa = {
+            'BAC San': 'bac',
+            'Davivienda': 'davivienda',
+            'BCR': 'bcr',
+            'Banco de Costa Rica': 'bcr',
+          };
+
+          // Buscar filas de la tabla HTML
+          const rowMatches = [...html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/gi)];
+          for (const row of rowMatches) {
+            const text = row[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const nums = [...text.matchAll(/(\d{3,}[.,]\d{0,2})/g)].map(m => parseFloat(m[1].replace(',','.')));
+
+            for (const [buscar, key] of Object.entries(bancosMapa)) {
+              if (text.includes(buscar) && nums.length >= 2 && !resultados[key]) {
+                resultados[key] = { compra: nums[0], venta: nums[1] };
+              }
+            }
+          }
+
+          return Response.json({ ok: true, data: resultados });
+        } catch(e) {
+          return Response.json({ ok: false, error: e.message });
         }
-        return Response.json({ ok: true, data: resultados });
       }
 
       case 'yahoo': {
