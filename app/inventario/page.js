@@ -319,16 +319,35 @@ export default function Inventario() {
   async function cerrarOrden(){
     if(!ordenItems.length){mostrarMsg('No hay productos en la orden.','err');return;}
     const nom=nombreOrden.trim()||new Date().toISOString().slice(0,16).replace('T','_');
+
+    // Guardar en Supabase
     try{
       const ahora=new Date().toISOString();
       const {data:cab}=await supabase.from('ordenes_compra').insert([{fecha_orden:ahora,nombre_lote:nom,dias_tribucion:dias,total_productos:ordenItems.length,creado_en:ahora}]).select();
-      if(cab?.length){ const oid=cab[0].id; await supabase.from('ordenes_compra_items').insert(ordenItems.map(i=>({orden_id:oid,codigo:i.codigo,nombre:i.nombre,proveedor:i.proveedor,cantidad_ordenada:i.cantidad,costo_unitario:i.costo,descuento:i.descuento,dias_tribucion:dias,cantidad_recibida:0,estado_item:'pendiente',creado_en:ahora}))); }
+      if(cab?.length){
+        const oid=cab[0].id;
+        await supabase.from('ordenes_compra_items').insert(ordenItems.map(i=>({orden_id:oid,codigo:i.codigo,nombre:i.nombre,proveedor:i.proveedor,cantidad_ordenada:i.cantidad,costo_unitario:i.costo,descuento:i.descuento,dias_tribucion:dias,cantidad_recibida:0,estado_item:'pendiente',creado_en:ahora})));
+      }
     }catch(e){}
-    const XLSX=(await import('xlsx')).default||(await import('xlsx'));
-    const rows=[['Código','Nombre','Cantidad a comprar','Último costo','Descuento']];
-    ordenItems.forEach(i=>rows.push([i.codigo,i.nombre,i.cantidad,i.costo,i.descuento]));
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Orden');
-    XLSX.writeFile(wb,`Orden_${nom}_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    // Generar Excel via /api/exportar-excel (formato correcto para NEO)
+    try{
+      const res=await fetch('/api/exportar-excel',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          items:ordenItems.map(i=>({codigo:i.codigo,cantidad:i.cantidad,ultimo_costo:i.costo,descuento:i.descuento})),
+          proveedor:nom
+        })
+      });
+      if(!res.ok){const e=await res.json();mostrarMsg(e.error||'Error al generar Excel','err');return;}
+      const blob=await res.blob();
+      const ts=new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=`Orden_${nom}_${ts}.xlsx`;a.click();
+      URL.revokeObjectURL(url);
+    }catch(e){mostrarMsg('Error generando Excel: '+e.message,'err');return;}
+
     mostrarMsg(`Orden "${nom}" cerrada y descargada.`);
     setOrdenItems([]); setNombreOrden(''); setTab(0);
   }
