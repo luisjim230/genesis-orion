@@ -93,8 +93,15 @@ export default function Contenedores() {
   const [saving, setSaving]     = useState(false);
   const [msg, setMsg]           = useState(null);
   const [buscar, setBuscar]     = useState('');
+  const [tcBac, setTcBac]       = useState(null);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    cargar();
+    fetch('/api/mercado?fuente=bccr_ref')
+      .then(r=>r.json())
+      .then(j=>{ if(j.ok && j.data?.venta) setTcBac(j.data.venta); })
+      .catch(()=>{});
+  }, []);
 
   async function cargar() {
     setLoading(true);
@@ -199,10 +206,12 @@ export default function Contenedores() {
             <div style={S.kpi('#c8a84b')}>
               <div style={S.mLabel}>Total comprometido</div>
               <div style={S.metric}>{usd(totalComprometido)}</div>
+              {tcBac && <div style={{fontSize:'0.78em',color:'#c8a84b',marginTop:'4px'}}>₡{Math.round(totalComprometido*tcBac).toLocaleString('es-CR')} <span style={{fontSize:'0.75em',color:'var(--text-muted)'}}>TC BAC ₡{tcBac.toFixed(2)}</span></div>}
             </div>
             <div style={S.kpi(totalPendiente>0?'#fc8181':'#68d391')}>
               <div style={S.mLabel}>Pendiente de pago</div>
               <div style={S.metric}>{usd(totalPendiente)}</div>
+              {tcBac && <div style={{fontSize:'0.78em',color:totalPendiente>0?'#fc8181':'#68d391',marginTop:'4px'}}>₡{Math.round(totalPendiente*tcBac).toLocaleString('es-CR')} <span style={{fontSize:'0.75em',color:'var(--text-muted)'}}>TC BAC ₡{tcBac.toFixed(2)}</span></div>}
               <div style={S.mDelta(totalPendiente>0)}>{totalPendiente>0?'⚠️ Por pagar':'✅ Al día'}</div>
             </div>
           </div>
