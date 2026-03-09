@@ -38,6 +38,7 @@ function usarFechas() {
     supabase.from('neo_items_facturados')
       .select('fecha_carga, periodo_reporte')
       .order('fecha_carga', { ascending: false })
+      .limit(2000)
       .then(({ data }) => {
         if (!data?.length) return;
         const vistos = new Set(); const unicas = [];

@@ -294,38 +294,58 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 // Esto es lo correcto para reportes de NEO que son siempre por rango de fechas
 async function cargarASupabase(tabla, records, periodoNuevo) {
   if (!records.length) return 0;
-  const BATCH = 100;
+  const BATCH = 50;
   const periodo = periodoNuevo || 'Sin período';
+  const fechaCargaActual = records[0]?.fecha_carga;
 
+  // Dedup: borrar cargas previas con el mismo periodo_reporte
+  // Si periodo es 'Sin período', borrar cargas del mismo día para evitar duplicados
   try {
-    // Borrar SOLO si existe una carga anterior con exactamente el mismo período
-    const { data: mismoP } = await supabase
-      .from(tabla)
-      .select('fecha_carga')
-      .eq('periodo_reporte', periodo)
-      .limit(10);
-
-    for (const row of (mismoP || [])) {
-      await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
+    let query = supabase.from(tabla).select('fecha_carga').limit(20);
+    if (periodo !== 'Sin período') {
+      query = query.eq('periodo_reporte', periodo);
+    } else {
+      // Buscar cargas del mismo día
+      const hoy = new Date(fechaCargaActual);
+      const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString();
+      const finHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()+1).toISOString();
+      query = query.gte('fecha_carga', inicioHoy).lt('fecha_carga', finHoy);
+    }
+    const { data: previas } = await query;
+    const fcsUnicas = [...new Set((previas||[]).map(r => r.fecha_carga))];
+    for (const fc of fcsUnicas) {
+      await supabase.from(tabla).delete().eq('fecha_carga', fc);
+      console.log(`[Ezequiel] Dedup: borrada carga ${fc} de ${tabla}`);
     }
   } catch(e) {
     console.warn('[Ezequiel] Advertencia en dedup:', e.message);
   }
 
-  // Insertar en batches con retry
+  // Insertar en batches
   let total = 0;
+  const errores = [];
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
     let intentos = 0;
-    while (intentos < 3) {
+    let ok = false;
+    while (intentos < 3 && !ok) {
       const { error } = await supabase.from(tabla).insert(batch);
-      if (!error) { total += batch.length; console.log(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1}: OK (${batch.length} filas)`); break; }
-      console.error(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1} error:`, error.message, error.details, error.hint);
-      intentos++;
-      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} falló: ${error.message} | ${error.details || ''}`);
-      await new Promise(r => setTimeout(r, 1000 * intentos));
+      if (!error) {
+        total += batch.length;
+        console.log(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(records.length/BATCH)}: OK (${batch.length} filas, total=${total})`);
+        ok = true;
+      } else {
+        intentos++;
+        console.error(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1} intento ${intentos} error:`, error.message, '|', error.details, '|', error.hint);
+        if (intentos >= 3) {
+          errores.push(`Batch ${Math.floor(i/BATCH)+1}: ${error.message}`);
+          break; // Continuar con el siguiente batch en vez de tirar error total
+        }
+        await new Promise(r => setTimeout(r, 800 * intentos));
+      }
     }
   }
+  if (errores.length) console.error('[Ezequiel] Batches fallidos:', errores.join('; '));
   return total;
 }
 
@@ -391,6 +411,7 @@ function TabSubir() {
         res.estado  = 'ok';
         res.tipo    = tipo;
         res.filas   = cantidad;
+        res.filasTotales = records.length;
         res.periodo = periodo;
       } catch(e) {
         res.estado = 'error';
@@ -486,7 +507,7 @@ function TabSubir() {
                     <>
                       <div style={{ fontSize:'0.83rem', color:'#276749' }}>✅ Guardado correctamente</div>
                       <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>
-                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · {r.periodo} · <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> filas
+                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · {r.periodo} · <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> guardadas{r.filasTotales && r.filasTotales !== r.filas ? <span style={{color:'#e53e3e'}}> ({r.filasTotales} en archivo)</span> : ''}
                       </div>
                     </>
                   )}
