@@ -279,9 +279,29 @@ function TabSubir() {
           continue;
         }
 
+        let cantidad;
+        // neo_minimos_maximos: procesar en el SERVIDOR para manejar xml:space="preserve"
+        // XLSX.js en el browser ignora ese atributo y devuelve "" para strings con espacios
+        if (tipo === 'neo_minimos_maximos') {
+          const formData = new FormData();
+          formData.append('file', file);
+          const apiRes = await fetch('/api/subir-inventario', { method: 'POST', body: formData });
+          const apiData = await apiRes.json();
+          if (!apiRes.ok) throw new Error(apiData.error || 'Error en servidor');
+          console.log(`[Ezequiel] Servidor procesó: ${apiData.total} records, ${apiData.con_proveedor} con proveedor`);
+          cantidad = apiData.total;
+          res.tipo = tipo;
+          res.filas = cantidad;
+          res.periodo = apiData.fecha_carga?.slice(0, 10) || '';
+          res.estado = 'ok';
+          nuevos.push(res);
+          continue;
+        }
+
         const periodo  = extraerPeriodo(filas);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
-        const cantidad = await cargarASupabase(tipo, records);
+        const cantidad2 = await cargarASupabase(tipo, records);
+        cantidad = cantidad2;
 
         res.estado  = 'ok';
         res.tipo    = tipo;
