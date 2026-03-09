@@ -89,6 +89,25 @@ const REPORTES = {
     columnas:['asiento','fecha','tipo','cuenta_contable','centro_costo','debe_moneda_asiento','moneda_debe','haber_moneda_asiento','moneda_haber','debe_contabilidad','moneda_debe_cont','haber_contabilidad','moneda_haber_cont','observaciones_asiento','observaciones_movimiento'],
     columnas_originales:['Asiento contable','Fecha ','Tipo','Cuenta contable','Centro de costo','Debe (Moneda del asiento)','Moneda','Haber (Moneda del asiento)','Moneda1','Debe (Moneda de contabilidad)','Moneda2','Haber (Moneda de contabilidad)','Moneda3','Observaciones del asiento','Observaciones del movimiento'],
   },
+  // ── Nuevos: Equipo de Ventas ─────────────────────────────────────────────
+  neo_items_facturados: {
+    nombre:'Lista de ítems facturados', emoji:'🧾',
+    descripcion:'Detalle de cada ítem vendido: vendedor, costo, utilidad, cliente.',
+    header_row:1, titulo_valor:'Lista de ítems facturados',
+    fecha_col:'fecha',
+    columnas:['factura','orden_compra','fecha','usuario_pedido','vendedor','codigo','identificacion','cliente','sucursal','tipo_item','codigo_interno','item','descripcion','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','moneda','costo_unitario','moneda1','subtotal','moneda2','descuento','moneda3','pct_descuento','impuesto','pct_impuesto','impuestos','moneda4','otros_cargos','utilidad_costo','total','moneda5','codigo_cupon','observaciones','observaciones_factura','tipo_cambio','telefono','correo','marca','color','chasis','motor','territorio','peso_unidad'],
+    columnas_originales:['Factura','Orden de compra','Fecha','Usuario que registró el pedido','Vendedor','Código','Identificación','Cliente','Sucursal','Tipo de ítem','Código interno','Ítem','Descripción del ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Moneda','Costo unitario sin impuesto','Moneda1','Subtotal','Moneda2','Descuento','Moneda3','% Descuento','Impuesto','% Impuesto','Impuestos','Moneda4','Otros cargos','Utilidad/costo','Total','Moneda5','Código del cupón','Observaciones','Observaciones de la factura','Tipo de cambio de venta','Teléfono','Correo electrónico','Marca','Color','Chasis','Motor','Territorio','Peso por unidad'],
+    modulos_destino:['vendedores'],
+  },
+  neo_consolidado_facturas: {
+    nombre:'Consolidado de facturas', emoji:'📑',
+    descripcion:'Resumen de facturas por vendedor: modo de pago, subtotal, total.',
+    header_row:8, titulo_valor:'Consolidado de facturas',
+    fecha_col:'fecha',
+    columnas:['factura','fecha','modo_pago','vendedor','cliente','subtotal','descuento','impuesto','total','observaciones','moneda'],
+    columnas_originales:['Factura','Fecha','Modo de pago','Vendedor','Cliente','Subtotal','Descuento','Impuesto','Total','Observaciones','Moneda'],
+    modulos_destino:['vendedores'],
+  },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -208,32 +227,84 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   return records;
 }
 
-async function cargarASupabase(tabla, records) {
+// ── Parsear rango del período "Del DD/MM/YYYY al DD/MM/YYYY" ───────────────
+function parsearRangoPeriodo(periodo) {
+  if (!periodo || periodo === 'Sin período') return null;
+  // Formatos: "Del 01/05/2026 al 20/05/2026" o "Del 01/05/2026 Al 20/05/2026"
+  const m = periodo.match(/Del\s+(\d{2}\/\d{2}\/\d{4})\s+[Aa]l\s+(\d{2}\/\d{2}\/\d{4})/i);
+  if (!m) return null;
+  const toISO = (dmy) => { const [d,mo,y] = dmy.split('/'); return `${y}-${mo}-${d}`; };
+  return { desde: toISO(m[1]), hasta: toISO(m[2]) };
+}
+
+// ── Deduplicación inteligente por rango de fechas ─────────────────────────
+// Lógica:
+//  1. Si la tabla NO tiene columna de fecha por registro (ej: mínimos/máximos),
+//     reemplaza siempre el período exacto (mismo periodo_reporte string).
+//  2. Si la tabla SÍ tiene fecha_col (ej: items_facturados):
+//     - Parsea el rango del nuevo reporte
+//     - Busca registros existentes cuya fecha caiga dentro de ese rango
+//     - Los borra (son datos que el nuevo reporte trae más completos o iguales)
+//     - Inserta solo los registros nuevos
+//     - Si el nuevo reporte es subconjunto exacto de uno ya cargado, no duplica
+async function cargarASupabase(tabla, records, periodoNuevo) {
   if (!records.length) return 0;
   const BATCH = 200;
+  const cfg = REPORTES[tabla];
   const fechaCarga = records[0].fecha_carga;
 
-  // Paso 1: obtener TODAS las fechas_carga existentes en esta tabla
-  // y borrarlas una por una (el RLS de Supabase permite delete con eq exacto)
   try {
-    const { data: fechasExistentes } = await supabase
-      .from(tabla)
-      .select('fecha_carga')
-      .order('fecha_carga', { ascending: false });
+    if (cfg?.fecha_col) {
+      // ── Tablas con fecha por registro (items_facturados, consolidado, etc.) ──
+      const rango = parsearRangoPeriodo(periodoNuevo);
+      if (rango) {
+        // Borrar registros existentes cuya fecha_registro esté dentro del nuevo rango
+        // Usamos periodo_reporte para identificar cargas que se solapan
+        const { data: cargasExistentes } = await supabase
+          .from(tabla)
+          .select('fecha_carga, periodo_reporte')
+          .order('fecha_carga', { ascending: false });
 
-    if (fechasExistentes?.length) {
-      const fechasUnicas = [...new Set(fechasExistentes.map(r => r.fecha_carga))];
-      for (const fc of fechasUnicas) {
-        await supabase.from(tabla).delete().eq('fecha_carga', fc);
+        if (cargasExistentes?.length) {
+          const vistos = new Set();
+          for (const row of cargasExistentes) {
+            if (vistos.has(row.fecha_carga)) continue;
+            vistos.add(row.fecha_carga);
+            const rangoExist = parsearRangoPeriodo(row.periodo_reporte);
+            if (!rangoExist) continue;
+            // Si los rangos se solapan, borrar esa carga para no duplicar
+            const seSolapa = rangoExist.desde <= rango.hasta && rangoExist.hasta >= rango.desde;
+            if (seSolapa) {
+              console.log(`[Ezequiel] Removiendo carga solapada: ${row.periodo_reporte} (${row.fecha_carga.slice(0,10)})`);
+              await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
+            }
+          }
+        }
+      } else {
+        // Sin rango parseable: reemplazar solo si ya existe el mismo periodo_reporte
+        const { data: mismoP } = await supabase
+          .from(tabla).select('fecha_carga').eq('periodo_reporte', periodoNuevo);
+        for (const row of (mismoP || [])) {
+          await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
+        }
+      }
+    } else {
+      // ── Tablas sin fecha por registro (mínimos/máximos, lista ítems, etc.) ──
+      // Reemplazar solo el período exacto que se está subiendo
+      // (snapshot: siempre refleja el estado en esa fecha de corte)
+      const { data: mismoP } = await supabase
+        .from(tabla).select('fecha_carga').eq('periodo_reporte', periodoNuevo || 'Sin período');
+      for (const row of (mismoP || [])) {
+        await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
       }
     }
   } catch(e) {
-    console.warn('Advertencia limpiando tabla:', e.message);
-    // Si falla, intentar limpiar al menos la fecha actual
+    console.warn('[Ezequiel] Advertencia en dedup:', e.message);
+    // Fallback: solo limpiar la fecha_carga actual (no borra historial)
     await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
   }
 
-  // Paso 2: insertar todos los registros nuevos en batches con retry
+  // Insertar registros nuevos en batches con retry
   let total = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
@@ -300,7 +371,7 @@ function TabSubir() {
 
         const periodo  = extraerPeriodo(filas);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
-        const cantidad2 = await cargarASupabase(tipo, records);
+        const cantidad2 = await cargarASupabase(tipo, records, periodo);
         cantidad = cantidad2;
 
         res.estado  = 'ok';
@@ -342,14 +413,16 @@ function TabSubir() {
             </thead>
             <tbody>
               {[
-                ['📊 Lista de mínimos y máximos',   '🪐 Inventario'],
-                ['🛒 Lista de ítems comprados',      '🔴 Trazabilidad'],
+                ['📊 Lista de mínimos y máximos',        '📦 Inventario · 🔄 Rotación de productos'],
+                ['🛒 Lista de ítems comprados',           '🔴 Trazabilidad'],
                 ['📅 Antigüedad de saldos · proveedores','💰 Finanzas → Cuentas por pagar'],
-                ['👥 Antigüedad de saldos · clientes',  '💰 Finanzas → Cuentas por cobrar'],
-                ['🏆 Ítems más vendidos',            '☀️ Inteligencia Comercial'],
-                ['💰 Rentabilidad por proveedor',    '☀️ Inteligencia Comercial'],
-                ['📋 Lista de ítems',                '☀️ Inteligencia Comercial'],
-                ['📒 Movimientos contables',         '📒 Contabilidad'],
+                ['👥 Antigüedad de saldos · clientes',   '💰 Finanzas → Cuentas por cobrar'],
+                ['🏆 Ítems más vendidos',                 '🔄 Rotación · 👥 Equipo de ventas'],
+                ['💰 Rentabilidad por proveedor',         '👥 Equipo de ventas'],
+                ['📋 Lista de ítems',                     '🔄 Rotación de productos'],
+                ['🧾 Lista de ítems facturados',          '👥 Equipo de ventas'],
+                ['📑 Consolidado de facturas',            '👥 Equipo de ventas'],
+                ['📒 Movimientos contables',              '📒 Contabilidad'],
               ].map(([r,a],i)=>(
                 <tr key={i}>
                   <td style={S.td}>{r}</td>
