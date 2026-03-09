@@ -6,7 +6,7 @@ export async function POST(req) {
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Orden')
 
-    // Headers - exact match to working file
+    // Headers
     const headers = ['Código', 'Cantidad comprada', 'Costo unitario de la compra', 'Descuento']
     headers.forEach((h, i) => {
       const cell = ws.getCell(1, i + 1)
@@ -23,10 +23,9 @@ export async function POST(req) {
     ws.getColumn(3).width = 28
     ws.getColumn(4).width = 12
 
-    // Data rows - exact format match
+    // Data rows
     items.forEach((item, idx) => {
       const r = idx + 2
-
       const cellA = ws.getCell(r, 1)
       cellA.value = String(item.codigo || '')
       cellA.numFmt = '@'
@@ -48,6 +47,9 @@ export async function POST(req) {
       cellD.numFmt = '#,##0.00'
       cellD.font = { name: 'Calibri', size: 11 }
     })
+
+    // AutoFilter - required by NEO to recognize the file
+    ws.autoFilter = { from: 'A1', to: `D${items.length + 1}` }
 
     const buf = await wb.xlsx.writeBuffer()
     const ns = (proveedor || 'orden').replace(/[\/\\?*[\]]/g, '-').substring(0, 40)
