@@ -32,21 +32,24 @@ const ESTADOS = {
 };
 
 const INCOTERMS = ['FOB', 'CIF', 'EXW', 'CFR', 'DDP', 'FCA', 'DAP'];
-const TIPOS_CONT = ['20 pies', '40 pies', '40 pies HC', '45 pies'];
 
 function fmtFecha(s) { return s ? String(s).substring(0, 10) : '—'; }
-function fmtUSD(n) { return n ? '$'+Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 }) : '—'; }
-function fmtCRC(n) { return n ? '₡'+Number(n).toLocaleString('es-CR', { maximumFractionDigits: 0 }) : '—'; }
+function fmtUSD(n) { return (n !== null && n !== undefined && n !== '' && Number(n) !== 0) ? '$'+Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 }) : '—'; }
+function fmtCRC(n) { return (n !== null && n !== undefined && n !== '' && Number(n) !== 0) ? '₡'+Number(n).toLocaleString('es-CR', { maximumFractionDigits: 0 }) : '—'; }
 
+// Estructura REAL de neptuno_envios:
+// _pago campos son boolean (¿ya se pagó?)
+// tlc es boolean (¿tiene contenedor?)
 const FORM_INIT = {
   nombre: '', proveedor: '', naviero: '', bl_num: '',
-  estado: '🚢 En el mar', incoterm: 'FOB', tlc: '40 pies',
+  estado: '🚢 En el mar', incoterm: 'FOB',
   etd: '', eta: '',
-  adelanto_monto: '', adelanto_pago: '',
-  final_monto: '', final_pago: '',
-  flete_monto: '', flete_pago: '',
-  impuestos_monto: '', impuestos_pago: '',
-  transporte_local_monto: '', transporte_local_pago: '',
+  adelanto_monto: '', adelanto_pago: false,
+  final_monto: '',    final_pago: false,
+  flete_monto: '',    flete_pago: false,
+  impuestos_monto: '', impuestos_pago: false,
+  transporte_local_monto: '', transporte_local_pago: false,
+  tlc: false,
   doc_bl: false, doc_factura: false, doc_packing: false, doc_cert: false, doc_poliza: false,
   notas: '', archivado: false,
 };
@@ -96,13 +99,13 @@ export default function Contenedores() {
     setSaving(true);
     const payload = {
       ...form,
-      adelanto_monto: form.adelanto_monto || null, final_monto: form.final_monto || null,
-      flete_monto: form.flete_monto || null, impuestos_monto: form.impuestos_monto || null,
-      transporte_local_monto: form.transporte_local_monto || null,
-      adelanto_pago: form.adelanto_pago || null, final_pago: form.final_pago || null,
-      flete_pago: form.flete_pago || null, impuestos_pago: form.impuestos_pago || null,
-      transporte_local_pago: form.transporte_local_pago || null,
-      etd: form.etd || null, eta: form.eta || null,
+      adelanto_monto: form.adelanto_monto !== '' ? parseFloat(form.adelanto_monto) : null,
+      final_monto:    form.final_monto !== ''    ? parseFloat(form.final_monto)    : null,
+      flete_monto:    form.flete_monto !== ''    ? parseFloat(form.flete_monto)    : null,
+      impuestos_monto: form.impuestos_monto !== '' ? parseFloat(form.impuestos_monto) : null,
+      transporte_local_monto: form.transporte_local_monto !== '' ? parseFloat(form.transporte_local_monto) : null,
+      etd: form.etd || null,
+      eta: form.eta || null,
     };
     const { error } = editId
       ? await supabase.from('neptuno_envios').update(payload).eq('id', editId)
@@ -113,7 +116,17 @@ export default function Contenedores() {
     cargar(); setTab(0);
   }
 
-  function editar(env) { setForm({ ...FORM_INIT, ...env }); setEditId(env.id); setTab(1); }
+  function editar(env) {
+    setForm({
+      ...FORM_INIT, ...env,
+      adelanto_monto: env.adelanto_monto ?? '',
+      final_monto:    env.final_monto ?? '',
+      flete_monto:    env.flete_monto ?? '',
+      impuestos_monto: env.impuestos_monto ?? '',
+      transporte_local_monto: env.transporte_local_monto ?? '',
+    });
+    setEditId(env.id); setTab(1);
+  }
 
   async function cerrar(id) {
     if (!confirm('¿Mover al historial?')) return;
@@ -133,9 +146,13 @@ export default function Contenedores() {
   }
 
   const tcCompra = tcBAC?.compra || null;
-  const aCRC = (usd) => tcCompra && usd ? '₡'+(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0}) : '';
-  const totalFlete = envios.reduce((s,e) => s+(parseFloat(e.flete_monto)||0), 0);
+  const toCRC = (usd) => tcCompra && usd ? ' · ₡'+(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0}) : '';
+  const totalFlete    = envios.reduce((s,e) => s+(parseFloat(e.flete_monto)||0), 0);
   const totalAdelanto = envios.reduce((s,e) => s+(parseFloat(e.adelanto_monto)||0), 0);
+
+  const chk = (v, label) => (
+    <span style={{fontSize:'0.82em', color: v ? '#68d391' : '#5a6a80'}}>{v ? '✅' : '⬜'} {label}</span>
+  );
 
   return (
     <div style={S.page}>
@@ -157,10 +174,15 @@ export default function Contenedores() {
         ))}
       </div>
 
+      {/* ── Tab 0: Activos ── */}
       {tab===0 && (
         <div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'20px'}}>
-            {[['📦 Envíos activos',envios.length,'#63b3ed',''],['💵 Flete total',fmtUSD(totalFlete),'#c8a84b',aCRC(totalFlete)],['💰 Adelantos',fmtUSD(totalAdelanto),'#68d391',aCRC(totalAdelanto)]].map(([l,v,c,crc])=>(
+            {[
+              ['📦 Envíos activos', envios.length, '#63b3ed', ''],
+              ['💵 Flete total', fmtUSD(totalFlete), '#c8a84b', toCRC(totalFlete)],
+              ['💰 Adelantos', fmtUSD(totalAdelanto), '#68d391', toCRC(totalAdelanto)],
+            ].map(([l,v,c,crc])=>(
               <div key={l} style={{background:'#161920',border:'1px solid '+c+'33',borderTop:'3px solid '+c,borderRadius:'10px',padding:'14px 16px'}}>
                 <div style={{fontSize:'0.72em',color:'#5a6a80',textTransform:'uppercase',letterSpacing:'0.06em'}}>{l}</div>
                 <div style={{fontSize:'1.6em',fontWeight:700,color:'#fff',marginTop:'4px'}}>{v}</div>
@@ -181,7 +203,6 @@ export default function Contenedores() {
                   <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
                     <span style={{fontWeight:700,color:'#fff',fontSize:'1em'}}>{env.nombre||env.proveedor}</span>
                     <span style={S.badge(ESTADOS[env.estado]||'#5a6a80')}>{env.estado}</span>
-                    {env.tlc && <span style={{fontSize:'0.78em',color:'#5a6a80'}}>{env.tlc}</span>}
                     {env.incoterm && <span style={{fontSize:'0.78em',color:'#c8a84b'}}>{env.incoterm}</span>}
                   </div>
                   <div style={{fontSize:'0.85em',color:'#c9d1e0',marginTop:'4px'}}>{env.proveedor}</div>
@@ -194,20 +215,40 @@ export default function Contenedores() {
                 </div>
               </div>
 
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:'8px',marginTop:'14px'}}>
-                {[['🚢 ETD',fmtFecha(env.etd),null],['📅 ETA',fmtFecha(env.eta),null],['💵 Flete',fmtUSD(env.flete_monto),env.flete_monto],['💰 Adelanto',fmtUSD(env.adelanto_monto),env.adelanto_monto],['🧾 Impuestos',fmtCRC(env.impuestos_monto),null],['🚛 Transporte CR',fmtCRC(env.transporte_local_monto),null]].map(([l,v,usd])=>(
+              {/* Datos principales */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:'8px',marginTop:'14px'}}>
+                {[
+                  ['🚢 ETD', fmtFecha(env.etd), null],
+                  ['📅 ETA', fmtFecha(env.eta), null],
+                  ['💵 Flete', fmtUSD(env.flete_monto), env.flete_monto],
+                  ['💰 Adelanto', fmtUSD(env.adelanto_monto), env.adelanto_monto],
+                  ['🧾 Impuestos', fmtCRC(env.impuestos_monto), null],
+                  ['🚛 Transporte CR', fmtCRC(env.transporte_local_monto), null],
+                ].map(([l,v,usd])=>(
                   <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
                     <div style={{fontSize:'0.65em',color:'#5a6a80'}}>{l}</div>
                     <div style={{fontSize:'0.9em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
-                    {usd&&tcCompra&&<div style={{fontSize:'0.7em',color:'#4ec9b0',marginTop:'1px'}}>₡{(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0})}</div>}
+                    {usd && tcCompra && <div style={{fontSize:'0.7em',color:'#4ec9b0',marginTop:'1px'}}>₡{(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0})}</div>}
                   </div>
                 ))}
+              </div>
+
+              {/* Estado de pagos — checkboxes */}
+              <div style={{display:'flex',gap:'16px',marginTop:'10px',flexWrap:'wrap'}}>
+                {chk(env.flete_pago,   '💵 Flete pagado')}
+                {chk(env.adelanto_pago,'💰 Adelanto pagado')}
+                {chk(env.final_pago,   '✔️ Final pagado')}
+                {chk(env.impuestos_pago,'🧾 Impuestos pagados')}
+                {chk(env.transporte_local_pago,'🚛 Transporte pagado')}
               </div>
 
               {expandido===env.id && (
                 <div style={{marginTop:'14px',paddingTop:'14px',borderTop:'1px solid #1e2330'}}>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'8px',marginBottom:'12px'}}>
-                    {[['Pago final',fmtUSD(env.final_monto),env.final_monto],['F. pago adelanto',fmtFecha(env.adelanto_pago),null],['F. pago final',fmtFecha(env.final_pago),null],['F. pago flete',fmtFecha(env.flete_pago),null],['F. pago impuestos',fmtFecha(env.impuestos_pago),null],['TC BAC',tcCompra?'₡'+tcCompra.toFixed(2):'—',null]].map(([l,v,usd])=>(
+                    {[
+                      ['Pago final', fmtUSD(env.final_monto), env.final_monto],
+                      ['TC BAC compra', tcCompra?'₡'+tcCompra.toFixed(2):'—', null],
+                    ].map(([l,v,usd])=>(
                       <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
                         <div style={{fontSize:'0.65em',color:'#5a6a80'}}>{l}</div>
                         <div style={{fontSize:'0.87em',color:'#fff'}}>{v||'—'}</div>
@@ -215,15 +256,19 @@ export default function Contenedores() {
                       </div>
                     ))}
                   </div>
+
                   <div style={{marginBottom:'10px'}}>
                     <div style={{fontSize:'0.75em',color:'#5a6a80',marginBottom:'6px',fontWeight:600,textTransform:'uppercase'}}>Documentos</div>
                     <div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}>
-                      {[['doc_bl','📄 BL'],['doc_factura','🧾 Factura'],['doc_packing','📦 Packing'],['doc_cert','📜 Certificados'],['doc_poliza','🛡️ Póliza']].map(([k,l])=>(
-                        <span key={k} style={{fontSize:'0.82em',color:env[k]?'#68d391':'#5a6a80'}}>{env[k]?'✅':'⬜'} {l}</span>
-                      ))}
+                      {chk(env.doc_bl,'📄 BL')}
+                      {chk(env.doc_factura,'🧾 Factura')}
+                      {chk(env.doc_packing,'📦 Packing')}
+                      {chk(env.doc_cert,'📜 Certificados')}
+                      {chk(env.doc_poliza,'🛡️ Póliza')}
                     </div>
                   </div>
-                  {env.notas&&<div style={{fontSize:'0.82em',color:'#8899aa',background:'#0f1115',borderRadius:'8px',padding:'10px'}}>📝 {env.notas}</div>}
+
+                  {env.notas && <div style={{fontSize:'0.82em',color:'#8899aa',background:'#0f1115',borderRadius:'8px',padding:'10px'}}>📝 {env.notas}</div>}
                   <div style={{marginTop:'10px'}}>
                     <button style={S.btnSm('#3d1515')} onClick={()=>eliminar(env.id)}>🗑️ Eliminar</button>
                   </div>
@@ -234,6 +279,7 @@ export default function Contenedores() {
         </div>
       )}
 
+      {/* ── Tab 1: Formulario ── */}
       {tab===1 && (
         <div style={S.card}>
           <div style={{fontWeight:700,color:'#fff',marginBottom:'20px',fontSize:'1.05em'}}>{editId?'✏️ Editar contenedor':'➕ Registrar nuevo contenedor'}</div>
@@ -243,13 +289,8 @@ export default function Contenedores() {
             {[['nombre','Número de contenedor / ID'],['proveedor','Proveedor / Exportador'],['naviero','Naviero / Línea naviera'],['bl_num','BL / AWB número']].map(([k,l])=>(
               <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="text" value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
             ))}
-            <div><label style={S.label}>Tipo de contenedor</label>
-              <select style={S.input} value={form.tlc} onChange={e=>setF('tlc',e.target.value)}>
-                {TIPOS_CONT.map(t=><option key={t}>{t}</option>)}
-              </select>
-            </div>
             <div><label style={S.label}>INCOTERM</label>
-              <select style={S.input} value={form.incoterm} onChange={e=>setF('incoterm',e.target.value)}>
+              <select style={S.input} value={form.incoterm||'FOB'} onChange={e=>setF('incoterm',e.target.value)}>
                 {INCOTERMS.map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
@@ -270,16 +311,30 @@ export default function Contenedores() {
 
           <hr style={S.divider}/>
           <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Pagos y costos</div>
-          <div style={S.grid3}>
-            {[['adelanto_monto','Adelanto (USD)','num'],['adelanto_pago','Fecha pago adelanto','date'],['final_monto','Pago final (USD)','num'],['final_pago','Fecha pago final','date'],['flete_monto','Flete (USD)','num'],['flete_pago','Fecha pago flete','date'],['impuestos_monto','Impuestos (CRC)','num'],['impuestos_pago','Fecha pago impuestos','date'],['transporte_local_monto','Transporte local (CRC)','num'],['transporte_local_pago','Fecha pago transporte','date']].map(([k,l,t])=>(
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type={t==='date'?'date':'number'} value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
+          <div style={S.grid2}>
+            {[
+              ['adelanto_monto','Adelanto (USD)','adelanto_pago','Adelanto pagado'],
+              ['final_monto','Pago final (USD)','final_pago','Final pagado'],
+              ['flete_monto','Flete (USD)','flete_pago','Flete pagado'],
+              ['impuestos_monto','Impuestos (CRC)','impuestos_pago','Impuestos pagados'],
+              ['transporte_local_monto','Transporte local (CRC)','transporte_local_pago','Transporte pagado'],
+            ].map(([km,lm,kb,lb])=>(
+              <div key={km} style={{background:'#0f1115',borderRadius:'8px',padding:'12px',display:'flex',flexDirection:'column',gap:'8px'}}>
+                <div><label style={S.label}>{lm}</label>
+                  <input style={S.input} type="number" value={form[km]||''} onChange={e=>setF(km,e.target.value)}/>
+                </div>
+                <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'0.85em',color:'#c9d1e0'}}>
+                  <input type="checkbox" checked={!!form[kb]} onChange={e=>setF(kb,e.target.checked)} style={{accentColor:'#c8a84b',width:'15px',height:'15px'}}/>
+                  {lb}
+                </label>
+              </div>
             ))}
           </div>
 
           <hr style={S.divider}/>
           <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Documentos</div>
           <div style={{display:'flex',gap:'20px',marginBottom:'16px',flexWrap:'wrap'}}>
-            {[['doc_bl','📄 BL'],['doc_factura','🧾 Factura comercial'],['doc_packing','📦 Packing list'],['doc_cert','📜 Certificados'],['doc_poliza','🛡️ Póliza de seguro']].map(([k,l])=>(
+            {[['doc_bl','📄 BL'],['doc_factura','🧾 Factura'],['doc_packing','📦 Packing'],['doc_cert','📜 Certificados'],['doc_poliza','🛡️ Póliza']].map(([k,l])=>(
               <label key={k} style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'0.87em',color:'#c9d1e0'}}>
                 <input type="checkbox" checked={!!form[k]} onChange={e=>setF(k,e.target.checked)} style={{accentColor:'#c8a84b',width:'16px',height:'16px'}}/>
                 {l}
@@ -295,6 +350,7 @@ export default function Contenedores() {
         </div>
       )}
 
+      {/* ── Tab 2: Historial ── */}
       {tab===2 && (
         <div>
           <div style={{fontSize:'0.82em',color:'#5a6a80',marginBottom:'14px'}}>{historial.length} contenedores en historial</div>
