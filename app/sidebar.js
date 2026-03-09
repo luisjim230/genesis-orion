@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
+// Cargar Nunito Black para el logo (igual que la imagen del logo real)
+const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
+
 const navGroups = [
   {
     label: 'Principal',
@@ -90,126 +93,130 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside style={{
-      width: collapsed ? 64 : 240,
-      background: '#5E2733',
-      borderRight: '1px solid rgba(255,255,255,0.06)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      height: '100vh',
-      overflowY: 'auto',
-      overflowX: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      zIndex: 100,
-      transition: 'width 0.2s ease',
-    }}>
-
-      {/* Logo */}
-      <div style={{
-        padding: collapsed ? '16px 12px' : '20px 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
+    <>
+      <style>{nunitoStyle}</style>
+      <aside style={{
+        width: collapsed ? 64 : 240,
+        background: '#5E2733',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        height: '100vh',
+        overflowY: 'auto',
+        overflowX: 'hidden',
         display: 'flex',
-        flexDirection: collapsed ? 'row' : 'column',
-        alignItems: 'center',
-        gap: collapsed ? 0 : 10,
-        flexShrink: 0,
+        flexDirection: 'column',
+        zIndex: 100,
+        transition: 'width 0.2s ease',
       }}>
-        {/* Brick SVG — igual que imagen 2: 3 filas, ladrillo blanco pequeño arriba izquierda */}
-        <svg width={collapsed ? 32 : 44} height={collapsed ? 28 : 38} viewBox="0 0 44 38" style={{ flexShrink: 0 }}>
-          {/* Fila 1 */}
-          <rect x="0"  y="0"  width="12" height="10" rx="2" fill="rgba(253,244,244,0.90)"/>
-          <rect x="15" y="0"  width="29" height="10" rx="2" fill="#ED6E2E"/>
-          {/* Fila 2 */}
-          <rect x="0"  y="14" width="27" height="10" rx="2" fill="rgba(253,244,244,0.90)"/>
-          <rect x="30" y="14" width="14" height="10" rx="2" fill="#ED6E2E"/>
-          {/* Fila 3 */}
-          <rect x="0"  y="28" width="13" height="10" rx="2" fill="#ED6E2E"/>
-          <rect x="16" y="28" width="28" height="10" rx="2" fill="#ED6E2E"/>
-        </svg>
 
-        {!collapsed && (
-          <div style={{ lineHeight: 1, textAlign: 'center' }}>
-            <div style={{
-              fontFamily: "'Bungee', cursive",
-              color: 'rgba(253,244,244,0.55)',
-              fontSize: 9,
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              marginBottom: 3,
-            }}>DEPÓSITO</div>
-            <div style={{
-              fontFamily: "'Bungee', cursive",
-              color: '#ED6E2E',
-              fontSize: 18,
-              letterSpacing: '0.04em',
-              lineHeight: 1.1,
-            }}>JIMÉNEZ</div>
-          </div>
-        )}
-      </div>
+        {/* Logo */}
+        <div style={{
+          padding: collapsed ? '16px 12px' : '18px 20px',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flexShrink: 0,
+        }}>
+          {/* Brick SVG */}
+          <svg width={collapsed ? 30 : 36} height={collapsed ? 26 : 32} viewBox="0 0 36 32" style={{ flexShrink: 0 }}>
+            {/* Fila 1: blanco pequeño + naranja grande */}
+            <rect x="0"  y="0"  width="10" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
+            <rect x="13" y="0"  width="23" height="9"  rx="2" fill="#ED6E2E"/>
+            {/* Fila 2: naranja grande + blanco pequeño */}
+            <rect x="0"  y="12" width="22" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
+            <rect x="25" y="12" width="11" height="9"  rx="2" fill="#ED6E2E"/>
+            {/* Fila 3: todo naranja */}
+            <rect x="0"  y="24" width="10" height="8"  rx="2" fill="#ED6E2E"/>
+            <rect x="13" y="24" width="23" height="8"  rx="2" fill="#ED6E2E"/>
+          </svg>
 
-      {/* Nav groups */}
-      <nav style={{ flex: 1, padding: '10px 0', overflowY: 'auto' }}>
-        {navGroups.map(group => (
-          <div key={group.label} style={{ marginBottom: 4 }}>
-            {!collapsed && (
+          {!collapsed && (
+            <div style={{ lineHeight: 1 }}>
               <div style={{
-                padding: '8px 20px 4px',
-                fontSize: '0.60rem',
-                fontWeight: 700,
-                color: 'rgba(253,244,244,0.25)',
+                fontFamily: "'Nunito', sans-serif",
+                fontWeight: 800,
+                color: 'rgba(253,244,244,0.55)',
+                fontSize: 8,
+                letterSpacing: '0.28em',
                 textTransform: 'uppercase',
-                letterSpacing: '0.12em',
-                fontFamily: "'Rubik', sans-serif",
-              }}>
-                {group.label}
-              </div>
-            )}
-            {group.items.map(item => (
-              <NavItem key={item.href} {...item} collapsed={collapsed} />
-            ))}
-          </div>
-        ))}
-      </nav>
+                marginBottom: 2,
+              }}>DEPÓSITO</div>
+              <div style={{
+                fontFamily: "'Nunito', sans-serif",
+                fontWeight: 900,
+                color: '#ED6E2E',
+                fontSize: 19,
+                letterSpacing: '0.02em',
+                lineHeight: 1.05,
+              }}>JIMÉNEZ</div>
+            </div>
+          )}
+        </div>
 
-      {/* Footer / collapse */}
-      <div style={{
-        padding: '12px 8px',
-        borderTop: '1px solid rgba(255,255,255,0.07)',
-        flexShrink: 0,
-      }}>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          style={{
-            width: '100%',
-            padding: '9px 12px',
-            background: 'rgba(255,255,255,0.06)',
-            border: 'none',
-            borderRadius: 8,
-            color: 'rgba(253,244,244,0.50)',
-            cursor: 'pointer',
-            fontSize: 12,
-            fontFamily: "'Rubik', sans-serif",
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            gap: 8,
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.10)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
-        >
-          <span style={{ fontSize: 14 }}>{collapsed ? '→' : '←'}</span>
-          {!collapsed && <span>Colapsar</span>}
-        </button>
+        {/* Nav groups */}
+        <nav style={{ flex: 1, padding: '10px 0', overflowY: 'auto' }}>
+          {navGroups.map(group => (
+            <div key={group.label} style={{ marginBottom: 4 }}>
+              {!collapsed && (
+                <div style={{
+                  padding: '8px 20px 4px',
+                  fontSize: '0.60rem',
+                  fontWeight: 700,
+                  color: 'rgba(253,244,244,0.25)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  fontFamily: "'Rubik', sans-serif",
+                }}>
+                  {group.label}
+                </div>
+              )}
+              {group.items.map(item => (
+                <NavItem key={item.href} {...item} collapsed={collapsed} />
+              ))}
+            </div>
+          ))}
+        </nav>
 
-        {!collapsed && (
-          <div style={{ padding: '10px 12px 0', fontSize: '0.62rem', color: 'rgba(253,244,244,0.20)', fontFamily: "'Rubik', sans-serif" }}>
-            Génesis Orión v3.0 · 2026
-          </div>
-        )}
-      </div>
-    </aside>
+        {/* Footer / collapse */}
+        <div style={{
+          padding: '12px 8px',
+          borderTop: '1px solid rgba(255,255,255,0.07)',
+          flexShrink: 0,
+        }}>
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              width: '100%',
+              padding: '9px 12px',
+              background: 'rgba(255,255,255,0.06)',
+              border: 'none',
+              borderRadius: 8,
+              color: 'rgba(253,244,244,0.50)',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontFamily: "'Rubik', sans-serif",
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              gap: 8,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+          >
+            <span style={{ fontSize: 14 }}>{collapsed ? '→' : '←'}</span>
+            {!collapsed && <span>Colapsar</span>}
+          </button>
+
+          {!collapsed && (
+            <div style={{ padding: '10px 12px 0', fontSize: '0.62rem', color: 'rgba(253,244,244,0.20)', fontFamily: "'Rubik', sans-serif" }}>
+              Génesis Orión v3.0 · 2026
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
