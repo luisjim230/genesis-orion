@@ -79,6 +79,11 @@ export default function Inventario() {
       if(!data?.length) break; todos=todos.concat(data); if(data.length<1000) break; offset+=1000;
     }
     setDatos(todos);
+    if (todos.length === 0) {
+      console.warn('Saturno: 0 registros cargados. Verificá que Ezequiel haya subido el archivo correctamente.');
+    } else {
+      console.log(`Saturno: ${todos.length} registros cargados desde fecha_carga=${fc}`);
+    }
     const {data:tData}=await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item',['pendiente','parcial']);
     const tMap={};
     (tData||[]).forEach(i=>{ const c=(i.codigo||'').trim(); const p=Math.max((parseFloat(i.cantidad_ordenada)||0)-(parseFloat(i.cantidad_recibida)||0),0); if(c&&p>0) tMap[c]=(tMap[c]||0)+p; });
@@ -173,7 +178,15 @@ export default function Inventario() {
         </div>
       ) : (
         <>
-          {fechaCarga && <p style={{fontSize:'0.78rem',color:'#999',marginBottom:10}}>☁️ Última carga: <strong style={{color:'var(--burgundy)'}}>{fechaCarga?.slice(0,16).replace('T',' ')}</strong></p>}
+          {fechaCarga && (
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10,flexWrap:'wrap'}}>
+              <p style={{fontSize:'0.78rem',color:'#999',margin:0}}>☁️ Última carga: <strong style={{color:'var(--burgundy)'}}>{fechaCarga?.slice(0,16).replace('T',' ')}</strong></p>
+              <span style={{fontSize:'0.78rem',background:datos.length>=4000?'#F0FFF4':datos.length>=1000?'#FFFBEB':'#FFF5F5',color:datos.length>=4000?'#276749':datos.length>=1000?'#7B341E':'#C53030',border:'1px solid',borderColor:datos.length>=4000?'#9AE6B4':datos.length>=1000?'#FAD776':'#FEB2B2',borderRadius:12,padding:'2px 10px',fontWeight:600}}>
+                {datos.length.toLocaleString()} registros en BD
+              </span>
+              {datos.length < 1000 && <span style={{fontSize:'0.78rem',color:'#C53030',fontWeight:600}}>⚠️ Parece incompleto — volvé a subir el archivo en Ezequiel</span>}
+            </div>
+          )}
           {totalTCods>0 && <div className="info-banner">🚢 <strong>{totalTCods} productos en tránsito</strong> ({totalTUnids.toLocaleString()} unidades). La columna <strong>🚢 En tránsito</strong> ya descuenta automáticamente de <strong>Cantidad a comprar</strong>.</div>}
           {proveedoresPausados.size>0 && <div className="warn-banner">⚠️ Tenés <strong>{proveedoresPausados.size} proveedores pausados</strong> — no aparecerán en la sugerencia del día. Andá al tab <strong>📋 Sugerencia</strong> y bajá al final para reactivarlos, o usá <strong>🔓 Reactivar todos</strong>.</div>}
 

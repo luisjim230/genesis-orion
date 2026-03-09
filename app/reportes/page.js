@@ -187,22 +187,29 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 
 async function cargarASupabase(tabla, records) {
   if (!records.length) return 0;
-  const BATCH = 500;
-  // Usar la fecha_carga del primer registro para limpiar duplicados
+  const BATCH = 200; // batches pequeños para evitar timeouts
   const fechaCarga = records[0].fecha_carga;
 
-  // Borrar datos anteriores con la misma fecha_carga para respetar el constraint de unicidad
-  const { error: delErr } = await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
+  // Limpiar TODOS los datos anteriores de esta tabla antes de insertar
+  // Esto evita cargas parciales antiguas que confunden a Saturno
+  const { error: delErr } = await supabase.from(tabla).delete().lt('fecha_carga', fechaCarga);
   if (delErr && delErr.code !== 'PGRST116') {
-    throw new Error('Error limpiando carga anterior: ' + delErr.message);
+    console.warn('Advertencia al limpiar registros viejos:', delErr.message);
   }
+  // También limpiar registros con la misma fecha (por si hay reintento)
+  await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
 
   let total = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
-    const { error } = await supabase.from(tabla).insert(batch);
-    if (error) throw new Error(error.message);
-    total += batch.length;
+    let intentos = 0;
+    while (intentos < 3) {
+      const { error } = await supabase.from(tabla).insert(batch);
+      if (!error) { total += batch.length; break; }
+      intentos++;
+      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} fallido tras 3 intentos: ${error.message}`);
+      await new Promise(r => setTimeout(r, 800 * intentos));
+    }
   }
   return total;
 }
