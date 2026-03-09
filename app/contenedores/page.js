@@ -16,7 +16,7 @@ const S = {
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' },
   grid3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' },
   divider: { border: 'none', borderTop: '1px solid #1e2330', margin: '20px 0' },
-  badge: (c) => ({ background: c+'22', color: c, border: `1px solid ${c}55`, borderRadius: '20px', padding: '3px 10px', fontSize: '0.72em', fontWeight: 600 }),
+  badge: (c) => ({ background: c+'22', color: c, border: '1px solid '+c+'55', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72em', fontWeight: 600 }),
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '0.83em' },
   th: { textAlign: 'left', padding: '9px 12px', background: '#0f1115', color: '#5a6a80', fontSize: '0.75em', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #1e2330' },
   td: { padding: '9px 12px', borderBottom: '1px solid #1e2330', color: '#c9d1e0', verticalAlign: 'middle' },
@@ -31,20 +31,24 @@ const ESTADOS = {
   '✅ Cerrado': '#5a6a80',
 };
 
-const ESTADOS_ACTIVOS = ['🏭 En producción', '🚢 En el mar', '🛳️ En puerto', '🚛 En tránsito CR', '🏬 En bodega'];
+const INCOTERMS = ['FOB', 'CIF', 'EXW', 'CFR', 'DDP', 'FCA', 'DAP'];
 const TIPOS_CONT = ['20 pies', '40 pies', '40 pies HC', '45 pies'];
 
-function fmtFecha(s) { return s ? s.substring(0, 10) : '—'; }
-function fmtUSD(n) { return n ? `$${Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 })}` : '—'; }
+function fmtFecha(s) { return s ? String(s).substring(0, 10) : '—'; }
+function fmtUSD(n) { return n ? '$'+Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2 }) : '—'; }
+function fmtCRC(n) { return n ? '₡'+Number(n).toLocaleString('es-CR', { maximumFractionDigits: 0 }) : '—'; }
 
 const FORM_INIT = {
-  proveedor: '', numero_contenedor: '', tipo_contenedor: '40 pies',
-  fecha_embarque: '', fecha_eta: '', fecha_llegada_cr: '', fecha_retiro: '',
-  estado: '🚢 En el mar', puerto_origen: '', naviera: '', bl_numero: '',
-  adelanto_usd: '', pago_final_usd: '', flete_usd: '', impuestos_crc: '',
-  transporte_crc: '', otros_crc: '', tipo_cambio: '',
-  documentos_recibidos: false, despacho_aduanal: false, exonerado: false,
-  notas: '',
+  nombre: '', proveedor: '', naviero: '', bl_num: '',
+  estado: '🚢 En el mar', incoterm: 'FOB', tlc: '40 pies',
+  etd: '', eta: '',
+  adelanto_monto: '', adelanto_pago: '',
+  final_monto: '', final_pago: '',
+  flete_monto: '', flete_pago: '',
+  impuestos_monto: '', impuestos_pago: '',
+  transporte_local_monto: '', transporte_local_pago: '',
+  doc_bl: false, doc_factura: false, doc_packing: false, doc_cert: false, doc_poliza: false,
+  notas: '', archivado: false,
 };
 
 export default function Contenedores() {
@@ -61,7 +65,6 @@ export default function Contenedores() {
 
   useEffect(() => {
     cargar();
-    // Cargar TC compra BAC para conversión USD→CRC
     fetch('/api/mercado?fuente=bac')
       .then(r => r.json())
       .then(j => { if (j.ok && j.data?.compra) setTcBAC(j.data); })
@@ -70,145 +73,159 @@ export default function Contenedores() {
 
   async function cargar() {
     setLoading(true);
-    const { data: activos, error: e1 } = await supabase.from('neptuno_envios').select('*').neq('estado', '✅ Cerrado').order('created_at', { ascending: false });
-    const { data: hist, error: e2 } = await supabase.from('neptuno_envios').select('*').eq('estado', '✅ Cerrado').order('created_at', { ascending: false }).limit(50);
-    if (e1 || e2) setMsg({ texto: '❌ Error Supabase: ' + (e1?.message || e2?.message), tipo: 'error' });
+    const { data: activos, error: e1 } = await supabase
+      .from('neptuno_envios').select('*')
+      .neq('estado', '✅ Cerrado')
+      .eq('archivado', false)
+      .order('creado', { ascending: false });
+    const { data: hist, error: e2 } = await supabase
+      .from('neptuno_envios').select('*')
+      .or('estado.eq.✅ Cerrado,archivado.eq.true')
+      .order('creado', { ascending: false }).limit(50);
+    if (e1 || e2) mostrarMsg('Error Supabase: ' + (e1?.message || e2?.message), 'err');
     setEnvios(activos || []);
     setHistorial(hist || []);
     setLoading(false);
   }
 
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  function mostrarMsg(texto, tipo = 'ok') {
-    setMsg({ texto, tipo });
-    setTimeout(() => setMsg(null), 3500);
-  }
+  function mostrarMsg(texto, tipo='ok') { setMsg({ texto, tipo }); setTimeout(() => setMsg(null), 4000); }
 
   async function guardar() {
-    if (!form.proveedor || !form.numero_contenedor) { mostrarMsg('Proveedor y número de contenedor son requeridos.', 'err'); return; }
+    if (!form.proveedor) { mostrarMsg('El proveedor es requerido.', 'err'); return; }
     setSaving(true);
-    const payload = { ...form, adelanto_usd: form.adelanto_usd || null, pago_final_usd: form.pago_final_usd || null, flete_usd: form.flete_usd || null, impuestos_crc: form.impuestos_crc || null, transporte_crc: form.transporte_crc || null, otros_crc: form.otros_crc || null, tipo_cambio: form.tipo_cambio || null };
-    if (editId) {
-      await supabase.from('neptuno_envios').update(payload).eq('id', editId);
-      mostrarMsg('Contenedor actualizado.');
-    } else {
-      await supabase.from('neptuno_envios').insert([payload]);
-      mostrarMsg('Contenedor registrado.');
-    }
+    const payload = {
+      ...form,
+      adelanto_monto: form.adelanto_monto || null, final_monto: form.final_monto || null,
+      flete_monto: form.flete_monto || null, impuestos_monto: form.impuestos_monto || null,
+      transporte_local_monto: form.transporte_local_monto || null,
+      adelanto_pago: form.adelanto_pago || null, final_pago: form.final_pago || null,
+      flete_pago: form.flete_pago || null, impuestos_pago: form.impuestos_pago || null,
+      transporte_local_pago: form.transporte_local_pago || null,
+      etd: form.etd || null, eta: form.eta || null,
+    };
+    const { error } = editId
+      ? await supabase.from('neptuno_envios').update(payload).eq('id', editId)
+      : await supabase.from('neptuno_envios').insert([payload]);
+    if (error) { mostrarMsg('Error: ' + error.message, 'err'); setSaving(false); return; }
+    mostrarMsg(editId ? 'Contenedor actualizado.' : 'Contenedor registrado.');
     setForm(FORM_INIT); setEditId(null); setSaving(false);
     cargar(); setTab(0);
   }
 
-  function editar(env) {
-    setForm({ ...FORM_INIT, ...env });
-    setEditId(env.id);
-    setTab(1);
-  }
+  function editar(env) { setForm({ ...FORM_INIT, ...env }); setEditId(env.id); setTab(1); }
 
   async function cerrar(id) {
+    if (!confirm('¿Mover al historial?')) return;
     await supabase.from('neptuno_envios').update({ estado: '✅ Cerrado' }).eq('id', id);
-    mostrarMsg('Contenedor cerrado y movido a historial.');
-    cargar();
+    mostrarMsg('Contenedor cerrado.'); cargar();
   }
 
   async function reactivar(id) {
-    await supabase.from('neptuno_envios').update({ estado: '🏬 En bodega' }).eq('id', id);
-    mostrarMsg('Contenedor reactivado.');
-    cargar();
+    await supabase.from('neptuno_envios').update({ estado: '🏬 En bodega', archivado: false }).eq('id', id);
+    mostrarMsg('Contenedor reactivado.'); cargar();
   }
 
   async function eliminar(id) {
-    if (!confirm('¿Eliminar este registro permanentemente?')) return;
+    if (!confirm('¿Eliminar permanentemente?')) return;
     await supabase.from('neptuno_envios').delete().eq('id', id);
-    mostrarMsg('Registro eliminado.');
-    cargar();
+    mostrarMsg('Registro eliminado.'); cargar();
   }
 
-  const totalFlete = envios.reduce((s, e) => s + (parseFloat(e.flete_usd) || 0), 0);
-  const totalAdelanto = envios.reduce((s, e) => s + (parseFloat(e.adelanto_usd) || 0), 0);
   const tcCompra = tcBAC?.compra || null;
-  const aCRC = (usd) => tcCompra ? `  ·  ₡${(usd * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}` : '';
+  const aCRC = (usd) => tcCompra && usd ? '₡'+(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0}) : '';
+  const totalFlete = envios.reduce((s,e) => s+(parseFloat(e.flete_monto)||0), 0);
+  const totalAdelanto = envios.reduce((s,e) => s+(parseFloat(e.adelanto_monto)||0), 0);
 
   return (
     <div style={S.page}>
       <div style={S.title}>🌊 Jonás – Contenedores</div>
-      <div style={S.sub}>Trazabilidad de importaciones · Corporación Rojimo S.A.</div>
+      <div style={S.sub}>
+        Trazabilidad de importaciones · Corporación Rojimo S.A.
+        {tcCompra && <span style={{color:'#c8a84b',marginLeft:'12px'}}>💱 TC BAC compra: ₡{tcCompra.toFixed(2)}{tcBAC?.esFallback?' ~':''}</span>}
+      </div>
 
       {msg && (
-        <div style={{ background: msg.tipo === 'ok' ? '#68d39122' : '#fc818122', border: `1px solid ${msg.tipo === 'ok' ? '#68d391' : '#fc8181'}55`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', color: msg.tipo === 'ok' ? '#68d391' : '#fc8181', fontSize: '0.85em' }}>
-          {msg.tipo === 'ok' ? '✅' : '❌'} {msg.texto}
+        <div style={{background:msg.tipo==='ok'?'#68d39122':'#fc818122',border:'1px solid '+(msg.tipo==='ok'?'#68d391':'#fc8181')+'55',borderRadius:'8px',padding:'10px 16px',marginBottom:'16px',color:msg.tipo==='ok'?'#68d391':'#fc8181',fontSize:'0.85em'}}>
+          {msg.tipo==='ok'?'✅':'❌'} {msg.texto}
         </div>
       )}
 
       <div style={S.tabBar}>
-        {['📦 Envíos Activos', '➕ Nuevo Envío', '📋 Historial'].map((t, i) => (
-          <button key={i} style={S.tab(tab === i)} onClick={() => { setTab(i); setEditId(null); if (i !== 1) setForm(FORM_INIT); }}>{t}</button>
+        {['📦 Envíos Activos','➕ Nuevo Envío','📋 Historial'].map((t,i) => (
+          <button key={i} style={S.tab(tab===i)} onClick={()=>{ setTab(i); setEditId(null); if(i!==1) setForm(FORM_INIT); }}>{t}</button>
         ))}
       </div>
 
-      {tab === 0 && (
+      {tab===0 && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
-            {[['📦 Envíos activos', envios.length, '#63b3ed', ''], ['💵 Flete total activo', fmtUSD(totalFlete), '#c8a84b', aCRC(totalFlete)], ['💰 Adelantos pagados', fmtUSD(totalAdelanto), '#68d391', aCRC(totalAdelanto)]].map(([l, v, c, crc]) => (
-              <div key={l} style={{ background: '#161920', border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: '10px', padding: '14px 16px' }}>
-                <div style={{ fontSize: '0.72em', color: '#5a6a80', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
-                <div style={{ fontSize: '1.6em', fontWeight: 700, color: '#fff', marginTop: '4px' }}>{v}</div>
-                {crc && <div style={{ fontSize: '0.75em', color: '#4ec9b0', marginTop: '2px' }}>{crc}{tcBAC?.esFallback ? ' ~' : ''}</div>}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'20px'}}>
+            {[['📦 Envíos activos',envios.length,'#63b3ed',''],['💵 Flete total',fmtUSD(totalFlete),'#c8a84b',aCRC(totalFlete)],['💰 Adelantos',fmtUSD(totalAdelanto),'#68d391',aCRC(totalAdelanto)]].map(([l,v,c,crc])=>(
+              <div key={l} style={{background:'#161920',border:'1px solid '+c+'33',borderTop:'3px solid '+c,borderRadius:'10px',padding:'14px 16px'}}>
+                <div style={{fontSize:'0.72em',color:'#5a6a80',textTransform:'uppercase',letterSpacing:'0.06em'}}>{l}</div>
+                <div style={{fontSize:'1.6em',fontWeight:700,color:'#fff',marginTop:'4px'}}>{v}</div>
+                {crc && <div style={{fontSize:'0.75em',color:'#4ec9b0',marginTop:'2px'}}>{crc}</div>}
               </div>
             ))}
           </div>
 
-          {loading ? <div style={{ textAlign: 'center', padding: '40px', color: '#5a6a80' }}>Cargando...</div> : envios.length === 0 ? (
-            <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '40px' }}>No hay envíos activos. <span style={{ color: '#c8a84b', cursor: 'pointer' }} onClick={() => setTab(1)}>Registrá uno →</span></div>
-          ) : envios.map(env => (
-            <div key={env.id} style={{ ...S.card, borderLeft: `3px solid ${ESTADOS[env.estado] || '#5a6a80'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+          {loading ? <div style={{textAlign:'center',padding:'40px',color:'#5a6a80'}}>Cargando...</div>
+          : envios.length===0 ? (
+            <div style={{...S.card,textAlign:'center',color:'#5a6a80',padding:'40px'}}>
+              No hay envíos activos. <span style={{color:'#c8a84b',cursor:'pointer'}} onClick={()=>setTab(1)}>Registrá uno →</span>
+            </div>
+          ) : envios.map(env=>(
+            <div key={env.id} style={{...S.card,borderLeft:'3px solid '+(ESTADOS[env.estado]||'#5a6a80')}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px'}}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, color: '#fff', fontSize: '1em' }}>{env.numero_contenedor || env.proveedor}</span>
-                    <span style={S.badge(ESTADOS[env.estado] || '#5a6a80')}>{env.estado}</span>
-                    {env.tipo_contenedor && <span style={{ fontSize: '0.78em', color: '#5a6a80' }}>{env.tipo_contenedor}</span>}
+                  <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+                    <span style={{fontWeight:700,color:'#fff',fontSize:'1em'}}>{env.nombre||env.proveedor}</span>
+                    <span style={S.badge(ESTADOS[env.estado]||'#5a6a80')}>{env.estado}</span>
+                    {env.tlc && <span style={{fontSize:'0.78em',color:'#5a6a80'}}>{env.tlc}</span>}
+                    {env.incoterm && <span style={{fontSize:'0.78em',color:'#c8a84b'}}>{env.incoterm}</span>}
                   </div>
-                  <div style={{ fontSize: '0.85em', color: '#c9d1e0', marginTop: '4px' }}>{env.proveedor}</div>
-                  {env.naviera && <div style={{ fontSize: '0.78em', color: '#5a6a80' }}>{env.naviera} · {env.puerto_origen}</div>}
+                  <div style={{fontSize:'0.85em',color:'#c9d1e0',marginTop:'4px'}}>{env.proveedor}</div>
+                  {env.naviero && <div style={{fontSize:'0.78em',color:'#5a6a80'}}>{env.naviero} · BL: {env.bl_num||'—'}</div>}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button style={S.btnSm()} onClick={() => setExpandido(expandido === env.id ? null : env.id)}>🔍 {expandido === env.id ? 'Menos' : 'Ver'}</button>
-                  <button style={S.btnSm()} onClick={() => editar(env)}>✏️ Editar</button>
-                  <button style={S.btnSm('#1e2330')} onClick={() => cerrar(env.id)}>📁 Cerrar</button>
+                <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                  <button style={S.btnSm()} onClick={()=>setExpandido(expandido===env.id?null:env.id)}>🔍 {expandido===env.id?'Menos':'Ver'}</button>
+                  <button style={S.btnSm()} onClick={()=>editar(env)}>✏️ Editar</button>
+                  <button style={S.btnSm('#1e2330')} onClick={()=>cerrar(env.id)}>📁 Cerrar</button>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '8px', marginTop: '14px' }}>
-                {[['🚢 Embarque', fmtFecha(env.fecha_embarque), null], ['📅 ETA', fmtFecha(env.fecha_eta), null], ['🏳️ Llegada CR', fmtFecha(env.fecha_llegada_cr), null], ['🚛 Retiro', fmtFecha(env.fecha_retiro), null], ['💵 Flete', fmtUSD(env.flete_usd), env.flete_usd], ['💰 Adelanto', fmtUSD(env.adelanto_usd), env.adelanto_usd]].map(([l, v, usd]) => (
-                  <div key={l} style={{ background: '#0f1115', borderRadius: '8px', padding: '8px 10px' }}>
-                    <div style={{ fontSize: '0.65em', color: '#5a6a80' }}>{l}</div>
-                    <div style={{ fontSize: '0.9em', fontWeight: 600, color: '#fff', marginTop: '2px' }}>{v}</div>
-                    {usd && tcCompra && <div style={{ fontSize: '0.7em', color: '#4ec9b0', marginTop: '1px' }}>₡{(parseFloat(usd) * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:'8px',marginTop:'14px'}}>
+                {[['🚢 ETD',fmtFecha(env.etd),null],['📅 ETA',fmtFecha(env.eta),null],['💵 Flete',fmtUSD(env.flete_monto),env.flete_monto],['💰 Adelanto',fmtUSD(env.adelanto_monto),env.adelanto_monto],['🧾 Impuestos',fmtCRC(env.impuestos_monto),null],['🚛 Transporte CR',fmtCRC(env.transporte_local_monto),null]].map(([l,v,usd])=>(
+                  <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
+                    <div style={{fontSize:'0.65em',color:'#5a6a80'}}>{l}</div>
+                    <div style={{fontSize:'0.9em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
+                    {usd&&tcCompra&&<div style={{fontSize:'0.7em',color:'#4ec9b0',marginTop:'1px'}}>₡{(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0})}</div>}
                   </div>
                 ))}
               </div>
 
-              {expandido === env.id && (
-                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #1e2330' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: '8px', marginBottom: '10px' }}>
-                    {[['BL Número', env.bl_numero, null], ['Pago final', fmtUSD(env.pago_final_usd), env.pago_final_usd], ['Impuestos', env.impuestos_crc ? `₡${Number(env.impuestos_crc).toLocaleString()}` : '—', null], ['Transporte CR', env.transporte_crc ? `₡${Number(env.transporte_crc).toLocaleString()}` : '—', null], ['Otros', env.otros_crc ? `₡${Number(env.otros_crc).toLocaleString()}` : '—', null], ['TC BAC (compra)', tcCompra ? `₡${tcCompra.toFixed(2)}` : (env.tipo_cambio ? `₡${env.tipo_cambio}` : '—'), null]].map(([l, v, usd]) => (
-                      <div key={l} style={{ background: '#0f1115', borderRadius: '8px', padding: '8px 10px' }}>
-                        <div style={{ fontSize: '0.65em', color: '#5a6a80' }}>{l}</div>
-                        <div style={{ fontSize: '0.87em', color: '#fff' }}>{v || '—'}</div>
-                        {usd && tcCompra && <div style={{ fontSize: '0.72em', color: '#4ec9b0', marginTop: '2px' }}>₡{(parseFloat(usd) * tcCompra).toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>}
+              {expandido===env.id && (
+                <div style={{marginTop:'14px',paddingTop:'14px',borderTop:'1px solid #1e2330'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:'8px',marginBottom:'12px'}}>
+                    {[['Pago final',fmtUSD(env.final_monto),env.final_monto],['F. pago adelanto',fmtFecha(env.adelanto_pago),null],['F. pago final',fmtFecha(env.final_pago),null],['F. pago flete',fmtFecha(env.flete_pago),null],['F. pago impuestos',fmtFecha(env.impuestos_pago),null],['TC BAC',tcCompra?'₡'+tcCompra.toFixed(2):'—',null]].map(([l,v,usd])=>(
+                      <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
+                        <div style={{fontSize:'0.65em',color:'#5a6a80'}}>{l}</div>
+                        <div style={{fontSize:'0.87em',color:'#fff'}}>{v||'—'}</div>
+                        {usd&&tcCompra&&<div style={{fontSize:'0.72em',color:'#4ec9b0',marginTop:'2px'}}>₡{(parseFloat(usd)*tcCompra).toLocaleString('es-CR',{maximumFractionDigits:0})}</div>}
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                    {[['📄 Docs recibidos', env.documentos_recibidos], ['🛃 Despacho aduanal', env.despacho_aduanal], ['✅ Exonerado', env.exonerado]].map(([l, v]) => (
-                      <span key={l} style={{ fontSize: '0.78em', color: v ? '#68d391' : '#5a6a80' }}>{v ? '✅' : '⬜'} {l}</span>
-                    ))}
+                  <div style={{marginBottom:'10px'}}>
+                    <div style={{fontSize:'0.75em',color:'#5a6a80',marginBottom:'6px',fontWeight:600,textTransform:'uppercase'}}>Documentos</div>
+                    <div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}>
+                      {[['doc_bl','📄 BL'],['doc_factura','🧾 Factura'],['doc_packing','📦 Packing'],['doc_cert','📜 Certificados'],['doc_poliza','🛡️ Póliza']].map(([k,l])=>(
+                        <span key={k} style={{fontSize:'0.82em',color:env[k]?'#68d391':'#5a6a80'}}>{env[k]?'✅':'⬜'} {l}</span>
+                      ))}
+                    </div>
                   </div>
-                  {env.notas && <div style={{ fontSize: '0.82em', color: '#8899aa', background: '#0f1115', borderRadius: '8px', padding: '10px' }}>📝 {env.notas}</div>}
-                  <div style={{ marginTop: '10px' }}>
-                    <button style={S.btnSm('#3d1515')} onClick={() => eliminar(env.id)}>🗑️ Eliminar registro</button>
+                  {env.notas&&<div style={{fontSize:'0.82em',color:'#8899aa',background:'#0f1115',borderRadius:'8px',padding:'10px'}}>📝 {env.notas}</div>}
+                  <div style={{marginTop:'10px'}}>
+                    <button style={S.btnSm('#3d1515')} onClick={()=>eliminar(env.id)}>🗑️ Eliminar</button>
                   </div>
                 </div>
               )}
@@ -217,81 +234,87 @@ export default function Contenedores() {
         </div>
       )}
 
-      {tab === 1 && (
+      {tab===1 && (
         <div style={S.card}>
-          <div style={{ fontWeight: 700, color: '#fff', marginBottom: '20px', fontSize: '1.05em' }}>{editId ? '✏️ Editar contenedor' : '➕ Registrar nuevo contenedor'}</div>
-          <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Datos generales</div>
+          <div style={{fontWeight:700,color:'#fff',marginBottom:'20px',fontSize:'1.05em'}}>{editId?'✏️ Editar contenedor':'➕ Registrar nuevo contenedor'}</div>
+
+          <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Datos generales</div>
           <div style={S.grid2}>
-            {[['proveedor', 'Proveedor / Exportador', 'text'], ['numero_contenedor', 'Número de contenedor', 'text'], ['naviera', 'Naviera', 'text'], ['puerto_origen', 'Puerto de origen', 'text'], ['bl_numero', 'BL / AWB número', 'text']].map(([k, l, t]) => (
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type={t} value={form[k]} onChange={e => setF(k, e.target.value)} /></div>
+            {[['nombre','Número de contenedor / ID'],['proveedor','Proveedor / Exportador'],['naviero','Naviero / Línea naviera'],['bl_num','BL / AWB número']].map(([k,l])=>(
+              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="text" value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
             ))}
             <div><label style={S.label}>Tipo de contenedor</label>
-              <select style={S.input} value={form.tipo_contenedor} onChange={e => setF('tipo_contenedor', e.target.value)}>
-                {TIPOS_CONT.map(t => <option key={t}>{t}</option>)}
+              <select style={S.input} value={form.tlc} onChange={e=>setF('tlc',e.target.value)}>
+                {TIPOS_CONT.map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div><label style={S.label}>INCOTERM</label>
+              <select style={S.input} value={form.incoterm} onChange={e=>setF('incoterm',e.target.value)}>
+                {INCOTERMS.map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
             <div><label style={S.label}>Estado</label>
-              <select style={S.input} value={form.estado} onChange={e => setF('estado', e.target.value)}>
-                {Object.keys(ESTADOS).map(s => <option key={s}>{s}</option>)}
+              <select style={S.input} value={form.estado} onChange={e=>setF('estado',e.target.value)}>
+                {Object.keys(ESTADOS).map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
 
-          <hr style={S.divider} />
-          <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Fechas</div>
+          <hr style={S.divider}/>
+          <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Fechas</div>
           <div style={S.grid2}>
-            {[['fecha_embarque', 'Fecha de embarque'], ['fecha_eta', 'ETA (fecha estimada llegada)'], ['fecha_llegada_cr', 'Fecha llegada a CR'], ['fecha_retiro', 'Fecha de retiro']].map(([k, l]) => (
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="date" value={form[k] || ''} onChange={e => setF(k, e.target.value)} /></div>
+            {[['etd','ETD (fecha de embarque)'],['eta','ETA (fecha estimada llegada)']].map(([k,l])=>(
+              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="date" value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
             ))}
           </div>
 
-          <hr style={S.divider} />
-          <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Pagos y costos</div>
+          <hr style={S.divider}/>
+          <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Pagos y costos</div>
           <div style={S.grid3}>
-            {[['adelanto_usd', 'Adelanto (USD)'], ['pago_final_usd', 'Pago final (USD)'], ['flete_usd', 'Flete (USD)'], ['impuestos_crc', 'Impuestos (CRC)'], ['transporte_crc', 'Transporte CR (CRC)'], ['otros_crc', 'Otros costos (CRC)'], ['tipo_cambio', 'Tipo de cambio']].map(([k, l]) => (
-              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="number" value={form[k] || ''} onChange={e => setF(k, e.target.value)} /></div>
+            {[['adelanto_monto','Adelanto (USD)','num'],['adelanto_pago','Fecha pago adelanto','date'],['final_monto','Pago final (USD)','num'],['final_pago','Fecha pago final','date'],['flete_monto','Flete (USD)','num'],['flete_pago','Fecha pago flete','date'],['impuestos_monto','Impuestos (CRC)','num'],['impuestos_pago','Fecha pago impuestos','date'],['transporte_local_monto','Transporte local (CRC)','num'],['transporte_local_pago','Fecha pago transporte','date']].map(([k,l,t])=>(
+              <div key={k}><label style={S.label}>{l}</label><input style={S.input} type={t==='date'?'date':'number'} value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
             ))}
           </div>
 
-          <hr style={S.divider} />
-          <div style={{ fontWeight: 600, color: '#c8a84b', fontSize: '0.8em', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>Documentos y estado</div>
-          <div style={{ display: 'flex', gap: '24px', marginBottom: '16px', flexWrap: 'wrap' }}>
-            {[['documentos_recibidos', '📄 Documentos recibidos'], ['despacho_aduanal', '🛃 Despacho aduanal completo'], ['exonerado', '✅ Exonerado']].map(([k, l]) => (
-              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.87em', color: '#c9d1e0' }}>
-                <input type="checkbox" checked={!!form[k]} onChange={e => setF(k, e.target.checked)} style={{ accentColor: '#c8a84b', width: '16px', height: '16px' }} />
+          <hr style={S.divider}/>
+          <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>Documentos</div>
+          <div style={{display:'flex',gap:'20px',marginBottom:'16px',flexWrap:'wrap'}}>
+            {[['doc_bl','📄 BL'],['doc_factura','🧾 Factura comercial'],['doc_packing','📦 Packing list'],['doc_cert','📜 Certificados'],['doc_poliza','🛡️ Póliza de seguro']].map(([k,l])=>(
+              <label key={k} style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'0.87em',color:'#c9d1e0'}}>
+                <input type="checkbox" checked={!!form[k]} onChange={e=>setF(k,e.target.checked)} style={{accentColor:'#c8a84b',width:'16px',height:'16px'}}/>
                 {l}
               </label>
             ))}
           </div>
-          <div><label style={S.label}>Notas</label><textarea style={{ ...S.input, minHeight: '80px', resize: 'vertical' }} value={form.notas || ''} onChange={e => setF('notas', e.target.value)} /></div>
+          <div><label style={S.label}>Notas</label><textarea style={{...S.input,minHeight:'80px',resize:'vertical'}} value={form.notas||''} onChange={e=>setF('notas',e.target.value)}/></div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <button style={S.btn()} onClick={guardar} disabled={saving}>{saving ? 'Guardando...' : editId ? '💾 Actualizar' : '💾 Guardar'}</button>
-            <button style={S.btnSm()} onClick={() => { setForm(FORM_INIT); setEditId(null); setTab(0); }}>Cancelar</button>
+          <div style={{display:'flex',gap:'10px',marginTop:'20px'}}>
+            <button style={S.btn()} onClick={guardar} disabled={saving}>{saving?'Guardando...':editId?'💾 Actualizar':'💾 Guardar'}</button>
+            <button style={S.btnSm()} onClick={()=>{ setForm(FORM_INIT); setEditId(null); setTab(0); }}>Cancelar</button>
           </div>
         </div>
       )}
 
-      {tab === 2 && (
+      {tab===2 && (
         <div>
-          <div style={{ fontSize: '0.82em', color: '#5a6a80', marginBottom: '14px' }}>{historial.length} contenedores cerrados</div>
-          {historial.length === 0 ? <div style={{ ...S.card, textAlign: 'center', color: '#5a6a80', padding: '30px' }}>Sin historial aún.</div> : (
-            <div style={{ overflowX: 'auto' }}>
+          <div style={{fontSize:'0.82em',color:'#5a6a80',marginBottom:'14px'}}>{historial.length} contenedores en historial</div>
+          {historial.length===0 ? <div style={{...S.card,textAlign:'center',color:'#5a6a80',padding:'30px'}}>Sin historial aún.</div> : (
+            <div style={{overflowX:'auto'}}>
               <table style={S.table}>
-                <thead><tr>{['Contenedor', 'Proveedor', 'Tipo', 'Embarque', 'Llegada CR', 'Flete USD', 'Acciones'].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <thead><tr>{['Contenedor','Proveedor','Estado','ETD','ETA','Flete USD','Acciones'].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {historial.map(env => (
+                  {historial.map(env=>(
                     <tr key={env.id}>
-                      <td style={S.td}><span style={{ fontWeight: 600 }}>{env.numero_contenedor || '—'}</span></td>
+                      <td style={S.td}><span style={{fontWeight:600}}>{env.nombre||'—'}</span></td>
                       <td style={S.td}>{env.proveedor}</td>
-                      <td style={S.td}>{env.tipo_contenedor || '—'}</td>
-                      <td style={S.td}>{fmtFecha(env.fecha_embarque)}</td>
-                      <td style={S.td}>{fmtFecha(env.fecha_llegada_cr)}</td>
-                      <td style={S.td}>{fmtUSD(env.flete_usd)}</td>
+                      <td style={S.td}><span style={S.badge(ESTADOS[env.estado]||'#5a6a80')}>{env.estado}</span></td>
+                      <td style={S.td}>{fmtFecha(env.etd)}</td>
+                      <td style={S.td}>{fmtFecha(env.eta)}</td>
+                      <td style={S.td}>{fmtUSD(env.flete_monto)}</td>
                       <td style={S.td}>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button style={S.btnSm()} onClick={() => reactivar(env.id)}>↩️ Reactivar</button>
-                          <button style={S.btnSm('#3d1515')} onClick={() => eliminar(env.id)}>🗑️</button>
+                        <div style={{display:'flex',gap:'6px'}}>
+                          <button style={S.btnSm()} onClick={()=>reactivar(env.id)}>↩️ Reactivar</button>
+                          <button style={S.btnSm('#3d1515')} onClick={()=>eliminar(env.id)}>🗑️</button>
                         </div>
                       </td>
                     </tr>
