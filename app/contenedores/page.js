@@ -70,8 +70,9 @@ export default function Contenedores() {
 
   async function cargar() {
     setLoading(true);
-    const { data: activos } = await supabase.from('neptuno_envios').select('*').neq('estado', '✅ Cerrado').order('created_at', { ascending: false });
-    const { data: hist } = await supabase.from('neptuno_envios').select('*').eq('estado', '✅ Cerrado').order('created_at', { ascending: false }).limit(50);
+    const { data: activos, error: e1 } = await supabase.from('neptuno_envios').select('*').neq('estado', '✅ Cerrado').order('created_at', { ascending: false });
+    const { data: hist, error: e2 } = await supabase.from('neptuno_envios').select('*').eq('estado', '✅ Cerrado').order('created_at', { ascending: false }).limit(50);
+    if (e1 || e2) setMsg({ texto: '❌ Error Supabase: ' + (e1?.message || e2?.message), tipo: 'error' });
     setEnvios(activos || []);
     setHistorial(hist || []);
     setLoading(false);

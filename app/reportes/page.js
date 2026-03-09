@@ -94,9 +94,11 @@ const REPORTES = {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function utcACR(iso) {
   try {
-    const d = new Date(iso);
-    d.setHours(d.getHours() - 6);
-    return d.toLocaleString('es-CR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return new Intl.DateTimeFormat('es-CR', {
+      timeZone: 'America/Costa_Rica',
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', hour12:false,
+    }).format(new Date(iso));
   } catch { return iso?.slice(0,16).replace('T',' ') || '—'; }
 }
 
@@ -184,7 +186,17 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 }
 
 async function cargarASupabase(tabla, records) {
+  if (!records.length) return 0;
   const BATCH = 500;
+  // Usar la fecha_carga del primer registro para limpiar duplicados
+  const fechaCarga = records[0].fecha_carga;
+
+  // Borrar datos anteriores con la misma fecha_carga para respetar el constraint de unicidad
+  const { error: delErr } = await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
+  if (delErr && delErr.code !== 'PGRST116') {
+    throw new Error('Error limpiando carga anterior: ' + delErr.message);
+  }
+
   let total = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
@@ -205,9 +217,11 @@ function TabSubir() {
     if (!files || files.length === 0) return;
     setProcesando(true);
     const nuevos = [];
-    const fechaCarga = new Date().toISOString();
 
     for (const file of files) {
+      // Cada archivo recibe su propia fecha_carga para historial separado
+      await new Promise(r => setTimeout(r, 10)); // pequeño delay para timestamps únicos
+      const fechaCarga = new Date().toISOString();
       const res = { nombre: file.name, estado: 'procesando', tipo: null, filas: 0, periodo: '', error: null };
       try {
         const buf = await file.arrayBuffer();
