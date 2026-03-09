@@ -269,7 +269,7 @@ function TabSubir() {
         const buf = await file.arrayBuffer();
         const wb  = XLSX.read(buf, { type:'array' });
         const ws  = wb.Sheets[wb.SheetNames[0]];
-        const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+        const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
 
         const tipo = detectarTipo(filas);
         if (!tipo) {
