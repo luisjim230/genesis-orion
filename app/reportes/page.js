@@ -280,84 +280,31 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   return records;
 }
 
-// ── Parsear rango del período "Del DD/MM/YYYY al DD/MM/YYYY" ───────────────
-function parsearRangoPeriodo(periodo) {
-  if (!periodo || periodo === 'Sin período') return null;
-  // Formatos: "Del 01/05/2026 al 20/05/2026" o "Del 01/05/2026 Al 20/05/2026"
-  const m = periodo.match(/Del\s+(\d{2}\/\d{2}\/\d{4})\s+[Aa]l\s+(\d{2}\/\d{2}\/\d{4})/i);
-  if (!m) return null;
-  const toISO = (dmy) => { const [d,mo,y] = dmy.split('/'); return `${y}-${mo}-${d}`; };
-  return { desde: toISO(m[1]), hasta: toISO(m[2]) };
-}
-
-// ── Deduplicación inteligente por rango de fechas ─────────────────────────
-// Lógica:
-//  1. Si la tabla NO tiene columna de fecha por registro (ej: mínimos/máximos),
-//     reemplaza siempre el período exacto (mismo periodo_reporte string).
-//  2. Si la tabla SÍ tiene fecha_col (ej: items_facturados):
-//     - Parsea el rango del nuevo reporte
-//     - Busca registros existentes cuya fecha caiga dentro de ese rango
-//     - Los borra (son datos que el nuevo reporte trae más completos o iguales)
-//     - Inserta solo los registros nuevos
-//     - Si el nuevo reporte es subconjunto exacto de uno ya cargado, no duplica
+// ── Deduplicación por período (simple y confiable) ────────────────────────
+// Regla: si ya existe una carga con el mismo periodo_reporte → la reemplaza
+// Si el período es distinto → acumula (no borra nada)
+// Esto es lo correcto para reportes de NEO que son siempre por rango de fechas
 async function cargarASupabase(tabla, records, periodoNuevo) {
   if (!records.length) return 0;
   const BATCH = 200;
-  const cfg = REPORTES[tabla];
-  const fechaCarga = records[0].fecha_carga;
+  const periodo = periodoNuevo || 'Sin período';
 
   try {
-    if (cfg?.fecha_col) {
-      // ── Tablas con fecha por registro (items_facturados, consolidado, etc.) ──
-      const rango = parsearRangoPeriodo(periodoNuevo);
-      if (rango) {
-        // Borrar registros existentes cuya fecha_registro esté dentro del nuevo rango
-        // Usamos periodo_reporte para identificar cargas que se solapan
-        const { data: cargasExistentes } = await supabase
-          .from(tabla)
-          .select('fecha_carga, periodo_reporte')
-          .order('fecha_carga', { ascending: false });
+    // Borrar SOLO si existe una carga anterior con exactamente el mismo período
+    const { data: mismoP } = await supabase
+      .from(tabla)
+      .select('fecha_carga')
+      .eq('periodo_reporte', periodo)
+      .limit(10);
 
-        if (cargasExistentes?.length) {
-          const vistos = new Set();
-          for (const row of cargasExistentes) {
-            if (vistos.has(row.fecha_carga)) continue;
-            vistos.add(row.fecha_carga);
-            const rangoExist = parsearRangoPeriodo(row.periodo_reporte);
-            if (!rangoExist) continue;
-            // Si los rangos se solapan, borrar esa carga para no duplicar
-            const seSolapa = rangoExist.desde <= rango.hasta && rangoExist.hasta >= rango.desde;
-            if (seSolapa) {
-              console.log(`[Ezequiel] Removiendo carga solapada: ${row.periodo_reporte} (${row.fecha_carga.slice(0,10)})`);
-              await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
-            }
-          }
-        }
-      } else {
-        // Sin rango parseable: reemplazar solo si ya existe el mismo periodo_reporte
-        const { data: mismoP } = await supabase
-          .from(tabla).select('fecha_carga').eq('periodo_reporte', periodoNuevo);
-        for (const row of (mismoP || [])) {
-          await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
-        }
-      }
-    } else {
-      // ── Tablas sin fecha por registro (mínimos/máximos, lista ítems, etc.) ──
-      // Reemplazar solo el período exacto que se está subiendo
-      // (snapshot: siempre refleja el estado en esa fecha de corte)
-      const { data: mismoP } = await supabase
-        .from(tabla).select('fecha_carga').eq('periodo_reporte', periodoNuevo || 'Sin período');
-      for (const row of (mismoP || [])) {
-        await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
-      }
+    for (const row of (mismoP || [])) {
+      await supabase.from(tabla).delete().eq('fecha_carga', row.fecha_carga);
     }
   } catch(e) {
     console.warn('[Ezequiel] Advertencia en dedup:', e.message);
-    // Fallback: solo limpiar la fecha_carga actual (no borra historial)
-    await supabase.from(tabla).delete().eq('fecha_carga', fechaCarga);
   }
 
-  // Insertar registros nuevos en batches con retry
+  // Insertar en batches con retry
   let total = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
