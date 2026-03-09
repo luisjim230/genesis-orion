@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 
 const GOLD   = 'var(--orange)'
@@ -109,15 +109,13 @@ function TabAlertas({ ordenes, items, loading }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <select style={{ ...S.input, cursor: 'pointer' }} value={filtroProv} onChange={e => setFiltroProv(e.target.value)}>
-          <option value="">🏭 Todos los proveedores</option>
-          {proveedores.map(p => <option key={p}>{p}</option>)}
-        </select>
+
         <select style={{ ...S.input, cursor: 'pointer' }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
           <option value="Todos">📋 Todos</option>
           <option value="pendiente">🔴 Pendientes</option>
           <option value="parcial">🟡 Parciales</option>
         </select>
+        <input style={{ ...S.input, flex: '1 1 160px' }} placeholder="🏭 Buscar proveedor..." value={filtroProv} onChange={e => setFiltroProv(e.target.value)} />
         <input style={{ ...S.input, flex: '1 1 200px' }} placeholder="🔍 Buscar por código o nombre..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
       </div>
       {loading ? (
@@ -125,9 +123,9 @@ function TabAlertas({ ordenes, items, loading }) {
       ) : pendientes.length === 0 ? (
         <div style={{ ...S.card, textAlign: 'center', color: '#68d391', padding: 40 }}>✅ Sin ítems pendientes.</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480, border: '1px solid var(--border-soft)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83em' }}>
-            <thead><tr>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}><tr>
               {['Estado', '⏱️ Días', 'Código', 'Nombre del producto', 'Proveedor', 'Orden / Lote', 'Cant. ordenada', 'Cant. recibida', 'Pendiente'].map(h => (
                 <th key={h} style={S.th}>{h}</th>
               ))}
@@ -266,9 +264,9 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
       ) : ordenesFilt.length === 0 ? (
         <div style={{ ...S.card, textAlign: 'center', color: MUTED, padding: 40 }}>Sin órdenes registradas. Generá órdenes desde Saturno.</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480, border: '1px solid var(--border-soft)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83em' }}>
-            <thead><tr>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}><tr>
               {['Fecha', 'Lote / Nombre', 'Productos', 'Días cobertura', 'Estado', 'Acción'].map(h => <th key={h} style={S.th}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -303,6 +301,8 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
   const [fechaProcesada, setFechaProcesada] = useState(null)
   const [infoMsg, setInfoMsg] = useState(null)
 
+  const ejecutarMatchRef = useRef(null)
+
   useEffect(() => {
     async function obtenerFecha() {
       try {
@@ -319,11 +319,20 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
             const cr = new Date(utc.getTime() - 6 * 3600000)
             setFechaLegible(cr.toLocaleString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
           } catch { setFechaLegible(fc?.substring(0, 16) || fc) }
+          // Auto-ejecutar match al detectar fecha nueva
+          ejecutarMatchRef.current = fc
         }
       } catch { /* sin tabla */ }
     }
     obtenerFecha()
   }, [])
+
+  // Auto-procesar cuando llega una nueva fecha_carga
+  useEffect(() => {
+    if (fechaCarga && ejecutarMatchRef.current === fechaCarga && estado === 'idle') {
+      ejecutarMatch()
+    }
+  }, [fechaCarga])
 
   async function revertirMatchsInvalidos() {
     const { data } = await supabase

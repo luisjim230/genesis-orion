@@ -615,9 +615,9 @@ export default function Inventario() {
                 <span style={{ fontSize: '0.78rem', color: '#999', whiteSpace: 'nowrap' }}><strong style={{ color: '#1a1a2e' }}>{calcFiltrado.length.toLocaleString()}</strong> de {calc.length.toLocaleString()} productos</span>
               </div>
 
-              <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 14 }}>
+              <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 520, borderRadius: 10, border: '1px solid var(--border)', marginBottom: 14 }}>
                 <table className="module-table">
-                  <thead>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr>
                       <th style={{ padding: '10px 12px' }}>☑</th>
                       {[{ key: '_alerta', label: 'Alerta' }, { key: 'codigo', label: 'Código' }, { key: 'nombre', label: 'Nombre' }, { key: 'ultimo_proveedor', label: 'Proveedor' }].map(col => (
@@ -635,7 +635,7 @@ export default function Inventario() {
                     </tr>
                   </thead>
                   <tbody>
-                    {calcFiltrado.slice(0, 300).map((item, i) => {
+                    {calcFiltrado.map((item, i) => {
                       const sel = seleccionados.has(item.codigo);
                       return (
                         <tr key={i} style={{ background: sel ? 'rgba(237,110,46,0.06)' : undefined, cursor: 'pointer' }} onClick={() => { const s = new Set(seleccionados); sel ? s.delete(item.codigo) : s.add(item.codigo); setSeleccionados(s); }}>
@@ -655,7 +655,7 @@ export default function Inventario() {
                     {calcFiltrado.length === 0 && <tr><td colSpan={11} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>😕 No hay productos con esos filtros</td></tr>}
                   </tbody>
                 </table>
-                {calcFiltrado.length > 300 && <div style={{ padding: 10, textAlign: 'center', color: '#999', fontSize: '0.8rem' }}>Mostrando primeros 300. Usá los filtros para acotar.</div>}
+
               </div>
 
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
