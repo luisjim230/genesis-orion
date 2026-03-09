@@ -102,10 +102,17 @@ const REPORTES = {
   neo_consolidado_facturas: {
     nombre:'Consolidado de facturas', emoji:'📑',
     descripcion:'Resumen de facturas por vendedor: modo de pago, subtotal, total.',
+    // XLSX.js no puede leer los headers de este reporte (celdas mergeadas en fila 8)
+    // Se detecta por nombre de archivo y se procesa por índice de columna fijo
     header_row:8, titulo_valor:'Consolidado de facturas',
     fecha_col:'fecha',
+    usar_indices: true,   // flag: no buscar headers, usar posición fija
+    data_row: 9,          // los datos empiezan en índice 9 (Excel row 10)
     columnas:['factura','fecha','modo_pago','vendedor','cliente','subtotal','descuento','impuesto','total','observaciones','moneda'],
-    columnas_originales:['Factura','Fecha','Modo de pago','Vendedor','Cliente','Subtotal','Descuento','Impuesto','Total','Observaciones','Moneda'],
+    // índices de columna: 0=Factura, 1=Fecha, 2=Modo pago, 3=Vendedor, 4=Cliente,
+    // 5=Subtotal, 6=Descuento, 7=Impuesto, 8=Total, 9=Observaciones, 10=Moneda
+    col_indices:[0,1,2,3,4,5,6,7,8,9,10],
+    columnas_originales:['Factura',' Fecha',' Modo de pago',' Vendedor',' Cliente',' Subtotal',' Descuento',' Impuesto',' Total',' Observaciones','Moneda'],
     modulos_destino:['vendedores'],
   },
 };
@@ -121,7 +128,7 @@ function utcACR(iso) {
   } catch { return iso?.slice(0,16).replace('T',' ') || '—'; }
 }
 
-function detectarTipo(filas) {
+function detectarTipo(filas, nombreArchivo) {
   // filas = array de arrays (raw sheet)
   let tituloEncontrado = null;
 
@@ -154,14 +161,33 @@ function detectarTipo(filas) {
       }
     }
   }
+
+  // ── Fallback: detectar por nombre de archivo ────────────────────────────
+  // Algunos reportes tienen celdas mergeadas que XLSX.js no puede leer
+  if (nombreArchivo) {
+    const nom = nombreArchivo.toLowerCase();
+    const mapaArchivo = [
+      { patron: 'consolidado_de_facturas', tabla: 'neo_consolidado_facturas' },
+      { patron: 'consolidado de facturas',  tabla: 'neo_consolidado_facturas' },
+      { patron: 'lista_de_i_tems_facturados', tabla: 'neo_items_facturados' },
+      { patron: 'lista de ítems facturados',  tabla: 'neo_items_facturados' },
+      { patron: 'items_facturados',           tabla: 'neo_items_facturados' },
+    ];
+    for (const { patron, tabla } of mapaArchivo) {
+      if (nom.includes(patron)) return tabla;
+    }
+  }
+
   return null;
 }
 
 function extraerPeriodo(filas) {
   for (let i = 0; i < Math.min(10, filas.length); i++) {
-    for (const v of filas[i]) {
+    // Scan ALL columns in each row (period can be in any column due to merges)
+    const fila = Array.isArray(filas[i]) ? filas[i] : [];
+    for (const v of fila) {
       const s = String(v||'').trim();
-      if (s && (s.includes('Del ') || s.includes('Al '))) return s;
+      if (s && (s.includes('Del ') || s.includes('del ')) && s.includes('/')) return s;
     }
   }
   return 'Sin período';
@@ -169,6 +195,33 @@ function extraerPeriodo(filas) {
 
 function procesarExcel(filas, tabla, fechaCarga, periodo) {
   const cfg = REPORTES[tabla];
+
+  // ── Procesador por índice de columna (para reportes con headers mergeados) ─
+  if (cfg.usar_indices) {
+    const dataRows = filas.slice(cfg.data_row);
+    const records = [];
+    for (const row of dataRows) {
+      if (!row || row.every(v => v === null || v === undefined || String(v).trim() === '')) continue;
+      const primerVal = String(row[0]||'').trim();
+      if (!primerVal || primerVal.startsWith('Total:') || primerVal === 'Factura') continue;
+
+      const record = { fecha_carga: fechaCarga, periodo_reporte: periodo };
+      cfg.columnas.forEach((col, i) => {
+        const idx = cfg.col_indices[i];
+        const val = row[idx];
+        if (val === null || val === undefined || String(val).trim() === '') {
+          record[col] = null;
+        } else {
+          const s = String(val).trim();
+          record[col] = (s === '' || s === 'nan' || s === 'null') ? null : s;
+        }
+      });
+      records.push(record);
+    }
+    return records;
+  }
+
+  // ── Procesador estándar por nombre de columna ────────────────────────────
   const headerRow = cfg.header_row;
   const headers = filas[headerRow].map(v => String(v||'').trim());
   const dataRows = filas.slice(headerRow + 1);
@@ -342,7 +395,7 @@ function TabSubir() {
         const ws  = wb.Sheets[wb.SheetNames[0]];
         const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
 
-        const tipo = detectarTipo(filas);
+        const tipo = detectarTipo(filas, file.name);
         if (!tipo) {
           res.estado  = 'no_reconocido';
           res.error   = 'No se pudo identificar el tipo de reporte.';
