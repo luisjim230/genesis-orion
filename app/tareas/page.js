@@ -4,29 +4,29 @@ import { supabase } from '../../lib/supabase';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
-  page:      { background:'#0f1115', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'#c9d1e0' },
+  page:      { background:'var(--cream)', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'var(--text-primary)' },
   header:    { marginBottom:'24px' },
-  title:     { fontSize:'1.7rem', fontWeight:700, color:'#fff', margin:0 },
-  caption:   { fontSize:'0.82rem', color:'#5a6a80', marginTop:'4px' },
-  tabs:      { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid #1e2530', paddingBottom:'0' },
-  tab:       { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, transition:'all .2s', background:'transparent', color:'#5a6a80', marginBottom:'-1px' },
-  tabActive: { background:'#1c1f26', color:'#c8a84b', borderBottom:'2px solid #c8a84b' },
-  card:      { background:'#161920', borderRadius:'12px', padding:'20px', marginBottom:'12px', border:'1px solid #1e2530' },
-  expander:  { background:'#161920', borderRadius:'12px', border:'1px solid #1e2530', marginBottom:'16px', overflow:'hidden' },
-  expanderHeader: { padding:'12px 16px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'#c8a84b', fontWeight:600, fontSize:'0.9rem' },
-  expanderBody: { padding:'16px', borderTop:'1px solid #1e2530' },
-  input:     { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
-  textarea:  { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', resize:'vertical', minHeight:'70px', boxSizing:'border-box' },
-  select:    { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
-  btnPrimary:{ background:'#c8a84b', color:'#0f1115', border:'none', borderRadius:'8px', padding:'9px 18px', fontWeight:700, cursor:'pointer', fontSize:'0.9rem', width:'100%' },
+  title:     { fontSize:'1.7rem', fontWeight:700, color:'var(--text-primary)', margin:0 },
+  caption:   { fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'4px' },
+  tabs:      { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid var(--border-soft)', paddingBottom:'0' },
+  tab:       { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, transition:'all .2s', background:'transparent', color:'var(--text-muted)', marginBottom:'-1px' },
+  tabActive: { background:'var(--cream)', color:'var(--orange)', borderBottom:'2px solid var(--orange)' },
+  card:      { background:'#fff', borderRadius:'12px', padding:'20px', marginBottom:'12px', border:'1px solid var(--border-soft)' },
+  expander:  { background:'#fff', borderRadius:'12px', border:'1px solid var(--border-soft)', marginBottom:'16px', overflow:'hidden' },
+  expanderHeader: { padding:'12px 16px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', color:'var(--orange)', fontWeight:600, fontSize:'0.9rem' },
+  expanderBody: { padding:'16px', borderTop:'1px solid var(--border-soft)' },
+  input:     { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
+  textarea:  { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', resize:'vertical', minHeight:'70px', boxSizing:'border-box' },
+  select:    { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
+  btnPrimary:{ background:'var(--orange)', color:'#fff', border:'none', borderRadius:'8px', padding:'9px 18px', fontWeight:700, cursor:'pointer', fontSize:'0.9rem', width:'100%' },
   btnDanger: { background:'#3a1a1a', color:'#ff6b6b', border:'1px solid #5a2a2a', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', fontSize:'0.85rem' },
   btnGhost:  { background:'transparent', border:'none', cursor:'pointer', fontSize:'1.1rem', padding:'4px 8px' },
-  label:     { fontSize:'0.82rem', color:'#5a6a80', marginBottom:'4px', display:'block' },
-  divider:   { border:'none', borderTop:'1px solid #1e2530', margin:'16px 0' },
-  badge:     (color) => ({ background:color, color:'#fff', padding:'2px 8px', borderRadius:'10px', fontSize:'0.78rem', fontWeight:600, display:'inline-block' }),
+  label:     { fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'4px', display:'block' },
+  divider:   { border:'none', borderTop:'1px solid var(--border-soft)', margin:'16px 0' },
+  badge:     (color) => ({ background:color, color:'var(--text-primary)', padding:'2px 8px', borderRadius:'10px', fontSize:'0.78rem', fontWeight:600, display:'inline-block' }),
   row:       { display:'flex', gap:'12px', alignItems:'flex-start' },
   calCell:   (bg, border, color) => ({ background:bg, border:`2px solid ${border}`, borderRadius:'8px', padding:'6px', textAlign:'center', minHeight:'70px', color, margin:'2px', fontSize:'0.8rem' }),
-  info:      { background:'#1a2535', border:'1px solid #2a3a55', borderRadius:'8px', padding:'12px 16px', color:'#7ec8e3', fontSize:'0.88rem', marginTop:'8px' },
+  info:      { background:'#EBF8FF', border:'1px solid #BEE3F8', borderRadius:'8px', padding:'12px 16px', color:'#2C5282', fontSize:'0.88rem', marginTop:'8px' },
 };
 
 const PRIORIDADES = ['🔴 Alta', '🟡 Media', '🟢 Baja'];
@@ -104,7 +104,7 @@ function TabPendientes() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>📖 Tareas pendientes</h3>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>📖 Tareas pendientes</h3>
 
       <Expander titulo="✍️ Agregar nueva tarea">
         <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:'16px' }}>
@@ -142,12 +142,12 @@ function TabPendientes() {
         ))}
       </div>
 
-      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      {loading ? <div style={{ color:'var(--text-muted)' }}>Cargando...</div>
       : filtradas.length===0
         ? <div style={S.info}>🕊️ No hay tareas pendientes.</div>
         : <>
-          <div style={{ color:'#5a6a80', fontSize:'0.85rem', marginBottom:'12px' }}>
-            <strong style={{ color:'#c9d1e0' }}>{filtradas.length}</strong> tarea(s) pendiente(s)
+          <div style={{ color:'var(--text-muted)', fontSize:'0.85rem', marginBottom:'12px' }}>
+            <strong style={{ color:'var(--text-primary)' }}>{filtradas.length}</strong> tarea(s) pendiente(s)
           </div>
           {filtradas.map(t=>(
             <div key={t.id} style={{ ...S.card, display:'flex', gap:'12px', alignItems:'flex-start' }}>
@@ -156,10 +156,10 @@ function TabPendientes() {
               <div style={{ flex:1 }}>
                 <div style={{ marginBottom:'4px' }}>
                   <Badge prioridad={t.prioridad}/>&nbsp;&nbsp;
-                  <strong style={{ color:'#fff' }}>{t.titulo}</strong>
+                  <strong style={{ color:'var(--text-primary)' }}>{t.titulo}</strong>
                 </div>
-                {t.notas && <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'4px' }}>📝 {t.notas}</div>}
-                <div style={{ fontSize:'0.78rem', color:'#3a4a5a' }}>Creada el {t.creada}</div>
+                {t.notas && <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginBottom:'4px' }}>📝 {t.notas}</div>}
+                <div style={{ fontSize:'0.78rem', color:'var(--text-muted)' }}>Creada el {t.creada}</div>
               </div>
               <button style={S.btnGhost} onClick={()=>eliminar(t.id)} title="Eliminar">🗑️</button>
             </div>
@@ -215,8 +215,8 @@ function TabRecurrentes() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>📜 Tareas recurrentes</h3>
-      <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>Las tareas que se repiten cada mes.</div>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>📜 Tareas recurrentes</h3>
+      <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginBottom:'16px' }}>Las tareas que se repiten cada mes.</div>
 
       <Expander titulo="⚡ Agregar tarea mensual recurrente">
         <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:'16px' }}>
@@ -242,9 +242,9 @@ function TabRecurrentes() {
       </Expander>
 
       <hr style={S.divider}/>
-      <h4 style={{ color:'#c8a84b', textTransform:'capitalize' }}>📅 {nombreMes}</h4>
+      <h4 style={{ color:'var(--orange)', textTransform:'capitalize' }}>📅 {nombreMes}</h4>
 
-      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      {loading ? <div style={{ color:'var(--text-muted)' }}>Cargando...</div>
       : recs.length===0
         ? <div style={S.info}>📭 No hay tareas recurrentes todavía.</div>
         : recs.map(rec => {
@@ -264,9 +264,9 @@ function TabRecurrentes() {
                   <div>
                     {icono} <strong>Día {rec.dia}</strong> — {rec.titulo}
                     {esHoy  && <span style={{ color:'#FFA500', fontWeight:'bold', marginLeft:'8px' }}>¡HOY!</span>}
-                    {!pasado && !esHoy && <span style={{ color:'#7ec8e3', fontWeight:'bold', marginLeft:'8px' }}>faltan {diasFaltan} día(s)</span>}
+                    {!pasado && !esHoy && <span style={{ color:'#2C5282', fontWeight:'bold', marginLeft:'8px' }}>faltan {diasFaltan} día(s)</span>}
                   </div>
-                  {rec.notas && <div style={{ fontSize:'0.8rem', color:'#8899aa', marginTop:'4px' }}>📝 {rec.notas}</div>}
+                  {rec.notas && <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>📝 {rec.notas}</div>}
                 </div>
                 <button style={S.btnGhost} onClick={()=>eliminar(rec.id)}>🗑️</button>
               </div>
@@ -324,7 +324,7 @@ function TabCalendario() {
         <div style={{ fontWeight:'bold', fontSize:'1rem' }}>{dia}</div>
         {n > 0 && <div style={{ fontSize:'0.6rem', color:'#3d8ef8' }}>{'● '.repeat(Math.min(n,3))}</div>}
         {tareasD.slice(0,2).map((t,i)=>(
-          <div key={i} style={{ fontSize:'0.6rem', color:'#7ec8e3', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+          <div key={i} style={{ fontSize:'0.6rem', color:'#2C5282', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
             {t.titulo.length>12 ? t.titulo.slice(0,12)+'…' : t.titulo}
           </div>
         ))}
@@ -343,14 +343,14 @@ function TabCalendario() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>📅 Calendario de Pagos</h3>
-      <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>Vista mensual compacta de tus tareas recurrentes.</div>
-      <h4 style={{ color:'#c8a84b', textTransform:'capitalize', marginBottom:'12px' }}>{nombreMes}</h4>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>📅 Calendario de Pagos</h3>
+      <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginBottom:'16px' }}>Vista mensual compacta de tus tareas recurrentes.</div>
+      <h4 style={{ color:'var(--orange)', textTransform:'capitalize', marginBottom:'12px' }}>{nombreMes}</h4>
 
-      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div> : <>
+      {loading ? <div style={{ color:'var(--text-muted)' }}>Cargando...</div> : <>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', gap:'2px', marginBottom:'4px' }}>
           {diasSemana.map(d=>(
-            <div key={d} style={{ textAlign:'center', fontWeight:'bold', color:'#8899aa', fontSize:'0.82rem', padding:'4px 0' }}>{d}</div>
+            <div key={d} style={{ textAlign:'center', fontWeight:'bold', color:'var(--text-muted)', fontSize:'0.82rem', padding:'4px 0' }}>{d}</div>
           ))}
         </div>
         {semanas.map((sem,i)=>(
@@ -360,7 +360,7 @@ function TabCalendario() {
         ))}
 
         <hr style={S.divider}/>
-        <h4 style={{ color:'#fff' }}>🔍 Detalle del día</h4>
+        <h4 style={{ color:'var(--text-primary)' }}>🔍 Detalle del día</h4>
         <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
           <label style={S.label}>Ver tareas del día:</label>
           <input style={{ ...S.input, width:'80px' }} type="number" min={1} max={diasMes} value={diaVer} onChange={e=>setDiaVer(parseInt(e.target.value))}/>
@@ -370,7 +370,7 @@ function TabCalendario() {
           ? tareasDelDia.map((t,i)=>(
             <div key={i} style={{ background:'#1a2a35', borderRadius:'8px', padding:'12px', margin:'6px 0', borderLeft:'4px solid #3d8ef8' }}>
               <div style={{ fontWeight:'bold', color:'#e0e0e0' }}>⏰ Día {t.dia} — {t.titulo}</div>
-              {t.notas && <div style={{ fontSize:'0.83rem', color:'#8899aa', marginTop:'4px' }}>📝 {t.notas}</div>}
+              {t.notas && <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginTop:'4px' }}>📝 {t.notas}</div>}
             </div>
           ))
           : <div style={S.info}>📭 El día {diaVer} no tiene tareas recurrentes.</div>
@@ -409,14 +409,14 @@ function TabCompletadas() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>🍞 Tareas completadas</h3>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>🍞 Tareas completadas</h3>
 
-      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      {loading ? <div style={{ color:'var(--text-muted)' }}>Cargando...</div>
       : completadas.length===0
         ? <div style={S.info}>🕊️ Ninguna tarea completada todavía.</div>
         : <>
-          <div style={{ color:'#5a6a80', fontSize:'0.85rem', marginBottom:'12px' }}>
-            <strong style={{ color:'#c9d1e0' }}>{completadas.length}</strong> tarea(s) completada(s)
+          <div style={{ color:'var(--text-muted)', fontSize:'0.85rem', marginBottom:'12px' }}>
+            <strong style={{ color:'var(--text-primary)' }}>{completadas.length}</strong> tarea(s) completada(s)
           </div>
           <input style={{ ...S.input, maxWidth:'350px', marginBottom:'16px' }}
             placeholder="🔍 Buscar..." value={buscar} onChange={e=>setBuscar(e.target.value)}/>
@@ -424,14 +424,14 @@ function TabCompletadas() {
           {filtradas.map(t=>(
             <div key={t.id} style={{ ...S.card, opacity:0.75 }}>
               <div style={{ marginBottom:'6px' }}>
-                <s style={{ color:'#5a6a80' }}>{t.titulo}</s>&nbsp;&nbsp;
+                <s style={{ color:'var(--text-muted)' }}>{t.titulo}</s>&nbsp;&nbsp;
                 <Badge prioridad={t.prioridad}/>
               </div>
-              <div style={{ display:'flex', gap:'20px', fontSize:'0.78rem', color:'#3a4a5a' }}>
+              <div style={{ display:'flex', gap:'20px', fontSize:'0.78rem', color:'var(--text-muted)' }}>
                 <span>📅 Creada: {t.creada}</span>
                 <span>✅ Completada: {t.completada || '—'}</span>
               </div>
-              {t.notas && <div style={{ fontSize:'0.8rem', color:'#3a4a5a', marginTop:'4px' }}>📝 {t.notas}</div>}
+              {t.notas && <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>📝 {t.notas}</div>}
             </div>
           ))}
 
@@ -441,7 +441,7 @@ function TabCompletadas() {
             : <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
                 <span style={{ color:'#ff6b6b', fontSize:'0.88rem' }}>¿Estás seguro? Esto borrará todas las completadas.</span>
                 <button style={{ ...S.btnDanger }} onClick={borrarTodas}>Sí, borrar</button>
-                <button style={{ background:'#1e2530', border:'1px solid #2a3142', color:'#c9d1e0', borderRadius:'8px', padding:'6px 12px', cursor:'pointer' }} onClick={()=>setConfirmando(false)}>Cancelar</button>
+                <button style={{ background:'var(--cream)', border:'1px solid var(--border)', color:'var(--text-primary)', borderRadius:'8px', padding:'6px 12px', cursor:'pointer' }} onClick={()=>setConfirmando(false)}>Cancelar</button>
               </div>
           }
         </>

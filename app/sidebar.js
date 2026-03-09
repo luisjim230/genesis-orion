@@ -133,21 +133,22 @@ export default function Sidebar() {
           <rect x="11" y="16" width="19" height="6" rx="1" fill="#ED6E2E"/>
         </svg>
         {!collapsed && (
-          <div>
+          <div style={{ lineHeight: 1 }}>
             <div style={{
               fontFamily: "'Bungee', cursive",
-              color: 'rgba(253,244,244,0.90)',
-              fontSize: 11,
-              letterSpacing: '0.15em',
-              lineHeight: 1,
+              color: 'rgba(253,244,244,0.60)',
+              fontSize: 9,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              marginBottom: 3,
             }}>DEPÓSITO</div>
             <div style={{
               fontFamily: "'Bungee', cursive",
               color: '#ED6E2E',
-              fontSize: 16,
-              letterSpacing: '0.05em',
-              lineHeight: 1.3,
-            }}>JIMÉNEZ</div>
+              fontSize: 18,
+              letterSpacing: '0.04em',
+              lineHeight: 1.1,
+            }}>JIMÉNEZ 👷🏼</div>
           </div>
         )}
       </div>

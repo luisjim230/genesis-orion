@@ -3,27 +3,27 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const S = {
-  page:    { background:'#0f1115', minHeight:'100vh', padding:'28px', fontFamily:'DM Sans, sans-serif', color:'#c9d1e0' },
-  title:   { fontSize:'1.7em', fontWeight:700, color:'#fff', margin:0 },
-  sub:     { fontSize:'0.82em', color:'#5a6a80', marginTop:'4px', marginBottom:'24px' },
-  card:    { background:'#161920', border:'1px solid #1e2330', borderRadius:'12px', padding:'20px', marginBottom:'16px' },
-  tabBar:  { display:'flex', gap:'4px', marginBottom:'20px', borderBottom:'1px solid #1e2330' },
-  tab:     (a)=>({ padding:'10px 18px', cursor:'pointer', border:'none', background:'none', color:a?'#c8a84b':'#5a6a80', fontWeight:a?700:400, borderBottom:a?'2px solid #c8a84b':'2px solid transparent', fontSize:'0.88em', fontFamily:'inherit' }),
-  btn:     (c='#c8a84b')=>({ background:c, color:'#fff', border:'none', borderRadius:'8px', padding:'9px 18px', cursor:'pointer', fontSize:'0.85em', fontWeight:600, fontFamily:'inherit' }),
-  btnSm:   (c='#252a35')=>({ background:c, color:'#c9d1e0', border:'1px solid #1e2330', borderRadius:'6px', padding:'5px 12px', cursor:'pointer', fontSize:'0.78em', fontFamily:'inherit' }),
-  input:   { background:'#0f1115', border:'1px solid #1e2330', borderRadius:'8px', padding:'9px 12px', color:'#c9d1e0', fontSize:'0.87em', width:'100%', boxSizing:'border-box', fontFamily:'inherit' },
-  label:   { fontSize:'0.75em', color:'#5a6a80', display:'block', marginBottom:'4px', fontWeight:500 },
+  page:    { background:'var(--cream)', minHeight:'100vh', padding:'32px 36px', fontFamily:"'Rubik','DM Sans',sans-serif", color:'var(--text-primary)' },
+  title:   { fontFamily:"'Bungee',cursive", fontSize:'1.6rem', color:'var(--burgundy)', letterSpacing:'0.03em', margin:0 },
+  sub:     { fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px', marginBottom:'24px' },
+  card:    { background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'12px', padding:'20px', marginBottom:'12px', boxShadow:'var(--card-shadow)' },
+  tabBar:  { display:'flex', gap:'0', marginBottom:'24px', borderBottom:'2px solid var(--border)', flexWrap:'wrap' },
+  tab:     (a)=>({ padding:'10px 20px', cursor:'pointer', border:'none', background:'none', color:a?'var(--orange)':'var(--text-muted)', fontWeight:a?600:400, borderBottom:a?'2px solid var(--orange)':'2px solid transparent', marginBottom:'-2px', fontSize:'0.86em', fontFamily:'inherit', transition:'all 0.15s' }),
+  btn:     (c='var(--orange)')=>({ background:c, color:'#fff', border:'none', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.84em', fontWeight:500, fontFamily:'inherit' }),
+  btnSm:   (c='#fff')=>({ background:c, color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'6px', padding:'5px 12px', cursor:'pointer', fontSize:'0.78em', fontFamily:'inherit' }),
+  input:   { background:'#fff', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 12px', color:'var(--text-primary)', fontSize:'0.87em', width:'100%', boxSizing:'border-box', fontFamily:'inherit' },
+  label:   { fontSize:'0.74em', color:'var(--text-muted)', display:'block', marginBottom:'4px', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' },
   grid2:   { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' },
   grid3:   { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'14px' },
-  divider: { border:'none', borderTop:'1px solid #1e2330', margin:'20px 0' },
-  badge:   (c)=>({ background:c+'22', color:c, border:'1px solid '+c+'55', borderRadius:'20px', padding:'3px 10px', fontSize:'0.72em', fontWeight:600 }),
+  divider: { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
+  badge:   (c)=>({ background:c+'18', color:c, border:'1px solid '+c+'44', borderRadius:'20px', padding:'3px 10px', fontSize:'0.72em', fontWeight:600 }),
   table:   { width:'100%', borderCollapse:'collapse', fontSize:'0.83em' },
-  th:      { textAlign:'left', padding:'9px 12px', background:'#0f1115', color:'#5a6a80', fontSize:'0.75em', textTransform:'uppercase', letterSpacing:'0.05em', borderBottom:'2px solid #1e2330' },
-  td:      { padding:'9px 12px', borderBottom:'1px solid #1e2330', color:'#c9d1e0', verticalAlign:'middle' },
-  kpi:     (c='#c8a84b')=>({ background:'#161920', border:'1px solid '+c+'33', borderTop:'3px solid '+c, borderRadius:'10px', padding:'14px 16px' }),
-  metric:  { fontSize:'1.5em', fontWeight:700, color:'#fff', marginTop:'4px' },
-  mLabel:  { fontSize:'0.72em', color:'#5a6a80', textTransform:'uppercase', letterSpacing:'0.06em' },
-  mDelta:  (warn)=>({ fontSize:'0.75em', color:warn?'#f6ad55':'#68d391', marginTop:'2px' }),
+  th:      { textAlign:'left', padding:'9px 12px', background:'var(--cream)', color:'var(--text-muted)', fontSize:'0.7em', textTransform:'uppercase', letterSpacing:'0.06em', borderBottom:'2px solid var(--border)' },
+  td:      { padding:'9px 12px', borderBottom:'1px solid var(--border-soft)', color:'var(--text-primary)', verticalAlign:'middle' },
+  kpi:     (c='var(--orange)')=>({ background:'#fff', border:'1px solid var(--border-soft)', borderTop:'3px solid '+c, borderRadius:'10px', padding:'14px 16px', boxShadow:'var(--card-shadow)' }),
+  metric:  { fontSize:'1.5em', fontWeight:700, color:'var(--text-primary)', marginTop:'4px' },
+  mLabel:  { fontSize:'0.68em', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em' },
+  mDelta:  (warn)=>({ fontSize:'0.74em', color:warn?'#DD6B20':'#38A169', marginTop:'2px' }),
 };
 
 const ESTADOS = {
@@ -188,7 +188,7 @@ export default function Contenedores() {
       {/* ── TAB 0: ACTIVOS ── */}
       {tab===0 && (
         <div>
-          <div style={{fontSize:'0.8em',color:'#5a6a80',marginBottom:'16px'}}>Todo lo que está en tránsito, en producción o en aduana.</div>
+          <div style={{fontSize:'0.8em',color:'var(--text-muted)',marginBottom:'16px'}}>Todo lo que está en tránsito, en producción o en aduana.</div>
 
           {/* KPIs */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',marginBottom:'24px'}}>
@@ -207,9 +207,9 @@ export default function Contenedores() {
             </div>
           </div>
 
-          {loading ? <div style={{textAlign:'center',padding:'40px',color:'#5a6a80'}}>Cargando...</div>
+          {loading ? <div style={{textAlign:'center',padding:'40px',color:'var(--text-muted)'}}>Cargando...</div>
           : envios.length===0 ? (
-            <div style={{...S.card,textAlign:'center',color:'#5a6a80',padding:'40px'}}>
+            <div style={{...S.card,textAlign:'center',color:'var(--text-muted)',padding:'40px'}}>
               No hay envíos activos. <span style={{color:'#c8a84b',cursor:'pointer'}} onClick={()=>setTab(1)}>Registrá uno →</span>
             </div>
           ) : envios.map(env=>{
@@ -246,8 +246,8 @@ export default function Contenedores() {
                     ['Docs', docs+'/5', null],
                     ['TLC', env.tlc?'✅ Sí':'❌ No', null],
                   ].map(([l,v,delta])=>(
-                    <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
-                      <div style={{fontSize:'0.65em',color:'#5a6a80',textTransform:'uppercase'}}>{l}</div>
+                    <div key={l} style={{background:'var(--cream)',borderRadius:'8px',padding:'8px 10px'}}>
+                      <div style={{fontSize:'0.65em',color:'var(--text-muted)',textTransform:'uppercase'}}>{l}</div>
                       <div style={{fontSize:'0.92em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
                       {delta && <div style={{fontSize:'0.68em',color:delta.color,marginTop:'2px'}}>{delta.label}</div>}
                     </div>
@@ -262,7 +262,7 @@ export default function Contenedores() {
                       <div>
                         <div style={{fontSize:'0.75em',color:'#c8a84b',fontWeight:700,textTransform:'uppercase',marginBottom:'8px'}}>🏭 General</div>
                         {[['Proveedor',env.proveedor],['Naviero',env.naviero],['BL',env.bl_num],['Incoterm',env.incoterm],['TLC',chk(env.tlc)]].map(([l,v])=>(
-                          <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'#c9d1e0'}}><span style={{color:'#5a6a80'}}>{l}:</span> {v||'—'}</div>
+                          <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'var(--text-primary)'}}><span style={{color:'var(--text-muted)'}}>{l}:</span> {v||'—'}</div>
                         ))}
                       </div>
                       {/* Pagos */}
@@ -275,8 +275,8 @@ export default function Contenedores() {
                           ['Impuestos', env.impuestos_monto, env.impuestos_pago],
                           ['Transp. local', env.transporte_local_monto, env.transporte_local_pago],
                         ].map(([l,m,p])=>(
-                          <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'#c9d1e0'}}>
-                            <span style={{color:'#5a6a80'}}>{l}:</span> {usd(m)} {chk(p)}
+                          <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'var(--text-primary)'}}>
+                            <span style={{color:'var(--text-muted)'}}>{l}:</span> {usd(m)} {chk(p)}
                           </div>
                         ))}
                       </div>
@@ -288,7 +288,7 @@ export default function Contenedores() {
                         ))}
                       </div>
                     </div>
-                    {env.notas && <div style={{marginTop:'12px',background:'#0f1115',borderRadius:'8px',padding:'10px',fontSize:'0.82em',color:'#8899aa'}}>📝 {env.notas}</div>}
+                    {env.notas && <div style={{marginTop:'12px',background:'var(--cream)',borderRadius:'8px',padding:'10px',fontSize:'0.82em',color:'#8899aa'}}>📝 {env.notas}</div>}
                     <div style={{marginTop:'10px',fontSize:'0.72em',color:'#3a4a5a'}}>Creado: {env.creado||'—'} · Actualizado: {env.actualizado||'—'}</div>
                     <button style={{...S.btnSm('#3d1515'),marginTop:'10px'}} onClick={()=>eliminar(env.id)}>🗑️ Eliminar registro</button>
                   </div>
@@ -323,7 +323,7 @@ export default function Contenedores() {
             <div><label style={S.label}>ETA (fecha llegada estimada)</label><input style={S.input} type="date" value={form.eta||''} onChange={e=>setF('eta',e.target.value)}/></div>
             <div style={{display:'flex',alignItems:'center',gap:'10px',paddingTop:'20px'}}>
               <input type="checkbox" id="tlc" checked={!!form.tlc} onChange={e=>setF('tlc',e.target.checked)} style={{accentColor:'#c8a84b',width:'16px',height:'16px'}}/>
-              <label htmlFor="tlc" style={{cursor:'pointer',fontSize:'0.87em',color:'#c9d1e0'}}>✅ Aplica TLC</label>
+              <label htmlFor="tlc" style={{cursor:'pointer',fontSize:'0.87em',color:'var(--text-primary)'}}>✅ Aplica TLC</label>
             </div>
           </div>
 
@@ -339,18 +339,18 @@ export default function Contenedores() {
               ['impuestos_monto','impuestos_pago','Impuestos de aduana (USD)','Impuestos pagados'],
               ['transporte_local_monto','transporte_local_pago','Transporte local (USD)','Transporte pagado'],
             ].map(([km,kb,lm,lb], i)=>(
-              <div key={i} style={{background:'#0f1115',borderRadius:'8px',padding:'12px'}}>
+              <div key={i} style={{background:'var(--cream)',borderRadius:'8px',padding:'12px'}}>
                 <div style={{fontSize:'0.75em',color:'#c8a84b',fontWeight:600,marginBottom:'8px'}}>{lm}</div>
                 {km ? (
                   <>
                     <input style={S.input} type="number" min="0" step="100" placeholder="0.00" value={form[km]||''} onChange={e=>setF(km,e.target.value)}/>
-                    <label style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'8px',cursor:'pointer',fontSize:'0.83em',color:'#c9d1e0'}}>
+                    <label style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'8px',cursor:'pointer',fontSize:'0.83em',color:'var(--text-primary)'}}>
                       <input type="checkbox" checked={!!form[kb]} onChange={e=>setF(kb,e.target.checked)} style={{accentColor:'#c8a84b'}}/>
                       {lb}
                     </label>
                   </>
                 ) : (
-                  <div style={{fontSize:'0.82em',color:'#5a6a80',paddingTop:'8px'}}>{lb}</div>
+                  <div style={{fontSize:'0.82em',color:'var(--text-muted)',paddingTop:'8px'}}>{lb}</div>
                 )}
               </div>
             ))}
@@ -360,7 +360,7 @@ export default function Contenedores() {
           <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>📄 Documentos</div>
           <div style={{display:'flex',gap:'20px',flexWrap:'wrap',marginBottom:'16px'}}>
             {[['doc_bl','📄 BL original'],['doc_factura','🧾 Factura comercial'],['doc_packing','📦 Packing list'],['doc_cert','📜 Cert. de origen'],['doc_poliza','🛡️ Póliza de seguro']].map(([k,l])=>(
-              <label key={k} style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'0.87em',color:'#c9d1e0'}}>
+              <label key={k} style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'0.87em',color:'var(--text-primary)'}}>
                 <input type="checkbox" checked={!!form[k]} onChange={e=>setF(k,e.target.checked)} style={{accentColor:'#c8a84b',width:'16px',height:'16px'}}/>
                 {l}
               </label>
@@ -384,9 +384,9 @@ export default function Contenedores() {
           <div style={{marginBottom:'16px'}}>
             <input style={{...S.input,maxWidth:'360px'}} placeholder="🔍 Buscar por nombre, proveedor, BL..." value={buscar} onChange={e=>setBuscar(e.target.value)}/>
           </div>
-          <div style={{fontSize:'0.82em',color:'#5a6a80',marginBottom:'14px'}}>{histFiltrado.length} contenedor(es) archivado(s)</div>
+          <div style={{fontSize:'0.82em',color:'var(--text-muted)',marginBottom:'14px'}}>{histFiltrado.length} contenedor(es) archivado(s)</div>
           {histFiltrado.length===0 ? (
-            <div style={{...S.card,textAlign:'center',color:'#5a6a80',padding:'30px'}}>Sin historial aún.</div>
+            <div style={{...S.card,textAlign:'center',color:'var(--text-muted)',padding:'30px'}}>Sin historial aún.</div>
           ) : histFiltrado.map(env=>{
             const {comprometido, pendiente, docs} = calcTotales(env);
             const color = ESTADOS[env.estado]||'#5a6a80';
@@ -404,8 +404,8 @@ export default function Contenedores() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'8px'}}>
                   {[['ETA',fmtF(env.eta)],['ETD',fmtF(env.etd)],['Comprometido',usd(comprometido)],['Pendiente',usd(pendiente)],['Docs',docs+'/5'],['TLC',env.tlc?'✅ Sí':'❌ No']].map(([l,v])=>(
-                    <div key={l} style={{background:'#0f1115',borderRadius:'8px',padding:'8px 10px'}}>
-                      <div style={{fontSize:'0.65em',color:'#5a6a80',textTransform:'uppercase'}}>{l}</div>
+                    <div key={l} style={{background:'var(--cream)',borderRadius:'8px',padding:'8px 10px'}}>
+                      <div style={{fontSize:'0.65em',color:'var(--text-muted)',textTransform:'uppercase'}}>{l}</div>
                       <div style={{fontSize:'0.9em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
                     </div>
                   ))}

@@ -4,30 +4,30 @@ import { supabase } from '../../lib/supabase';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
-  page:      { background:'#0f1115', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'#c9d1e0' },
-  title:     { fontSize:'1.7rem', fontWeight:700, color:'#fff', margin:0 },
-  caption:   { fontSize:'0.82rem', color:'#5a6a80', marginTop:'4px', marginBottom:'24px' },
-  tabs:      { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid #1e2530' },
-  tab:       { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, background:'transparent', color:'#5a6a80', marginBottom:'-1px' },
-  tabActive: { background:'#1c1f26', color:'#c8a84b', borderBottom:'2px solid #c8a84b' },
-  card:      { background:'#161920', borderRadius:'12px', padding:'20px', marginBottom:'16px', border:'1px solid #1e2530' },
-  input:     { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
-  select:    { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
-  btnPrimary:{ background:'#c8a84b', color:'#0f1115', border:'none', borderRadius:'8px', padding:'10px 24px', fontWeight:700, cursor:'pointer', fontSize:'0.95rem' },
-  btnGhost:  { background:'#1e2530', color:'#c9d1e0', border:'1px solid #2a3142', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
+  page:      { background:'var(--cream)', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'var(--text-primary)' },
+  title:     { fontSize:'1.7rem', fontWeight:700, color:'var(--text-primary)', margin:0 },
+  caption:   { fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'4px', marginBottom:'24px' },
+  tabs:      { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid var(--border-soft)' },
+  tab:       { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, background:'transparent', color:'var(--text-muted)', marginBottom:'-1px' },
+  tabActive: { background:'var(--cream)', color:'var(--orange)', borderBottom:'2px solid var(--orange)' },
+  card:      { background:'#fff', borderRadius:'12px', padding:'20px', marginBottom:'16px', border:'1px solid var(--border-soft)' },
+  input:     { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
+  select:    { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
+  btnPrimary:{ background:'var(--orange)', color:'#fff', border:'none', borderRadius:'8px', padding:'10px 24px', fontWeight:700, cursor:'pointer', fontSize:'0.95rem' },
+  btnGhost:  { background:'var(--cream)', color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
   btnDanger: { background:'#3a1a1a', color:'#f87171', border:'1px solid #5a2020', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
-  label:     { fontSize:'0.82rem', color:'#5a6a80', marginBottom:'4px', display:'block' },
-  divider:   { border:'none', borderTop:'1px solid #1e2530', margin:'20px 0' },
-  info:      { background:'#1a2535', border:'1px solid #2a3a55', borderRadius:'8px', padding:'12px 16px', color:'#7ec8e3', fontSize:'0.88rem', marginBottom:'12px' },
-  success:   { background:'#1a3525', border:'1px solid #2a5535', borderRadius:'8px', padding:'10px 14px', color:'#4ade80', fontSize:'0.88rem', marginBottom:'12px' },
-  warning:   { background:'#352a10', border:'1px solid #554020', borderRadius:'8px', padding:'10px 14px', color:'#fbbf24', fontSize:'0.88rem', marginBottom:'12px' },
+  label:     { fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'4px', display:'block' },
+  divider:   { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
+  info:      { background:'#EBF8FF', border:'1px solid #BEE3F8', borderRadius:'8px', padding:'12px 16px', color:'#2C5282', fontSize:'0.88rem', marginBottom:'12px' },
+  success:   { background:'#F0FFF4', border:'1px solid #9AE6B4', borderRadius:'8px', padding:'10px 14px', color:'#276749', fontSize:'0.88rem', marginBottom:'12px' },
+  warning:   { background:'#352a10', border:'1px solid #FAD776', borderRadius:'8px', padding:'10px 14px', color:'#7B341E', fontSize:'0.88rem', marginBottom:'12px' },
   error:     { background:'#351a1a', border:'1px solid #552020', borderRadius:'8px', padding:'10px 14px', color:'#f87171', fontSize:'0.88rem', marginBottom:'12px' },
   table:     { width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' },
-  th:        { background:'#1c1f26', color:'#8899aa', padding:'8px 10px', textAlign:'left', borderBottom:'1px solid #1e2530', fontWeight:600, whiteSpace:'nowrap' },
-  td:        { padding:'7px 10px', borderBottom:'1px solid #1a1e26', color:'#c9d1e0' },
-  metric:    { background:'#161920', borderRadius:'10px', padding:'14px 18px', border:'1px solid #1e2530', textAlign:'center' },
-  metricVal: { fontSize:'1.3rem', fontWeight:700, color:'#c8a84b' },
-  metricLbl: { fontSize:'0.78rem', color:'#5a6a80', marginTop:'4px' },
+  th:        { background:'var(--cream)', color:'var(--text-muted)', padding:'8px 10px', textAlign:'left', borderBottom:'1px solid var(--border-soft)', fontWeight:600, whiteSpace:'nowrap' },
+  td:        { padding:'7px 10px', borderBottom:'1px solid #1a1e26', color:'var(--text-primary)' },
+  metric:    { background:'#fff', borderRadius:'10px', padding:'14px 18px', border:'1px solid var(--border-soft)', textAlign:'center' },
+  metricVal: { fontSize:'1.3rem', fontWeight:700, color:'var(--orange)' },
+  metricLbl: { fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'4px' },
   grid3:     { display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'16px', marginBottom:'16px' },
   grid4:     { display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'12px', marginBottom:'16px' },
   grid2:     { display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'16px', marginBottom:'16px' },
@@ -121,8 +121,8 @@ function Medidor({ filas, volMax, pesoMax }) {
   const BarraProgreso = ({ usado, max, label, unidad }) => {
     if (!max || max <= 0) return (
       <div style={{ marginBottom:'12px' }}>
-        <div style={{ fontWeight:600, color:'#c9d1e0', marginBottom:'6px' }}>{label}</div>
-        <div style={{ color:'#5a6a80', fontSize:'0.85rem' }}>{usado.toFixed(2)} {unidad} (sin límite)</div>
+        <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:'6px' }}>{label}</div>
+        <div style={{ color:'var(--text-muted)', fontSize:'0.85rem' }}>{usado.toFixed(2)} {unidad} (sin límite)</div>
       </div>
     );
     const pct = Math.min(usado/max, 1.0);
@@ -130,13 +130,13 @@ function Medidor({ filas, volMax, pesoMax }) {
     const emoji = pct < 0.85 ? '🟢' : pct < 1.0 ? '🟡' : '🔴';
     return (
       <div style={{ marginBottom:'16px' }}>
-        <div style={{ fontWeight:600, color:'#c9d1e0', marginBottom:'6px' }}>{emoji} {label}</div>
-        <div style={{ background:'#1e2530', borderRadius:'8px', height:'12px', overflow:'hidden', marginBottom:'6px' }}>
+        <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:'6px' }}>{emoji} {label}</div>
+        <div style={{ background:'var(--cream)', borderRadius:'8px', height:'12px', overflow:'hidden', marginBottom:'6px' }}>
           <div style={{ width:`${pct*100}%`, height:'100%', background:color, borderRadius:'8px', transition:'width .3s' }}/>
         </div>
-        <div style={{ fontSize:'0.8rem', color:'#8899aa' }}>
-          {usado.toFixed(2)} {unidad} de {max} {unidad} → <strong style={{ color:'#c9d1e0' }}>{(pct*100).toFixed(1)}%</strong>
-          &nbsp;· Disponible: <strong style={{ color:'#c9d1e0' }}>{Math.max(max-usado,0).toFixed(2)} {unidad}</strong>
+        <div style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>
+          {usado.toFixed(2)} {unidad} de {max} {unidad} → <strong style={{ color:'var(--text-primary)' }}>{(pct*100).toFixed(1)}%</strong>
+          &nbsp;· Disponible: <strong style={{ color:'var(--text-primary)' }}>{Math.max(max-usado,0).toFixed(2)} {unidad}</strong>
         </div>
         {pct >= 1.0 && <div style={S.error}>🔴 ¡Excedés el límite del contenedor!</div>}
         {pct >= 0.85 && pct < 1.0 && <div style={S.warning}>🟡 Estás casi en el límite.</div>}
@@ -153,7 +153,7 @@ function Medidor({ filas, volMax, pesoMax }) {
 
   return (
     <div style={S.card}>
-      <h4 style={{ color:'#c8a84b', marginTop:0 }}>🌡️ ¿Qué tan llena está el Arca?</h4>
+      <h4 style={{ color:'var(--orange)', marginTop:0 }}>🌡️ ¿Qué tan llena está el Arca?</h4>
       <div style={S.grid2}>
         <BarraProgreso usado={volUsado}  max={volMax}  label="Volumen del contenedor" unidad="m³"/>
         <BarraProgreso usado={pesoUsado} max={pesoMax} label="Peso de la carga"       unidad="t"/>
@@ -306,7 +306,7 @@ function TabCalculadora() {
     <div>
       {/* Parámetros generales */}
       <div style={S.card}>
-        <h4 style={{ color:'#c8a84b', marginTop:0 }}>⚙️ Las Condiciones de la Travesía</h4>
+        <h4 style={{ color:'var(--orange)', marginTop:0 }}>⚙️ Las Condiciones de la Travesía</h4>
         <div style={S.grid3}>
           <div>
             <label style={S.label}>Nombre de la importación</label>
@@ -321,7 +321,7 @@ function TabCalculadora() {
               <select style={S.select} value={metodoClave2} onChange={e=>setMetodoClave2(e.target.value)}>
                 {Object.keys(METODOS).map(m=><option key={m}>{m}</option>)}
               </select>
-              <div style={{ fontSize:'0.78rem', color:'#5a6a80', marginTop:'6px' }}>{AYUDAS[metodo]}</div>
+              <div style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginTop:'6px' }}>{AYUDAS[metodo]}</div>
             </div>
           </div>
           <div>
@@ -353,7 +353,7 @@ function TabCalculadora() {
 
       {/* Tipo de contenedor */}
       <div style={S.card}>
-        <h4 style={{ color:'#c8a84b', marginTop:0 }}>🚢 El Arca — Capacidad del Contenedor</h4>
+        <h4 style={{ color:'var(--orange)', marginTop:0 }}>🚢 El Arca — Capacidad del Contenedor</h4>
         <div style={S.grid3}>
           <div>
             <label style={S.label}>Tipo de contenedor</label>
@@ -379,7 +379,7 @@ function TabCalculadora() {
 
       {/* Tabla de productos */}
       <div style={S.card}>
-        <h4 style={{ color:'#c8a84b', marginTop:0 }}>📦 Resumen del Contenedor</h4>
+        <h4 style={{ color:'var(--orange)', marginTop:0 }}>📦 Resumen del Contenedor</h4>
         <div style={{ overflowX:'auto' }}>
           <table style={S.table}>
             <thead>
@@ -416,9 +416,9 @@ function TabCalculadora() {
       {resultado && (
         <div>
           <hr style={S.divider}/>
-          <h3 style={{ color:'#fff' }}>📊 La Revelación — Costos Aterrizados</h3>
-          <div style={{ fontSize:'0.83rem', color:'#5a6a80', marginBottom:'16px' }}>
-            Método: <strong style={{ color:'#c9d1e0' }}>{metodoClave2}</strong> · Contenedor: <strong style={{ color:'#c9d1e0' }}>{tipoCont}</strong>
+          <h3 style={{ color:'var(--text-primary)' }}>📊 La Revelación — Costos Aterrizados</h3>
+          <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginBottom:'16px' }}>
+            Método: <strong style={{ color:'var(--text-primary)' }}>{metodoClave2}</strong> · Contenedor: <strong style={{ color:'var(--text-primary)' }}>{tipoCont}</strong>
           </div>
 
           <div style={S.grid4}>
@@ -435,7 +435,7 @@ function TabCalculadora() {
             ))}
           </div>
 
-          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid #1e2530', marginBottom:'16px' }}>
+          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'16px' }}>
             <table style={S.table}>
               <thead>
                 <tr>
@@ -453,9 +453,9 @@ function TabCalculadora() {
                     <td style={S.td}>${parseFloat(r.FOB_unitario).toFixed(2)}</td>
                     <td style={S.td}>${r.FOB_total.toFixed(2)}</td>
                     <td style={S.td}>{r.margen_pct}%</td>
-                    <td style={S.td} style={{ ...S.td, color:'#c8a84b', fontWeight:600 }}>${r.costo_CIF_unitario_USD.toFixed(4)}</td>
+                    <td style={S.td} style={{ ...S.td, color:'var(--orange)', fontWeight:600 }}>${r.costo_CIF_unitario_USD.toFixed(4)}</td>
                     <td style={S.td}>₡{r.costo_CIF_unitario_CRC.toFixed(2)}</td>
-                    <td style={S.td} style={{ ...S.td, color:'#4ade80' }}>${r.precio_venta_USD.toFixed(4)}</td>
+                    <td style={S.td} style={{ ...S.td, color:'#276749' }}>${r.precio_venta_USD.toFixed(4)}</td>
                     <td style={S.td}>₡{r.precio_venta_CRC.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -465,7 +465,7 @@ function TabCalculadora() {
 
           {/* Desglose */}
           <details style={{ ...S.card, marginBottom:'16px' }}>
-            <summary style={{ cursor:'pointer', color:'#c8a84b', fontWeight:600 }}>🔍 El Desglose de las Plagas — Todos los Costos</summary>
+            <summary style={{ cursor:'pointer', color:'var(--orange)', fontWeight:600 }}>🔍 El Desglose de las Plagas — Todos los Costos</summary>
             <table style={{ ...S.table, marginTop:'12px' }}>
               <thead><tr><th style={S.th}>Concepto</th><th style={S.th}>USD</th><th style={S.th}>₡ colones</th></tr></thead>
               <tbody>
@@ -480,10 +480,10 @@ function TabCalculadora() {
                 ].map(([c,v])=>(
                   <tr key={c}><td style={S.td}>{c}</td><td style={S.td}>${v.toFixed(2)}</td><td style={S.td}>₡{(v*tipoCambio).toFixed(0)}</td></tr>
                 ))}
-                <tr style={{ background:'#1c1f26', fontWeight:700 }}>
+                <tr style={{ background:'var(--cream)', fontWeight:700 }}>
                   <td style={S.td}>TOTAL ATERRIZADO</td>
-                  <td style={{ ...S.td, color:'#c8a84b' }}>${costoTotal.toFixed(2)}</td>
-                  <td style={{ ...S.td, color:'#c8a84b' }}>₡{(costoTotal*tipoCambio).toFixed(0)}</td>
+                  <td style={{ ...S.td, color:'var(--orange)' }}>${costoTotal.toFixed(2)}</td>
+                  <td style={{ ...S.td, color:'var(--orange)' }}>₡{(costoTotal*tipoCambio).toFixed(0)}</td>
                 </tr>
               </tbody>
             </table>
@@ -520,20 +520,20 @@ function TabHistorial() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>📁 Historial</h3>
-      {loading ? <div style={{ color:'#5a6a80' }}>Cargando...</div>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>📁 Historial</h3>
+      {loading ? <div style={{ color:'var(--text-muted)' }}>Cargando...</div>
       : hist.length===0
         ? <div style={S.info}>📜 Sin historial. Aún no se ha registrado ninguna importación.</div>
         : <>
-          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid #1e2530', marginBottom:'20px' }}>
+          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'20px' }}>
             <table style={S.table}>
               <thead>
                 <tr>{['Nombre','Fecha','Contenedor','Método','Vol m³','Peso t','Productos','FOB Total $','Costo $','Costo ₡'].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {hist.map((h,i)=>(
-                  <tr key={i} style={{ background:i%2===0?'#0f1115':'#161920' }}>
-                    <td style={{ ...S.td, color:'#c8a84b', fontWeight:600 }}>{h.nombre}</td>
+                  <tr key={i} style={{ background:i%2===0?'#ffffff':'#fdf8f8' }}>
+                    <td style={{ ...S.td, color:'var(--orange)', fontWeight:600 }}>{h.nombre}</td>
                     <td style={S.td}>{h.fecha}</td>
                     <td style={S.td}>{h.contenedor||'—'}</td>
                     <td style={S.td}>{h.metodo||'—'}</td>
@@ -559,7 +559,7 @@ function TabHistorial() {
 
           {selReg && selReg.productos && (
             <div style={S.card}>
-              <div style={{ marginBottom:'12px', color:'#c9d1e0' }}>
+              <div style={{ marginBottom:'12px', color:'var(--text-primary)' }}>
                 <strong>{selReg.nombre}</strong> · {selReg.fecha} · {selReg.metodo} · {selReg.contenedor}
               </div>
               <div style={{ overflowX:'auto' }}>
@@ -569,7 +569,7 @@ function TabHistorial() {
                   </thead>
                   <tbody>
                     {selReg.productos.map((p,i)=>(
-                      <tr key={i} style={{ background:i%2===0?'#0f1115':'#161920' }}>
+                      <tr key={i} style={{ background:i%2===0?'#ffffff':'#fdf8f8' }}>
                         <td style={S.td}>{p.descripcion||'—'}</td>
                         <td style={S.td}>{p.codigo||'—'}</td>
                         <td style={S.td}>{p.cantidad}</td>
@@ -577,9 +577,9 @@ function TabHistorial() {
                         <td style={S.td}>{p.volumen_m3}</td>
                         <td style={S.td}>${p.FOB_unitario}</td>
                         <td style={S.td}>{p.margen_pct}%</td>
-                        <td style={{ ...S.td, color:'#c8a84b' }}>${parseFloat(p.costo_CIF_unitario_USD||0).toFixed(4)}</td>
+                        <td style={{ ...S.td, color:'var(--orange)' }}>${parseFloat(p.costo_CIF_unitario_USD||0).toFixed(4)}</td>
                         <td style={S.td}>₡{parseFloat(p.costo_CIF_unitario_CRC||0).toFixed(2)}</td>
-                        <td style={{ ...S.td, color:'#4ade80' }}>${parseFloat(p.precio_venta_USD||0).toFixed(4)}</td>
+                        <td style={{ ...S.td, color:'#276749' }}>${parseFloat(p.precio_venta_USD||0).toFixed(4)}</td>
                         <td style={S.td}>₡{parseFloat(p.precio_venta_CRC||0).toFixed(2)}</td>
                       </tr>
                     ))}
@@ -605,7 +605,7 @@ export default function HalleyCIF() {
       <h1 style={S.title}>💫 Halley – Calculadora CIF</h1>
       <div style={S.caption}>
         💫 Módulo de cálculo · Última sesión: {fecha}<br/>
-        <span style={{ color:'#3a4a5a' }}>Porque de Egipto a Costa Rica, todo tiene un costo. · Génesis Suite</span>
+        <span style={{ color:'var(--text-muted)' }}>Porque de Egipto a Costa Rica, todo tiene un costo. · Génesis Suite</span>
       </div>
 
       <div style={S.tabs}>

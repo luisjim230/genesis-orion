@@ -2,17 +2,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 
-const GOLD   = '#c8a84b'
-const BG     = '#0f1115'
-const SURF   = '#161920'
-const BORDER = '#1e2330'
-const TEXT   = '#c9d1e0'
-const MUTED  = '#5a6a80'
+const GOLD   = 'var(--orange)'
+const BG     = 'var(--cream)'
+const SURF   = '#ffffff'
+const BORDER = 'var(--border-soft)'
+const TEXT   = 'var(--text-primary)'
+const MUTED  = 'var(--text-muted)'
 
 const S = {
   badge: (c) => ({ background: c+'22', color: c, border: `1px solid ${c}55`, borderRadius: 20, padding: '3px 10px', fontSize: '0.72em', fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-block' }),
-  th: { textAlign: 'left', padding: '9px 12px', background: BG, color: MUTED, fontSize: '0.72em', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `2px solid ${BORDER}`, whiteSpace: 'nowrap' },
-  td: { padding: '9px 12px', borderBottom: `1px solid ${BORDER}`, color: TEXT, verticalAlign: 'middle', fontSize: '0.84em' },
+  th: { textAlign: 'left', padding: '9px 12px', background: 'var(--cream)', color: 'var(--text-muted)', fontSize: '0.7em', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap' },
+  td: { padding: '9px 12px', borderBottom: '1px solid var(--border-soft)', color: 'var(--text-primary)', verticalAlign: 'middle', fontSize: '0.84em' },
   card: { background: SURF, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '18px 20px', marginBottom: 16 },
   input: { background: BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 12px', color: TEXT, fontSize: '0.85em', fontFamily: 'DM Sans,sans-serif', outline: 'none' },
   btn: (c = GOLD) => ({ background: c, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontSize: '0.83em', fontWeight: 600, fontFamily: 'DM Sans,sans-serif' }),

@@ -5,30 +5,30 @@ import * as XLSX from 'xlsx';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
-  page:     { background:'#0f1115', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'#c9d1e0' },
-  title:    { fontSize:'1.7rem', fontWeight:700, color:'#fff', margin:0 },
-  caption:  { fontSize:'0.82rem', color:'#5a6a80', marginTop:'4px', marginBottom:'24px' },
+  page:     { background:'var(--cream)', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans, sans-serif', color:'var(--text-primary)' },
+  title:    { fontSize:'1.7rem', fontWeight:700, color:'var(--text-primary)', margin:0 },
+  caption:  { fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'4px', marginBottom:'24px' },
   kicker:   { color:'#63b3ed', fontSize:'0.82rem', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:'6px' },
-  tabs:     { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid #1e2530', paddingBottom:'0' },
-  tab:      { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, background:'transparent', color:'#5a6a80', marginBottom:'-1px' },
-  tabActive:{ background:'#1c1f26', color:'#c8a84b', borderBottom:'2px solid #c8a84b' },
-  card:     { background:'#161920', borderRadius:'12px', padding:'16px 20px', marginBottom:'12px', border:'1px solid #1e2530' },
-  cardDash: { background:'#161920', borderRadius:'12px', padding:'16px', marginBottom:'12px', border:'1px solid #1e2530' },
-  cardEmpty:{ background:'#161920', borderRadius:'12px', padding:'16px', marginBottom:'12px', border:'1px dashed #1e2330' },
-  input:    { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
-  select:   { background:'#0f1115', border:'1px solid #2a3142', borderRadius:'8px', color:'#c9d1e0', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
-  btnPrimary:{ background:'#c8a84b', color:'#0f1115', border:'none', borderRadius:'8px', padding:'9px 20px', fontWeight:700, cursor:'pointer', fontSize:'0.9rem' },
-  btnGhost: { background:'#1e2530', color:'#c9d1e0', border:'1px solid #2a3142', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
-  label:    { fontSize:'0.82rem', color:'#5a6a80', marginBottom:'4px', display:'block' },
-  divider:  { border:'none', borderTop:'1px solid #1e2530', margin:'20px 0' },
-  info:     { background:'#1a2535', border:'1px solid #2a3a55', borderRadius:'8px', padding:'12px 16px', color:'#7ec8e3', fontSize:'0.88rem' },
-  success:  { background:'#1a3525', border:'1px solid #2a5535', borderRadius:'8px', padding:'10px 14px', color:'#4ade80', fontSize:'0.88rem' },
-  warning:  { background:'#352a10', border:'1px solid #554020', borderRadius:'8px', padding:'10px 14px', color:'#fbbf24', fontSize:'0.88rem' },
+  tabs:     { display:'flex', gap:'8px', marginBottom:'24px', borderBottom:'1px solid var(--border-soft)', paddingBottom:'0' },
+  tab:      { padding:'8px 18px', borderRadius:'8px 8px 0 0', border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight:500, background:'transparent', color:'var(--text-muted)', marginBottom:'-1px' },
+  tabActive:{ background:'var(--cream)', color:'var(--orange)', borderBottom:'2px solid var(--orange)' },
+  card:     { background:'#fff', borderRadius:'12px', padding:'16px 20px', marginBottom:'12px', border:'1px solid var(--border-soft)' },
+  cardDash: { background:'#fff', borderRadius:'12px', padding:'16px', marginBottom:'12px', border:'1px solid var(--border-soft)' },
+  cardEmpty:{ background:'#fff', borderRadius:'12px', padding:'16px', marginBottom:'12px', border:'1px dashed var(--border)' },
+  input:    { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none', boxSizing:'border-box' },
+  select:   { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', width:'100%', outline:'none' },
+  btnPrimary:{ background:'var(--orange)', color:'#fff', border:'none', borderRadius:'8px', padding:'9px 20px', fontWeight:700, cursor:'pointer', fontSize:'0.9rem' },
+  btnGhost: { background:'var(--cream)', color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
+  label:    { fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'4px', display:'block' },
+  divider:  { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
+  info:     { background:'#EBF8FF', border:'1px solid #BEE3F8', borderRadius:'8px', padding:'12px 16px', color:'#2C5282', fontSize:'0.88rem' },
+  success:  { background:'#F0FFF4', border:'1px solid #9AE6B4', borderRadius:'8px', padding:'10px 14px', color:'#276749', fontSize:'0.88rem' },
+  warning:  { background:'#352a10', border:'1px solid #FAD776', borderRadius:'8px', padding:'10px 14px', color:'#7B341E', fontSize:'0.88rem' },
   error:    { background:'#351a1a', border:'1px solid #552020', borderRadius:'8px', padding:'10px 14px', color:'#f87171', fontSize:'0.88rem' },
-  dropzone: { background:'#161920', border:'1px dashed #1e2330', borderRadius:'14px', padding:'2.5rem', textAlign:'center', marginTop:'1rem' },
+  dropzone: { background:'#fff', border:'1px dashed var(--border)', borderRadius:'14px', padding:'2.5rem', textAlign:'center', marginTop:'1rem' },
   table:    { width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' },
-  th:       { background:'#1c1f26', color:'#8899aa', padding:'8px 12px', textAlign:'left', borderBottom:'1px solid #1e2530', fontWeight:600, whiteSpace:'nowrap' },
-  td:       { padding:'7px 12px', borderBottom:'1px solid #1a1e26', color:'#c9d1e0', whiteSpace:'nowrap', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis' },
+  th:       { background:'var(--cream)', color:'var(--text-muted)', padding:'8px 12px', textAlign:'left', borderBottom:'1px solid var(--border-soft)', fontWeight:600, whiteSpace:'nowrap' },
+  td:       { padding:'7px 12px', borderBottom:'1px solid #1a1e26', color:'var(--text-primary)', whiteSpace:'nowrap', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis' },
 };
 
 // ── Configuración de reportes ──────────────────────────────────────────────
@@ -264,12 +264,12 @@ function TabSubir() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>Subir reportes de NEO</h3>
-      <p style={{ color:'#5a6a80', marginBottom:'20px' }}>Podés subir varios archivos a la vez. Génesis detecta automáticamente qué tipo de reporte es cada uno.</p>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>Subir reportes de NEO</h3>
+      <p style={{ color:'var(--text-muted)', marginBottom:'20px' }}>Podés subir varios archivos a la vez. Génesis detecta automáticamente qué tipo de reporte es cada uno.</p>
 
       {/* Info tabla */}
       <details style={{ ...S.card, marginBottom:'16px' }}>
-        <summary style={{ cursor:'pointer', color:'#c8a84b', fontWeight:600, fontSize:'0.9rem' }}>📋 ¿Qué reportes necesito subir?</summary>
+        <summary style={{ cursor:'pointer', color:'var(--orange)', fontWeight:600, fontSize:'0.9rem' }}>📋 ¿Qué reportes necesito subir?</summary>
         <div style={{ marginTop:'12px', overflowX:'auto' }}>
           <table style={S.table}>
             <thead>
@@ -307,7 +307,7 @@ function TabSubir() {
         onDrop={onDrop}
       >
         <div style={{ fontSize:'2.5rem', marginBottom:'12px' }}>📂</div>
-        <p style={{ color:'#5a6a80', margin:0, fontSize:'0.95rem' }}>
+        <p style={{ color:'var(--text-muted)', margin:0, fontSize:'0.95rem' }}>
           {procesando ? '⏳ Procesando archivos...' : 'Arrastrá tus archivos Excel de NEO acá'}
         </p>
         <p style={{ color:'#2a3a50', margin:'6px 0 16px', fontSize:'0.82rem' }}>Ítems más vendidos · Mínimos y máximos · Ítems comprados · Lista de ítems · Rentabilidad · Antigüedad de saldos</p>
@@ -322,7 +322,7 @@ function TabSubir() {
         <div style={{ marginTop:'20px' }}>
           <hr style={S.divider}/>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-            <h4 style={{ color:'#fff', margin:0 }}>Resultados</h4>
+            <h4 style={{ color:'var(--text-primary)', margin:0 }}>Resultados</h4>
             <button style={S.btnGhost} onClick={()=>setResultados([])}>Limpiar</button>
           </div>
           {resultados.map((r,i)=>(
@@ -332,18 +332,18 @@ function TabSubir() {
             }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                 <div>
-                  <div style={{ fontWeight:600, color:'#fff', marginBottom:'4px' }}>📄 {r.nombre}</div>
+                  <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:'4px' }}>📄 {r.nombre}</div>
                   {r.estado==='ok' && (
                     <>
-                      <div style={{ fontSize:'0.83rem', color:'#4ade80' }}>✅ Guardado correctamente</div>
-                      <div style={{ fontSize:'0.8rem', color:'#5a6a80', marginTop:'4px' }}>
-                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · {r.periodo} · <strong style={{ color:'#c9d1e0' }}>{r.filas.toLocaleString()}</strong> filas
+                      <div style={{ fontSize:'0.83rem', color:'#276749' }}>✅ Guardado correctamente</div>
+                      <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>
+                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · {r.periodo} · <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> filas
                       </div>
                     </>
                   )}
-                  {r.estado==='no_reconocido' && <div style={{ fontSize:'0.83rem', color:'#fbbf24' }}>⚠️ No reconocido — {r.error}</div>}
+                  {r.estado==='no_reconocido' && <div style={{ fontSize:'0.83rem', color:'#7B341E' }}>⚠️ No reconocido — {r.error}</div>}
                   {r.estado==='error' && <div style={{ fontSize:'0.83rem', color:'#f87171' }}>❌ Error: {r.error}</div>}
-                  {r.estado==='procesando' && <div style={{ fontSize:'0.83rem', color:'#c8a84b' }}>⏳ Procesando...</div>}
+                  {r.estado==='procesando' && <div style={{ fontSize:'0.83rem', color:'var(--orange)' }}>⏳ Procesando...</div>}
                 </div>
               </div>
             </div>
@@ -435,32 +435,32 @@ function TabVerDatos() {
 
   return (
     <div>
-      <h3 style={{ color:'#fff', marginTop:0 }}>Estado de los reportes</h3>
+      <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>Estado de los reportes</h3>
 
       {/* Cards de estado */}
       {!resumenCargado
-        ? <div style={{ color:'#5a6a80', marginBottom:'20px' }}>Cargando estado...</div>
+        ? <div style={{ color:'var(--text-muted)', marginBottom:'20px' }}>Cargando estado...</div>
         : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'12px', marginBottom:'24px' }}>
             {Object.entries(REPORTES).map(([tabla, cfg]) => {
               const info = resumen[tabla];
               return info
                 ? <div key={tabla} style={S.cardDash}>
                     <div style={{ fontSize:'1.4rem' }}>{cfg.emoji}</div>
-                    <div style={{ color:'#fff', fontWeight:600, fontSize:'0.88rem', margin:'4px 0 2px' }}>{cfg.nombre}</div>
+                    <div style={{ color:'var(--text-primary)', fontWeight:600, fontSize:'0.88rem', margin:'4px 0 2px' }}>{cfg.nombre}</div>
                     <div style={{ color:'#63b3ed', fontSize:'0.75rem' }}>✅ {utcACR(info.fecha_carga)}</div>
-                    <div style={{ color:'#5a6a80', fontSize:'0.72rem' }}>{info.periodo_reporte||'—'}</div>
+                    <div style={{ color:'var(--text-muted)', fontSize:'0.72rem' }}>{info.periodo_reporte||'—'}</div>
                   </div>
                 : <div key={tabla} style={S.cardEmpty}>
                     <div style={{ fontSize:'1.4rem' }}>{cfg.emoji}</div>
-                    <div style={{ color:'#fff', fontWeight:600, fontSize:'0.88rem', margin:'4px 0 2px' }}>{cfg.nombre}</div>
-                    <div style={{ color:'#5a6a80', fontSize:'0.75rem' }}>Sin datos aún</div>
+                    <div style={{ color:'var(--text-primary)', fontWeight:600, fontSize:'0.88rem', margin:'4px 0 2px' }}>{cfg.nombre}</div>
+                    <div style={{ color:'var(--text-muted)', fontSize:'0.75rem' }}>Sin datos aún</div>
                   </div>;
             })}
           </div>
       }
 
       <hr style={S.divider}/>
-      <h4 style={{ color:'#fff', marginBottom:'16px' }}>Explorar historial</h4>
+      <h4 style={{ color:'var(--text-primary)', marginBottom:'16px' }}>Explorar historial</h4>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'16px' }}>
         <div>
@@ -489,14 +489,14 @@ function TabVerDatos() {
       {!cargando && datos.length > 0 && (
         <>
           <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'12px', flexWrap:'wrap' }}>
-            <span style={{ color:'#5a6a80', fontSize:'0.85rem' }}>
-              <strong style={{ color:'#c9d1e0' }}>{datosFiltrados.length.toLocaleString()}</strong> / {datos.length.toLocaleString()} filas
+            <span style={{ color:'var(--text-muted)', fontSize:'0.85rem' }}>
+              <strong style={{ color:'var(--text-primary)' }}>{datosFiltrados.length.toLocaleString()}</strong> / {datos.length.toLocaleString()} filas
             </span>
             <input style={{ ...S.input, maxWidth:'280px' }} placeholder="🔍 Buscar en datos..." value={buscar} onChange={e=>setBuscar(e.target.value)}/>
             <button style={S.btnGhost} onClick={descargarCSV}>⬇️ Descargar CSV</button>
           </div>
 
-          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid #1e2530' }}>
+          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)' }}>
             <table style={S.table}>
               <thead>
                 <tr>{columnas.slice(0,12).map(c=><th key={c} style={S.th}>{c}</th>)}</tr>
@@ -510,7 +510,7 @@ function TabVerDatos() {
               </tbody>
             </table>
             {datosFiltrados.length > 200 && (
-              <div style={{ padding:'10px 16px', color:'#5a6a80', fontSize:'0.82rem', borderTop:'1px solid #1e2530' }}>
+              <div style={{ padding:'10px 16px', color:'var(--text-muted)', fontSize:'0.82rem', borderTop:'1px solid var(--border-soft)' }}>
                 Mostrando 200 de {datosFiltrados.length.toLocaleString()} filas · Descargá CSV para ver todo
               </div>
             )}
