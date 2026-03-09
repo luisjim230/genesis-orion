@@ -61,16 +61,8 @@ function NavItem({ href, icon, name, sub, collapsed }) {
         background: isActive ? 'rgba(237,110,46,0.12)' : 'transparent',
         transition: 'all 0.12s ease',
       }}
-        onMouseEnter={e => {
-          if (!isActive) {
-            e.currentTarget.style.background = 'rgba(253,244,244,0.06)';
-          }
-        }}
-        onMouseLeave={e => {
-          if (!isActive) {
-            e.currentTarget.style.background = 'transparent';
-          }
-        }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(253,244,244,0.06)'; }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
       >
         <span style={{ fontSize: '1rem', flexShrink: 0, width: 20, textAlign: 'center' }}>{icon}</span>
         {!collapsed && (
@@ -116,29 +108,34 @@ export default function Sidebar() {
 
       {/* Logo */}
       <div style={{
-        padding: collapsed ? '20px 16px' : '22px 20px',
+        padding: collapsed ? '16px 12px' : '20px 20px',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         display: 'flex',
+        flexDirection: collapsed ? 'row' : 'column',
         alignItems: 'center',
-        gap: 10,
+        gap: collapsed ? 0 : 10,
         flexShrink: 0,
       }}>
-        {/* Brick SVG logo */}
-        <svg width="30" height="26" viewBox="0 0 30 26" style={{ flexShrink: 0 }}>
-          <rect x="0"  y="0"  width="13" height="6" rx="1" fill="#ED6E2E"/>
-          <rect x="15" y="0"  width="15" height="6" rx="1" fill="rgba(253,244,244,0.85)"/>
-          <rect x="0"  y="8"  width="19" height="6" rx="1" fill="#ED6E2E"/>
-          <rect x="21" y="8"  width="9"  height="6" rx="1" fill="rgba(253,244,244,0.85)"/>
-          <rect x="0"  y="16" width="9"  height="6" rx="1" fill="rgba(253,244,244,0.85)"/>
-          <rect x="11" y="16" width="19" height="6" rx="1" fill="#ED6E2E"/>
+        {/* Brick SVG — igual que imagen 2: 3 filas, ladrillo blanco pequeño arriba izquierda */}
+        <svg width={collapsed ? 32 : 44} height={collapsed ? 28 : 38} viewBox="0 0 44 38" style={{ flexShrink: 0 }}>
+          {/* Fila 1 */}
+          <rect x="0"  y="0"  width="12" height="10" rx="2" fill="rgba(253,244,244,0.90)"/>
+          <rect x="15" y="0"  width="29" height="10" rx="2" fill="#ED6E2E"/>
+          {/* Fila 2 */}
+          <rect x="0"  y="14" width="27" height="10" rx="2" fill="rgba(253,244,244,0.90)"/>
+          <rect x="30" y="14" width="14" height="10" rx="2" fill="#ED6E2E"/>
+          {/* Fila 3 */}
+          <rect x="0"  y="28" width="13" height="10" rx="2" fill="#ED6E2E"/>
+          <rect x="16" y="28" width="28" height="10" rx="2" fill="#ED6E2E"/>
         </svg>
+
         {!collapsed && (
-          <div style={{ lineHeight: 1 }}>
+          <div style={{ lineHeight: 1, textAlign: 'center' }}>
             <div style={{
               fontFamily: "'Bungee', cursive",
-              color: 'rgba(253,244,244,0.60)',
+              color: 'rgba(253,244,244,0.55)',
               fontSize: 9,
-              letterSpacing: '0.18em',
+              letterSpacing: '0.22em',
               textTransform: 'uppercase',
               marginBottom: 3,
             }}>DEPÓSITO</div>
@@ -148,7 +145,7 @@ export default function Sidebar() {
               fontSize: 18,
               letterSpacing: '0.04em',
               lineHeight: 1.1,
-            }}>JIMÉNEZ 👷🏼</div>
+            }}>JIMÉNEZ</div>
           </div>
         )}
       </div>
