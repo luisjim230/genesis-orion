@@ -95,8 +95,9 @@ const REPORTES = {
     descripcion:'Detalle de cada ítem vendido: vendedor, costo, utilidad, cliente.',
     header_row:1, titulo_valor:'Lista de ítems facturados',
     fecha_col:'fecha',
-    columnas:['factura','orden_compra','fecha','usuario_pedido','vendedor','codigo','identificacion','cliente','sucursal','tipo_item','codigo_interno','item','descripcion','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','moneda','costo_unitario','moneda1','subtotal','moneda2','descuento','moneda3','pct_descuento','impuesto','pct_impuesto','impuestos','moneda4','otros_cargos','utilidad_costo','total','moneda5','codigo_cupon','observaciones','observaciones_factura','tipo_cambio','telefono','correo','marca','color','chasis','motor','territorio','peso_unidad'],
-    columnas_originales:['Factura','Orden de compra','Fecha','Usuario que registró el pedido','Vendedor','Código','Identificación','Cliente','Sucursal','Tipo de ítem','Código interno','Ítem','Descripción del ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Moneda','Costo unitario sin impuesto','Moneda1','Subtotal','Moneda2','Descuento','Moneda3','% Descuento','Impuesto','% Impuesto','Impuestos','Moneda4','Otros cargos','Utilidad/costo','Total','Moneda5','Código del cupón','Observaciones','Observaciones de la factura','Tipo de cambio de venta','Teléfono','Correo electrónico','Marca','Color','Chasis','Motor','Territorio','Peso por unidad'],
+    // Solo columnas necesarias para el módulo Equipo de Ventas (reduce payload ~50%)
+    columnas:['factura','fecha','vendedor','cliente','codigo_interno','item','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','costo_unitario','subtotal','descuento','pct_descuento','impuesto','impuestos','utilidad_costo','total','tipo_cambio','territorio'],
+    columnas_originales:['Factura','Fecha','Vendedor','Cliente','Código interno','Ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Costo unitario sin impuesto','Subtotal','Descuento','% Descuento','Impuesto','Impuestos','Utilidad/costo','Total','Tipo de cambio de venta','Territorio'],
     modulos_destino:['vendedores'],
   },
   neo_consolidado_facturas: {
@@ -293,7 +294,7 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 // Esto es lo correcto para reportes de NEO que son siempre por rango de fechas
 async function cargarASupabase(tabla, records, periodoNuevo) {
   if (!records.length) return 0;
-  const BATCH = 200;
+  const BATCH = 100;
   const periodo = periodoNuevo || 'Sin período';
 
   try {
@@ -318,9 +319,10 @@ async function cargarASupabase(tabla, records, periodoNuevo) {
     let intentos = 0;
     while (intentos < 3) {
       const { error } = await supabase.from(tabla).insert(batch);
-      if (!error) { total += batch.length; break; }
+      if (!error) { total += batch.length; console.log(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1}: OK (${batch.length} filas)`); break; }
+      console.error(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1} error:`, error.message, error.details, error.hint);
       intentos++;
-      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} falló (${error.message})`);
+      if (intentos >= 3) throw new Error(`Batch ${Math.floor(i/BATCH)+1} falló: ${error.message} | ${error.details || ''}`);
       await new Promise(r => setTimeout(r, 1000 * intentos));
     }
   }
@@ -350,6 +352,8 @@ function TabSubir() {
         const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
 
         const tipo = detectarTipo(filas, file.name);
+        console.log(`[Ezequiel] Archivo: ${file.name} → tipo: ${tipo}`);
+        console.log(`[Ezequiel] Filas totales: ${filas.length}`);
         if (!tipo) {
           res.estado  = 'no_reconocido';
           res.error   = 'No se pudo identificar el tipo de reporte.';
@@ -378,7 +382,10 @@ function TabSubir() {
 
         const periodo  = extraerPeriodo(filas);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
+        console.log(`[Ezequiel] procesarExcel → ${records.length} records para ${tipo}`);
+        if (records.length > 0) console.log(`[Ezequiel] Sample:`, JSON.stringify(records[0]).slice(0,200));
         const cantidad2 = await cargarASupabase(tipo, records, periodo);
+        console.log(`[Ezequiel] cargarASupabase → ${cantidad2} insertados`);
         cantidad = cantidad2;
 
         res.estado  = 'ok';
