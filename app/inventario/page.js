@@ -297,45 +297,23 @@ export default function Inventario() {
   async function pausarProveedor(p){ try{await supabase.from('proveedores_pausados').upsert({proveedor:p,motivo:''});setProveedoresPausados(prev=>new Set([...prev,p]));mostrarMsg(`${p} pausado.`);}catch(e){} }
   async function reactivarProveedor(p){ try{await supabase.from('proveedores_pausados').delete().eq('proveedor',p);setProveedoresPausados(prev=>{ const s=new Set(prev); s.delete(p); return s; });mostrarMsg(`${p} reactivado.`);}catch(e){} }
 
-  async function exportarExcel(fuente,nombre){
-    const XLSX=(await import('xlsx')).default||(await import('xlsx'));
-    const headers=['Alerta','Código','Nombre','Promedio mensual','Existencias','🚢 En tránsito','Cantidad a comprar','Último costo','Fecha última compra','Último proveedor'];
-    // Orden de alertas igual que el archivo original
-    const alertaOrder={'🔴 Bajo stock':1,'🔴 Bajo stock 🚢':2,'🟠 En tránsito':3,'🟡 Prestar atención':4,'🟢 Óptimo':5,'🔵 Sobrestock':6};
-    // Agrupar por proveedor
-    const porProv={};
-    fuente.forEach(i=>{ const p=(i.ultimo_proveedor||'Sin proveedor').trim(); if(!porProv[p])porProv[p]=[]; porProv[p].push(i); });
-    const rows=[headers];
-    Object.keys(porProv).sort().forEach((prov,idx)=>{
-      // 4 filas vacías entre proveedores (igual que el original)
-      if(idx>0) for(let k=0;k<4;k++) rows.push(new Array(headers.length).fill(null));
-      // Separador: "Proveedor: NOMBRE" solo en col 1, resto null
-      rows.push([`Proveedor: ${prov}`,null,null,null,null,null,null,null,null,null]);
-      // Productos ordenados por alerta dentro del grupo
-      const itemsOrdenados=[...porProv[prov]].sort((a,b)=>(alertaOrder[a._alerta]||9)-(alertaOrder[b._alerta]||9));
-      itemsOrdenados.forEach(i=>rows.push([
-        i._alerta,
-        i.codigo,
-        i.nombre,
-        parseFloat(i.promedio_mensual)||0,
-        parseFloat(i.existencias)||0,
-        i._transito>0?`🚢 ${i._transito}`:'–',
-        i._cantComprar,
-        parseFloat(i.ultimo_costo)||0,
-        fmtF(i.ultima_compra),
-        i.ultimo_proveedor||''
-      ]));
-    });
-    const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Filtrado agrupado');
-    // Hoja resumen
-    const rRows=[['Proveedor','Productos','A comprar']];
-    Object.keys(porProv).sort().forEach(p=>rRows.push([p,porProv[p].length,porProv[p].reduce((s,i)=>s+i._cantComprar,0)]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rRows),'Resumen por Proveedor');
-    // Nombre de archivo igual que el original
-    const ts=new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
-    XLSX.writeFile(wb,`filtrado_por_proveedor_${ts}.xlsx`);
-    mostrarMsg('Excel descargado.');
+  async function exportarExcel(){
+    mostrarMsg('Generando Excel, un momento...');
+    try {
+      const res = await fetch('/api/exportar-inventario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dias }),
+      });
+      if (!res.ok) { const e = await res.json(); mostrarMsg(e.error||'Error al generar Excel','err'); return; }
+      const blob = await res.blob();
+      const ts = new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `filtrado_por_proveedor_${ts}.xlsx`;
+      a.click(); URL.revokeObjectURL(url);
+      mostrarMsg('Excel descargado.');
+    } catch(e) { mostrarMsg('Error: '+e.message,'err'); }
   }
 
   async function cerrarOrden(){
@@ -640,7 +618,7 @@ export default function Inventario() {
               <div style={{fontWeight:600,color:"var(--burgundy)",marginBottom:8,fontSize:"1rem"}}>📊 Exportar tabla agrupada por proveedor</div>
               <p style={{fontSize:"0.82rem",color:"#666",marginBottom:18}}>Exporta <strong>todos</strong> los productos con sus alertas, agrupados por proveedor — igual que antes.</p>
               <p style={{fontSize:"0.82rem",color:"#666",marginBottom:16}}>Se exportarán <strong>{calc.length.toLocaleString()}</strong> productos de <strong>{new Set(calc.map(i=>i.ultimo_proveedor||"Sin proveedor")).size}</strong> proveedores.</p>
-              <button className="btn-primary" style={{fontSize:"0.9rem",padding:"10px 24px"}} onClick={()=>exportarExcel(calc,"filtrado_por_proveedor")}>📄 Generar y Descargar Excel agrupado</button>
+              <button className="btn-primary" style={{fontSize:"0.9rem",padding:"10px 24px"}} onClick={()=>exportarExcel()}>📄 Generar y Descargar Excel agrupado</button>
               <div className="info-banner" style={{marginTop:16}}>
                 <strong>El Excel incluye:</strong> Hoja "Filtrado agrupado" con alertas + columna 🚢 En tránsito, agrupado por proveedor. Hoja "Resumen por Proveedor".
               </div>
