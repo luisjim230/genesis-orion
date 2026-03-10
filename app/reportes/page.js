@@ -288,7 +288,7 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
         unidades_vendidas: n(row[1]),
       };
       // unidades en col 1, datos de col 2 en adelante → mapear
-      COLS.forEach((c, i) => { record[c] = row[i + 2] !== undefined ? row[i + 2] : null; });
+      COLS.forEach((c, i) => { record[c] = n(row[i + 2]); });
       records.push(record);
     }
     return records;
@@ -318,7 +318,7 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
         categoria = col0; subcategoria = null; dataStart = 1;
       }
       const record = { fecha_carga: fechaCarga, periodo_reporte: periodo, categoria, subcategoria };
-      DATA_COLS.forEach((c, i) => { record[c] = row[dataStart + i] !== undefined ? row[dataStart + i] : null; });
+      DATA_COLS.forEach((c, i) => { record[c] = n(row[dataStart + i]); });
       records.push(record);
     }
     return records;
