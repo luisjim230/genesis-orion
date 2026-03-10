@@ -100,6 +100,26 @@ const REPORTES = {
     columnas_originales:['Factura','Fecha','Vendedor','Cliente','Código interno','Ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Costo unitario sin impuesto','Subtotal','Descuento','% Descuento','Impuesto','Impuestos','Utilidad/costo','Total','Tipo de cambio de venta','Territorio'],
     modulos_destino:['vendedores'],
   },
+  neo_informe_ventas_vendedor: {
+    nombre:'Informe de ventas por vendedor', emoji:'👤',
+    descripcion:'Totales de ventas, notas de crédito, utilidad y margen por vendedor.',
+    titulo_valor:'Informe de ventas por  vendedor',
+    header_row:7, data_row:8,
+    usar_vendedor_parser: true,
+    modulos_destino:['vendedores'],
+    columnas:['vendedor','unidades_vendidas','ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'],
+    columnas_originales:['Vendedor','Unidades vendidas','Ventas sin impuestos','Ventas con impuestos','Notas a clientes sin impuestos','Notas a clientes con impuestos','Impuestos ventas','Impuestos notas','Ventas / Otros cargos','Notas a clientes / Otros cargos','Ventas totales','Notas a clientes totales','Ventas netas','Costo','Utilidad','% Utilidad','Utilidad/Costo','Transacciones','Tiquete promedio'],
+  },
+  neo_informe_ventas_categoria: {
+    nombre:'Informe de ventas por categoría', emoji:'📦',
+    descripcion:'Totales de ventas, notas de crédito, utilidad y margen por categoría y subcategoría.',
+    titulo_valor:'Informe de ventas por  Categoría del ítem',
+    header_row:7, data_row:8,
+    usar_categoria_parser: true,
+    modulos_destino:['vendedores'],
+    columnas:['categoria','subcategoria','unidades_vendidas','ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'],
+    columnas_originales:['Categoría del ítem','','Unidades vendidas','Ventas sin impuestos','Ventas con impuestos','Notas a clientes sin impuestos','Notas a clientes con impuestos','Impuestos ventas','Impuestos notas','Ventas / Otros cargos','Notas a clientes / Otros cargos','Ventas totales','Notas a clientes totales','Ventas netas','Costo','Utilidad','% Utilidad','Utilidad/Costo','Transacciones','Tiquete promedio'],
+  },
   neo_consolidado_facturas: {
     nombre:'Consolidado de facturas', emoji:'📑',
     descripcion:'Resumen de facturas por vendedor: modo de pago, subtotal, total.',
@@ -173,9 +193,22 @@ function detectarTipo(filas, nombreArchivo) {
       { patron: 'lista_de_i_tems_facturados', tabla: 'neo_items_facturados' },
       { patron: 'lista de ítems facturados',  tabla: 'neo_items_facturados' },
       { patron: 'items_facturados',           tabla: 'neo_items_facturados' },
+      // Detectar informe de ventas: vendedor vs categoría por contenido de fila 1
+      { patron: 'informe_de_ventas',          tabla: '_informe_ventas_check' },
+      { patron: 'informe de ventas',          tabla: '_informe_ventas_check' },
     ];
     for (const { patron, tabla } of mapaArchivo) {
-      if (nom.includes(patron)) return tabla;
+      if (nom.includes(patron)) {
+        if (tabla === '_informe_ventas_check') {
+          // Distinguir por contenido de fila 1: "vendedor" vs "Categoría"
+          for (let i = 0; i < Math.min(5, filas.length); i++) {
+            const txt = filas[i].map(v => String(v||'').toLowerCase()).join(' ');
+            if (txt.includes('vendedor')) return 'neo_informe_ventas_vendedor';
+            if (txt.includes('categor')) return 'neo_informe_ventas_categoria';
+          }
+        }
+        return tabla;
+      }
     }
   }
 
@@ -197,7 +230,63 @@ function extraerPeriodo(filas) {
 function procesarExcel(filas, tabla, fechaCarga, periodo) {
   const cfg = REPORTES[tabla];
 
+  // ── Procesador: Informe ventas por VENDEDOR ───────────────────────────────
+  if (cfg.usar_vendedor_parser) {
+    const records = [];
+    // Headers en fila 7, datos de fila 8 en adelante
+    // Col 0 = vendedor (string) o vacío (subtotal) — solo guardamos filas con nombre
+    // Última fila = total general (número en col 0)
+    const COLS = ['ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'];
+    const n = (v) => parseFloat(String(v||'0').replace('%','').trim()) || 0;
+    for (const row of filas.slice(8)) {
+      if (!row || !row.length) continue;
+      const col0 = String(row[0]||'').trim();
+      // Solo filas con nombre de vendedor (string no vacío, no número)
+      if (!col0 || !isNaN(parseFloat(col0))) continue;
+      const record = {
+        fecha_carga: fechaCarga, periodo_reporte: periodo,
+        vendedor: col0,
+        unidades_vendidas: n(row[1]),
+      };
+      // unidades en col 1, datos de col 2 en adelante → mapear
+      COLS.forEach((c, i) => { record[c] = row[i + 2] !== undefined ? row[i + 2] : null; });
+      records.push(record);
+    }
+    return records;
+  }
+
+  // ── Procesador: Informe ventas por CATEGORÍA ──────────────────────────────
+  if (cfg.usar_categoria_parser) {
+    const records = [];
+    const n = (v) => parseFloat(String(v||'0').replace('%','').trim()) || 0;
+    // Header en fila 7: [Categoría, subcategoría-o-nada, unidades, ...]
+    // Fila con 2 strings iniciales = subcategoría; 1 string = categoría sin subcat
+    // Última fila = totales (col 0 = número)
+    const DATA_COLS = ['unidades_vendidas','ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'];
+    for (const row of filas.slice(8)) {
+      if (!row || !row.length) continue;
+      const col0 = String(row[0]||'').trim();
+      const col1 = String(row[1]||'').trim();
+      // Saltar fila de totales (col0 = número)
+      if (!col0 || !isNaN(parseFloat(col0))) continue;
+
+      let categoria, subcategoria, dataStart;
+      if (col1 && isNaN(parseFloat(col1))) {
+        // col0=categoria, col1=subcategoria, datos desde col 2
+        categoria = col0; subcategoria = col1; dataStart = 2;
+      } else {
+        // col0=categoria (sin subcat), datos desde col 1
+        categoria = col0; subcategoria = null; dataStart = 1;
+      }
+      const record = { fecha_carga: fechaCarga, periodo_reporte: periodo, categoria, subcategoria };
+      DATA_COLS.forEach((c, i) => { record[c] = row[dataStart + i] !== undefined ? row[dataStart + i] : null; });
+      records.push(record);
+    }
+    return records;
+  }
+
   // ── Procesador por índice de columna (para reportes con headers mergeados) ─
+
   if (cfg.usar_indices) {
     const dataRows = filas.slice(cfg.data_row);
     const records = [];
@@ -271,37 +360,54 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   return records;
 }
 
-// ── Deduplicación por período (simple y confiable) ────────────────────────
-// Regla: si ya existe una carga con el mismo periodo_reporte → la reemplaza
-// Si el período es distinto → acumula (no borra nada)
-// Esto es lo correcto para reportes de NEO que son siempre por rango de fechas
+// ── Deduplicación inteligente por período ─────────────────────────────────
+// REGLA CLAVE:
+//   • Mismo período exacto  → borra la carga anterior y reemplaza (evita duplicados)
+//   • Período distinto      → acumula (suma datos históricos de distintos períodos)
+//   • "Sin período"         → usa la fecha del día como identificador de período
+//
+// Esto permite subir:
+//   - Un reporte diario, semanal o mensual
+//   - Acumular histórico de múltiples períodos en la misma tabla
+//   - Re-subir el mismo período sin duplicar datos
 async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
   if (!records.length) return 0;
   const BATCH = 50;
-  const periodo = periodoNuevo || 'Sin período';
   const fechaCargaActual = records[0]?.fecha_carga;
 
-  // Dedup: borrar cargas previas con el mismo periodo_reporte
-  // Si periodo es 'Sin período', borrar cargas del mismo día para evitar duplicados
+  // Normalizar período: si no viene, usar fecha del día como clave única
+  let periodo = periodoNuevo || 'Sin período';
+  if (periodo === 'Sin período') {
+    const hoy = new Date(fechaCargaActual);
+    periodo = `Día ${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  }
+
+  // Poner el período normalizado en todos los records
+  records = records.map(r => ({ ...r, periodo_reporte: periodo }));
+
+  // Dedup: si ya existe UNA carga con este mismo período → borrarla antes de insertar
+  // Si el período es distinto a los existentes → no borramos nada (acumulamos)
+  let esNuevoPeriodo = true;
   try {
-    let query = supabase.from(tabla).select('fecha_carga').limit(20);
-    if (periodo !== 'Sin período') {
-      query = query.eq('periodo_reporte', periodo);
-    } else {
-      // Buscar cargas del mismo día
-      const hoy = new Date(fechaCargaActual);
-      const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString();
-      const finHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()+1).toISOString();
-      query = query.gte('fecha_carga', inicioHoy).lt('fecha_carga', finHoy);
-    }
-    const { data: previas } = await query;
+    const { data: previas } = await supabase
+      .from(tabla)
+      .select('fecha_carga')
+      .eq('periodo_reporte', periodo)
+      .limit(50);
+
     const fcsUnicas = [...new Set((previas||[]).map(r => r.fecha_carga))];
-    for (const fc of fcsUnicas) {
-      await supabase.from(tabla).delete().eq('fecha_carga', fc);
-      console.log(`[Ezequiel] Dedup: borrada carga ${fc} de ${tabla}`);
+    if (fcsUnicas.length > 0) {
+      console.log(`[SOL] Período "${periodo}" ya existe en ${tabla} — reemplazando ${fcsUnicas.length} carga(s) previa(s)`);
+      for (const fc of fcsUnicas) {
+        await supabase.from(tabla).delete().eq('fecha_carga', fc);
+      }
+      esNuevoPeriodo = false;
+    } else {
+      console.log(`[SOL] Período "${periodo}" es NUEVO en ${tabla} — acumulando al histórico`);
+      esNuevoPeriodo = true;
     }
   } catch(e) {
-    console.warn('[Ezequiel] Advertencia en dedup:', e.message);
+    console.warn('[SOL] Advertencia en dedup:', e.message);
   }
 
   // Insertar en batches
@@ -315,12 +421,12 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
       const { error } = await supabase.from(tabla).insert(batch);
       if (!error) {
         total += batch.length;
-        console.log(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(records.length/BATCH)}: OK (${batch.length} filas, total=${total})`);
+        console.log(`[SOL] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(records.length/BATCH)}: OK (${batch.length} filas, total=${total})`);
         ok = true;
         if (onProgress) onProgress(total);
       } else {
         intentos++;
-        console.error(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1} intento ${intentos} error:`, error.message, '|', error.details, '|', error.hint);
+        console.error(`[SOL] Batch ${Math.floor(i/BATCH)+1} intento ${intentos} error:`, error.message, '|', error.details, '|', error.hint);
         if (intentos >= 3) {
           errores.push(`Batch ${Math.floor(i/BATCH)+1}: ${error.message}`);
           break; // Continuar con el siguiente batch en vez de tirar error total
@@ -329,8 +435,8 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
       }
     }
   }
-  if (errores.length) console.error('[Ezequiel] Batches fallidos:', errores.join('; '));
-  return total;
+  if (errores.length) console.error('[SOL] Batches fallidos:', errores.join('; '));
+  return { total, esNuevoPeriodo };
 }
 
 // ── Tab 1: Subir ──────────────────────────────────────────────────────────
@@ -386,8 +492,8 @@ function TabSubir() {
 
         const periodo  = extraerPeriodo(filas);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
-        console.log(`[Ezequiel] procesarExcel → ${records.length} records para ${tipo}`);
-        if (records.length > 0) console.log(`[Ezequiel] Sample:`, JSON.stringify(records[0]).slice(0,200));
+        console.log(`[SOL] procesarExcel → ${records.length} records para ${tipo}`);
+        if (records.length > 0) console.log(`[SOL] Sample:`, JSON.stringify(records[0]).slice(0,200));
         // Mostrar progreso en tiempo real
         res.totalRecords = records.length;
         setResultados(prev => {
@@ -395,11 +501,11 @@ function TabSubir() {
           if (idx >= 0) { const n=[...prev]; n[idx]={...res}; return n; }
           return prev;
         });
-        const cantidad2 = await cargarASupabase(tipo, records, periodo, (inserted) => {
+        const { total: cantidad2, esNuevoPeriodo } = await cargarASupabase(tipo, records, periodo, (inserted) => {
           res.insertados = inserted;
           setResultados(prev => [...prev]);
         });
-        console.log(`[Ezequiel] cargarASupabase → ${cantidad2} insertados`);
+        console.log(`[SOL] cargarASupabase → ${cantidad2} insertados, nuevo período: ${esNuevoPeriodo}`);
         cantidad = cantidad2;
 
         res.estado  = 'ok';
@@ -407,6 +513,7 @@ function TabSubir() {
         res.filas   = cantidad;
         res.filasTotales = records.length;
         res.periodo = periodo;
+        res.esNuevoPeriodo = esNuevoPeriodo;
       } catch(e) {
         res.estado = 'error';
         res.error  = e.message;
@@ -449,13 +556,15 @@ function TabSubir() {
                 ['🏆 Ítems más vendidos',                 '🔄 Rotación · 👥 Equipo de ventas'],
                 ['💰 Rentabilidad por proveedor',         '👥 Equipo de ventas'],
                 ['📋 Lista de ítems',                     '🔄 Rotación de productos'],
-                ['🧾 Lista de ítems facturados',          '👥 Equipo de ventas'],
+                ['🧾 Lista de ítems facturados',          '👥 Ventas — Pestaña Productos'],
+                ['👤 Informe de ventas por vendedor',     '👥 Ventas — Resumen + Comisiones'],
+                ['📦 Informe de ventas por Categoría',   '👥 Ventas — Categorías'],
                 ['📑 Consolidado de facturas',            '👥 Equipo de ventas'],
                 ['📒 Movimientos contables',              '📒 Contabilidad'],
               ].map(([r,a],i)=>(
-                <tr key={i}>
+                <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
                   <td style={S.td}>{r}</td>
-                  <td style={S.td} style={{ ...S.td, color:'#63b3ed' }}>{a}</td>
+                  <td style={{ ...S.td, color:'#63b3ed' }}>{a}</td>
                 </tr>
               ))}
             </tbody>
@@ -474,7 +583,7 @@ function TabSubir() {
         <p style={{ color:'var(--text-muted)', margin:0, fontSize:'0.95rem' }}>
           {procesando ? '⏳ Procesando archivos...' : 'Arrastrá tus archivos Excel de NEO acá'}
         </p>
-        <p style={{ color:'#2a3a50', margin:'6px 0 16px', fontSize:'0.82rem' }}>Ítems más vendidos · Mínimos y máximos · Ítems comprados · Lista de ítems · Rentabilidad · Antigüedad de saldos</p>
+        <p style={{ color:'#2a3a50', margin:'6px 0 16px', fontSize:'0.82rem' }}>Ítems facturados · Informe vendedor · Informe categoría · Mínimos/máximos · Ítems comprados · Rentabilidad · Antigüedad saldos</p>
         <label style={{ ...S.btnPrimary, display:'inline-block', cursor:'pointer', opacity: procesando ? 0.5 : 1 }}>
           {procesando ? 'Procesando...' : '📁 Seleccionar archivos'}
           <input type="file" accept=".xlsx" multiple style={{ display:'none' }} onChange={onFileInput} disabled={procesando}/>
@@ -501,7 +610,12 @@ function TabSubir() {
                     <>
                       <div style={{ fontSize:'0.83rem', color:'#276749' }}>✅ Guardado correctamente</div>
                       <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>
-                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · {r.periodo} · <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> guardadas{r.filasTotales && r.filasTotales !== r.filas ? <span style={{color:'#e53e3e'}}> ({r.filasTotales} en archivo)</span> : ''}
+                        {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · <strong style={{ color:'var(--text-primary)' }}>{r.periodo}</strong> ·{' '}
+                        <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> filas{r.filasTotales && r.filasTotales !== r.filas ? <span style={{color:'#e53e3e'}}> ({r.filasTotales} en archivo)</span> : ''}{' '}
+                        {r.esNuevoPeriodo
+                          ? <span style={{ background:'#c6f6d5', color:'#276749', borderRadius:4, padding:'1px 7px', fontSize:'0.72rem', fontWeight:700 }}>+ NUEVO PERÍODO</span>
+                          : <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:4, padding:'1px 7px', fontSize:'0.72rem', fontWeight:700 }}>↺ REEMPLAZADO</span>
+                        }
                       </div>
                     </>
                   )}
