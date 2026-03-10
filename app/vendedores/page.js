@@ -55,33 +55,34 @@ function parseNum(v) {
   return parseFloat(v) || 0;
 }
 
-// ── usePeriodos — carga fechas disponibles ──────────────────────────────────
+// ── usePeriodos — agrupa cargas por periodo_reporte ─────────────────────────
+// Cada entrada = un período único (ej: "Del 1 al 15 de marzo")
+// La query siempre busca por periodo_reporte para unir cargas del mismo período
 function usePeriodos() {
   const [periodos, setPeriodos] = useState([]);
   const [sel, setSel]           = useState('');
 
   useEffect(() => {
     (async () => {
-      // Cargar desde las 3 tablas posibles
       const [r1, r2] = await Promise.all([
         supabase.from('neo_informe_ventas_vendedor').select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending: false }).limit(500),
         supabase.from('neo_informe_ventas_categoria').select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending: false }).limit(500),
       ]);
       const todas = [...(r1.data||[]), ...(r2.data||[])];
-      const vistos = new Set(); const unicas = [];
+      // Agrupar por periodo_reporte — cada período único es una entrada
+      // Si hay varios uploads del mismo período (reemplazo), quedarse con el más reciente
+      const porPeriodo = {};
       for (const r of todas) {
-        if (!vistos.has(r.fecha_carga)) { vistos.add(r.fecha_carga); unicas.push(r); }
+        const p = r.periodo_reporte || 'Sin período';
+        if (!porPeriodo[p] || r.fecha_carga > porPeriodo[p].fecha_carga) {
+          porPeriodo[p] = r;
+        }
       }
-      unicas.sort((a,b) => b.fecha_carga.localeCompare(a.fecha_carga));
-      // Agrupar por fecha (solo la fecha, no hora)
-      const porFecha = {};
-      for (const r of unicas) {
-        const d = r.fecha_carga.slice(0,10);
-        if (!porFecha[d]) porFecha[d] = r;
-      }
-      const lista = Object.values(porFecha);
+      const lista = Object.entries(porPeriodo)
+        .map(([periodo, r]) => ({ periodo, fecha_carga: r.fecha_carga }))
+        .sort((a, b) => b.fecha_carga.localeCompare(a.fecha_carga));
       setPeriodos(lista);
-      if (lista.length) setSel(lista[0].fecha_carga);
+      if (lista.length) setSel(lista[0].periodo);
     })();
   }, []);
 
@@ -97,14 +98,12 @@ function TabResumen({ sel }) {
     if (!sel) return;
     setCargando(true);
     (async () => {
-      const fechaDia = sel.slice(0, 10);
       let todos = [], off = 0;
       while (true) {
         const { data } = await supabase
           .from('neo_informe_ventas_vendedor')
           .select('*')
-          .gte('fecha_carga', fechaDia + 'T00:00:00')
-          .lte('fecha_carga', fechaDia + 'T23:59:59')
+          .eq('periodo_reporte', sel)
           .range(off, off + 999);
         if (!data?.length) break;
         todos = [...todos, ...data];
@@ -241,14 +240,12 @@ function TabCategorias({ sel }) {
     if (!sel) return;
     setCargando(true);
     (async () => {
-      const fechaDia = sel.slice(0, 10);
       let todos = [], off = 0;
       while (true) {
         const { data } = await supabase
           .from('neo_informe_ventas_categoria')
           .select('*')
-          .gte('fecha_carga', fechaDia + 'T00:00:00')
-          .lte('fecha_carga', fechaDia + 'T23:59:59')
+          .eq('periodo_reporte', sel)
           .range(off, off + 999);
         if (!data?.length) break;
         todos = [...todos, ...data];
@@ -444,14 +441,12 @@ function TabProductos({ sel }) {
     if (!sel) return;
     setCargando(true);
     (async () => {
-      const fechaDia = sel.slice(0, 10);
       let todos = [], off = 0;
       while (true) {
         const { data } = await supabase
           .from('neo_items_facturados')
           .select('vendedor,item,codigo_interno,bodega,cantidad_facturada,cantidad_devuelta,precio_unitario,costo_unitario,subtotal,descuento,impuestos,utilidad_costo,total,factura')
-          .gte('fecha_carga', fechaDia + 'T00:00:00')
-          .lte('fecha_carga', fechaDia + 'T23:59:59')
+          .eq('periodo_reporte', sel)
           .range(off, off + 999);
         if (!data?.length) break;
         todos = [...todos, ...data];
@@ -621,14 +616,12 @@ function TabComisiones({ sel }) {
     if (!sel) return;
     setCargando(true);
     (async () => {
-      const fechaDia = sel.slice(0, 10);
       let todos = [], off = 0;
       while (true) {
         const { data } = await supabase
           .from('neo_informe_ventas_vendedor')
           .select('*')
-          .gte('fecha_carga', fechaDia + 'T00:00:00')
-          .lte('fecha_carga', fechaDia + 'T23:59:59')
+          .eq('periodo_reporte', sel)
           .range(off, off + 999);
         if (!data?.length) break;
         todos = [...todos, ...data];
@@ -770,18 +763,24 @@ export default function VendedoresPage() {
       </p>
 
       {/* Selector de período */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <div>
-          <label style={S.label}>Período</label>
-          <select value={sel} onChange={e => setSel(e.target.value)} style={S.select}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, flexWrap: 'wrap', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={S.label}>📅 Período cargado</span>
+          <select value={sel} onChange={e => setSel(e.target.value)} style={{ ...S.select, minWidth: 280, fontWeight: 600 }}>
+            {periodos.length === 0 && <option value="">Sin períodos — subí reportes primero</option>}
             {periodos.map(p => (
-              <option key={p.fecha_carga} value={p.fecha_carga}>
-                {new Date(p.fecha_carga).toLocaleDateString('es-CR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })} — {p.periodo_reporte || 'Sin período'}
+              <option key={p.periodo} value={p.periodo}>
+                {p.periodo}
               </option>
             ))}
           </select>
+          <span style={{ fontSize: '0.72rem', color: C.muted }}>Subido el {periodos.find(p=>p.periodo===sel) ? new Date(periodos.find(p=>p.periodo===sel).fecha_carga).toLocaleDateString('es-CR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</span>
         </div>
-        {sel && <div style={{ fontSize: '0.8rem', color: C.muted, marginTop: 18 }}>📅 {periodos.find(p=>p.fecha_carga===sel)?.periodo_reporte || 'Sin período'}</div>}
+        <div style={{ color: C.muted, fontSize: '0.8rem', marginTop: 16, maxWidth: 320 }}>
+          Para ver otro período, subí el reporte correspondiente en{' '}
+          <a href="/reportes" style={{ color: C.orange, fontWeight: 600 }}>Carga de reportes</a>.
+          Cada período cargado queda guardado en el historial.
+        </div>
       </div>
 
       {/* Tabs */}
