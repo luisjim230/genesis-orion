@@ -215,32 +215,55 @@ function detectarTipo(filas, nombreArchivo) {
   return null;
 }
 
-function extraerPeriodo(filas) {
-  let fechaReporte = null;
+function extraerPeriodo(filas, tipo) {
+  // Caso 1: rango explícito "Del X al Y" en encabezado (cualquier reporte)
   for (let i = 0; i < Math.min(10, filas.length); i++) {
     const fila = Array.isArray(filas[i]) ? filas[i] : [];
     for (const v of fila) {
       const s = String(v||'').trim();
-      // Caso 1: rango explícito "Del X al Y"
       if (s && (s.includes('Del ') || s.includes('del ')) && s.includes('/')) return s;
-      // Caso 2: capturar fecha del reporte formato DD/MM/YYYY HH:MM
-      if (!fechaReporte && s.match(/^\d{2}\/\d{2}\/\d{4}/)) fechaReporte = s;
     }
   }
-  // Usar fecha del reporte como período (ej: "Día 2026-03-10")
-  if (fechaReporte) {
-    const parts = fechaReporte.split(' ')[0].split('/');
-    if (parts.length === 3) {
-      const [d, m, y] = parts;
-      return `Día ${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+
+  // Caso 2: Lista de ítems facturados — leer fechas reales de las facturas
+  // La columna "Fecha" (col 2) tiene seriales de Excel con la fecha de cada factura
+  if (tipo === 'neo_items_facturados' && filas.length > 2) {
+    const fechas = [];
+    for (let i = 2; i < filas.length; i++) {
+      const serial = parseFloat(filas[i][2]);
+      if (!isNaN(serial) && serial > 40000) { // serial válido (año > 2009)
+        const ms = Math.round((serial - 25569) * 86400 * 1000);
+        fechas.push(ms);
+      }
+    }
+    if (fechas.length > 0) {
+      const min = new Date(Math.min(...fechas));
+      const max = new Date(Math.max(...fechas));
+      const fmt = d => d.toLocaleDateString('es-CR', { day:'2-digit', month:'2-digit', year:'numeric' });
+      if (fmt(min) === fmt(max)) {
+        return `Día ${max.toISOString().slice(0,10)}`;
+      }
+      return `Del ${fmt(min)} al ${fmt(max)}`;
     }
   }
-  // Fallback: usar fecha de hoy
-  const hoy = new Date();
-  const yy = hoy.getFullYear();
-  const mm = String(hoy.getMonth()+1).padStart(2,'0');
-  const dd = String(hoy.getDate()).padStart(2,'0');
-  return `Día ${yy}-${mm}-${dd}`;
+
+  // Caso 3: Informes de ventas — fecha en fila 2 (formato DD/MM/YYYY HH:MM)
+  for (let i = 0; i < Math.min(5, filas.length); i++) {
+    const fila = Array.isArray(filas[i]) ? filas[i] : [];
+    for (const v of fila) {
+      const s = String(v||'').trim();
+      if (s.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+        const parts = s.split(' ')[0].split('/');
+        if (parts.length === 3) {
+          const [d, m, y] = parts;
+          return `Día ${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        }
+      }
+    }
+  }
+
+  // Fallback: fecha de hoy
+  return `Día ${new Date().toISOString().slice(0,10)}`;
 }
 
 function procesarExcel(filas, tabla, fechaCarga, periodo) {
@@ -506,7 +529,7 @@ function TabSubir() {
           continue;
         }
 
-        const periodo  = extraerPeriodo(filas);
+        const periodo  = extraerPeriodo(filas, tipo);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
         console.log(`[SOL] procesarExcel → ${records.length} records para ${tipo}`);
         if (records.length > 0) console.log(`[SOL] Sample:`, JSON.stringify(records[0]).slice(0,200));
