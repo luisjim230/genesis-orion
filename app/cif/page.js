@@ -605,7 +605,7 @@ export default function HalleyCIF() {
       <h1 style={S.title}>💫 Halley – Calculadora CIF</h1>
       <div style={S.caption}>
         💫 Módulo de cálculo · Última sesión: {fecha}<br/>
-        <span style={{ color:'var(--text-muted)' }}>Porque de Egipto a Costa Rica, todo tiene un costo. · Génesis Suite</span>
+        <span style={{ color:'var(--text-muted)' }}>Porque de Egipto a Costa Rica, todo tiene un costo. · SOL</span>
       </div>
 
       <div style={S.tabs}>

@@ -56,7 +56,7 @@ export default function Ponderacion() {
       <div className="module-header">
         <div>
           <h1 className="module-title">⚖️ Esdras – Ponderación de Precios</h1>
-          <p className="module-sub">Costo promedio ponderado móvil · Depósito Jiménez</p>
+          <p className="module-sub">Costo promedio ponderado móvil · Corporación Rojimo</p>
         </div>
       </div>
 

@@ -74,7 +74,7 @@ export default function IsaiasMercado() {
   return (
     <div style={S.page}>
       <h1 style={S.title}>⚡ Pulsar – Mercado en Tiempo Real</h1>
-      <div style={S.caption}>⚡ Datos en tiempo real · Consultado: {ultima||'—'}<br/><span style={{color:'var(--text-muted)'}}>Precios e indicadores en tiempo real · Génesis Suite</span></div>
+      <div style={S.caption}>⚡ Datos en tiempo real · Consultado: {ultima||'—'}<br/><span style={{color:'var(--text-muted)'}}>Precios e indicadores en tiempo real · SOL</span></div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px',flexWrap:'wrap',gap:'12px'}}>
         <div style={{fontSize:'0.82rem',color:'var(--text-muted)'}}>🕐 Última consulta: {ultima||'—'} · Actualización automática cada 15-30 min</div>
         <button style={S.btnGhost} onClick={recargar} disabled={cargando}>{cargando?'⏳ Actualizando...':'🔄 Forzar actualización'}</button>

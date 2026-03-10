@@ -475,7 +475,7 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
       <div style={{ ...S.card, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, color: '#fff', marginBottom: 8 }}>📥 Estado del ciclo de trazabilidad</div>
         <div style={{ fontSize: '0.84em', color: MUTED, marginBottom: 16 }}>
-          Génesis cruza automáticamente el reporte de compras (subido en <strong style={{ color: TEXT }}>Reportes NEO</strong>) con las órdenes pendientes.
+          SOL cruza automáticamente el reporte de compras (subido en <strong style={{ color: TEXT }}>Reportes NEO</strong>) con las órdenes pendientes.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
           {[

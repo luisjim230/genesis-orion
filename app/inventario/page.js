@@ -450,7 +450,7 @@ export default function Inventario() {
       <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="module-title">🪐 Saturno – Inventario</h1>
-          <p className="module-sub">El Análisis de Stock · Depósito Jiménez</p>
+          <p className="module-sub">El Análisis de Stock · Corporación Rojimo</p>
         </div>
         <button className="btn-outline" onClick={() => { setDatos([]); setCalc([]); cargarDatos(); }}>🔄 Reiniciar</button>
       </div>

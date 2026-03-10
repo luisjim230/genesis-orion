@@ -461,7 +461,7 @@ export default function VegaTareas() {
     <div style={S.page}>
       <div style={S.header}>
         <h1 style={S.title}>⭐ Vega – Tareas</h1>
-        <div style={S.caption}>☁️ Sincronizado en la nube · {ahora} · Génesis Suite</div>
+        <div style={S.caption}>☁️ Sincronizado en la nube · {ahora} · SOL</div>
       </div>
 
       <div style={S.tabs}>

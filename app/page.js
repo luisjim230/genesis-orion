@@ -91,7 +91,7 @@ function TareaRow({ tarea }) {
   )
 }
 
-export default function CosmosPage() {
+export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState({})
   const [alertas, setAlertas] = useState([])
@@ -187,7 +187,7 @@ export default function CosmosPage() {
           Dashboard ejecutivo
         </span>
         <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: '#1a1d24', letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 4 }}>
-          🌌 Cosmos
+          ☀️ SOL
         </h1>
         <p style={{ fontSize: '0.875rem', color: '#6a7288' }}>Visión consolidada del negocio en tiempo real.</p>
       </div>

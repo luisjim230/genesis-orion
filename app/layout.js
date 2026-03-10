@@ -5,8 +5,8 @@ import './globals.css';
 const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
 
 export const metadata = {
-  title: 'Génesis Orión – Corporación Rojimo S.A.',
-  description: 'Sistema de gestión empresarial · Depósito Jiménez',
+  title: 'SOL · Sistema de Operaciones y Logística',
+  description: 'Sistema de Operaciones y Logística · Corporación Rojimo S.A.',
 };
 
 export default function RootLayout({ children }) {

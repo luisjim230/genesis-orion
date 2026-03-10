@@ -227,15 +227,6 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   const headers = filas[headerRow].map(v => String(v||'').trim());
   const dataRows = filas.slice(headerRow + 1);
 
-  // Función robusta para limpiar valores del Excel
-  // XLSX.js puede devolver strings con trailing spaces, tabs, etc.
-  // También puede devolver fechas como número serial de Excel (ej: 46090.62...)
-  const excelSerialToDate = (n) => {
-    // Excel serial date: días desde 1900-01-01 (con bug de 1900-02-29)
-    const d = new Date((n - 25569) * 86400 * 1000);
-    if (isNaN(d.getTime())) return null;
-    return d.toISOString().slice(0, 10); // YYYY-MM-DD
-  };
   // Construir rename map: original → normalizado
   const renameMap = {};
   cfg.columnas_originales.forEach((orig, i) => {
@@ -246,8 +237,6 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   });
   console.log(`[Ezequiel] renameMap keys:`, Object.keys(renameMap).length, 'de', cfg.columnas_originales.length);
 
-  // Función robusta para limpiar valores del Excel
-  // XLSX.js puede devolver strings con trailing spaces, tabs, etc.
   const limpiar = (val, colName) => {
     if (val === null || val === undefined) return null;
     // Número serial de Excel en columna de fecha → convertir a YYYY-MM-DD
@@ -255,8 +244,10 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
       const d = new Date((val - 25569) * 86400 * 1000);
       if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
     }
+    // Si es número (no fecha), convertir directamente a string sin notación científica
+    if (typeof val === 'number') return String(val);
     // Convertir a string y limpiar TODOS los whitespace (incluyendo non-breaking spaces)
-    const s = String(val).replace(/^[\s ​]+|[\s ​]+$/g, '');
+    const s = String(val).trim();
     if (s === '' || s === 'nan' || s === 'null' || s === 'undefined') return null;
     return s;
   };
@@ -277,14 +268,6 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
     records.push(record);
   }
   
-  // DEBUG: mostrar muestra de valores procesados
-  if (records.length > 0) {
-    const sample = records.find(r => r.ultimo_proveedor !== null) || records[0];
-    console.log(`[Ezequiel] Muestra de record procesado:`, JSON.stringify(sample));
-    const conProv = records.filter(r => r.ultimo_proveedor !== null).length;
-    console.log(`[Ezequiel] Records con ultimo_proveedor: ${conProv} / ${records.length}`);
-  }
-  
   return records;
 }
 
@@ -292,7 +275,7 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 // Regla: si ya existe una carga con el mismo periodo_reporte → la reemplaza
 // Si el período es distinto → acumula (no borra nada)
 // Esto es lo correcto para reportes de NEO que son siempre por rango de fechas
-async function cargarASupabase(tabla, records, periodoNuevo) {
+async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
   if (!records.length) return 0;
   const BATCH = 50;
   const periodo = periodoNuevo || 'Sin período';
@@ -334,6 +317,7 @@ async function cargarASupabase(tabla, records, periodoNuevo) {
         total += batch.length;
         console.log(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(records.length/BATCH)}: OK (${batch.length} filas, total=${total})`);
         ok = true;
+        if (onProgress) onProgress(total);
       } else {
         intentos++;
         console.error(`[Ezequiel] Batch ${Math.floor(i/BATCH)+1} intento ${intentos} error:`, error.message, '|', error.details, '|', error.hint);
@@ -404,7 +388,17 @@ function TabSubir() {
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
         console.log(`[Ezequiel] procesarExcel → ${records.length} records para ${tipo}`);
         if (records.length > 0) console.log(`[Ezequiel] Sample:`, JSON.stringify(records[0]).slice(0,200));
-        const cantidad2 = await cargarASupabase(tipo, records, periodo);
+        // Mostrar progreso en tiempo real
+        res.totalRecords = records.length;
+        setResultados(prev => {
+          const idx = prev.findIndex(r => r === res);
+          if (idx >= 0) { const n=[...prev]; n[idx]={...res}; return n; }
+          return prev;
+        });
+        const cantidad2 = await cargarASupabase(tipo, records, periodo, (inserted) => {
+          res.insertados = inserted;
+          setResultados(prev => [...prev]);
+        });
         console.log(`[Ezequiel] cargarASupabase → ${cantidad2} insertados`);
         cantidad = cantidad2;
 
@@ -433,7 +427,7 @@ function TabSubir() {
   return (
     <div>
       <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>Subir reportes de NEO</h3>
-      <p style={{ color:'var(--text-muted)', marginBottom:'20px' }}>Podés subir varios archivos a la vez. Génesis detecta automáticamente qué tipo de reporte es cada uno.</p>
+      <p style={{ color:'var(--text-muted)', marginBottom:'20px' }}>Podés subir varios archivos a la vez. SOL detecta automáticamente qué tipo de reporte es cada uno.</p>
 
       {/* Info tabla */}
       <details style={{ ...S.card, marginBottom:'16px' }}>
@@ -513,7 +507,20 @@ function TabSubir() {
                   )}
                   {r.estado==='no_reconocido' && <div style={{ fontSize:'0.83rem', color:'#7B341E' }}>⚠️ No reconocido — {r.error}</div>}
                   {r.estado==='error' && <div style={{ fontSize:'0.83rem', color:'#f87171' }}>❌ Error: {r.error}</div>}
-                  {r.estado==='procesando' && <div style={{ fontSize:'0.83rem', color:'var(--orange)' }}>⏳ Procesando...</div>}
+                  {r.estado==='procesando' && (
+                    r.totalRecords > 0 ? (
+                      <div style={{ marginTop:4 }}>
+                        <div style={{ fontSize:'0.78rem', color:'var(--orange)', marginBottom:3 }}>
+                          ⏳ Subiendo… {(r.insertados||0).toLocaleString()} / {r.totalRecords.toLocaleString()} filas
+                        </div>
+                        <div style={{ background:'#EAE0E0', borderRadius:4, height:6, width:'180px' }}>
+                          <div style={{ background:'var(--orange)', borderRadius:4, height:6,
+                            width: Math.round(((r.insertados||0)/r.totalRecords)*100)+'%',
+                            transition:'width 0.4s ease' }}/>
+                        </div>
+                      </div>
+                    ) : <div style={{ fontSize:'0.83rem', color:'var(--orange)' }}>⏳ Procesando...</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -719,7 +726,7 @@ export default function EzequielCentrodeDatos() {
     <div style={S.page}>
       <div style={S.kicker}>NEO · Reportes</div>
       <h1 style={S.title}>📂 Ezequiel – Centro de Datos</h1>
-      <p style={S.caption}>Subí tus reportes de NEO y Génesis los guarda con historial completo en la nube.</p>
+      <p style={S.caption}>Subí tus reportes de NEO y SOL los guarda con historial completo en la nube.</p>
 
       <div style={S.tabs}>
         {['⬆️ Subir reportes','📊 Ver datos'].map((t,i)=>(

@@ -122,13 +122,18 @@ export default function Sidebar() {
           gap: 10,
           flexShrink: 0,
         }}>
-          <svg width={collapsed ? 30 : 36} height={collapsed ? 26 : 32} viewBox="0 0 36 32" style={{ flexShrink: 0 }}>
-            <rect x="0"  y="0"  width="10" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
-            <rect x="13" y="0"  width="23" height="9"  rx="2" fill="#ED6E2E"/>
-            <rect x="0"  y="12" width="22" height="9"  rx="2" fill="rgba(253,244,244,0.90)"/>
-            <rect x="25" y="12" width="11" height="9"  rx="2" fill="#ED6E2E"/>
-            <rect x="0"  y="24" width="10" height="8"  rx="2" fill="#ED6E2E"/>
-            <rect x="13" y="24" width="23" height="8"  rx="2" fill="#ED6E2E"/>
+          <svg width={collapsed ? 32 : 36} height={collapsed ? 32 : 36} viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+            {/* Sol — círculo central */}
+            <circle cx="18" cy="18" r="7" fill="#ED6E2E"/>
+            {/* Rayos del sol — 8 rayos */}
+            <line x1="18" y1="2"  x2="18" y2="8"  stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="18" y1="28" x2="18" y2="34" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="2"  y1="18" x2="8"  y2="18" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="28" y1="18" x2="34" y2="18" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="6.1" y1="6.1"   x2="10.3" y2="10.3" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="25.7" y1="25.7" x2="29.9" y2="29.9" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="29.9" y1="6.1"  x2="25.7" y2="10.3" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="10.3" y1="25.7" x2="6.1"  y2="29.9" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
           </svg>
           {!collapsed && (
             <div style={{ lineHeight: 1 }}>
@@ -136,11 +141,11 @@ export default function Sidebar() {
                 fontFamily: "'Nunito', sans-serif",
                 fontWeight: 800,
                 color: 'rgba(253,244,244,0.55)',
-                fontSize: 8,
-                letterSpacing: '0.28em',
+                fontSize: 6.5,
+                letterSpacing: '0.10em',
                 textTransform: 'uppercase',
                 marginBottom: 2,
-              }}>DEPÓSITO</div>
+              }}>SISTEMA DE OPERACIONES Y</div>
               <div style={{
                 fontFamily: "'Nunito', sans-serif",
                 fontWeight: 900,
@@ -148,7 +153,7 @@ export default function Sidebar() {
                 fontSize: 19,
                 letterSpacing: '0.02em',
                 lineHeight: 1.05,
-              }}>JIMÉNEZ</div>
+              }}>LOGÍSTICA</div>
             </div>
           )}
         </div>
@@ -208,7 +213,7 @@ export default function Sidebar() {
           </button>
           {!collapsed && (
             <div style={{ padding: '10px 12px 0', fontSize: '0.62rem', color: 'rgba(253,244,244,0.20)', fontFamily: "'Rubik', sans-serif" }}>
-              Génesis Orión v3.0 · 2026
+              SOL v1.0 · 2026
             </div>
           )}
         </div>
