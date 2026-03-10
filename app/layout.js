@@ -7,6 +7,18 @@ const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '
 export const metadata = {
   title: 'SOL · Sistema de Operaciones y Logística',
   description: 'Sistema de Operaciones y Logística · Corporación Rojimo S.A.',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '48x48' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+    other: [
+      { rel: 'mask-icon', url: '/icon.svg', color: '#ED6E2E' },
+    ],
+  },
 };
 
 export default function RootLayout({ children }) {

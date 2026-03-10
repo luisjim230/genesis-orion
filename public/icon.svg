@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#5E2733"/>
+  <!-- Rayos -->
+  <line x1="50" y1="8"  x2="50" y2="28" stroke="#FDF4F4" stroke-width="7" stroke-linecap="round"/>
+  <line x1="50" y1="72" x2="50" y2="92" stroke="#FDF4F4" stroke-width="7" stroke-linecap="round"/>
+  <line x1="8"  y1="50" x2="28" y2="50" stroke="#FDF4F4" stroke-width="7" stroke-linecap="round"/>
+  <line x1="72" y1="50" x2="92" y2="50" stroke="#FDF4F4" stroke-width="7" stroke-linecap="round"/>
+  <line x1="19" y1="19" x2="33" y2="33" stroke="#FDF4F4" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <line x1="67" y1="67" x2="81" y2="81" stroke="#FDF4F4" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <line x1="81" y1="19" x2="67" y2="33" stroke="#FDF4F4" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <line x1="33" y1="67" x2="19" y2="81" stroke="#FDF4F4" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <!-- Sol central -->
+  <circle cx="50" cy="50" r="22" fill="#ED6E2E"/>
+  <!-- Brillo -->
+  <circle cx="43" cy="43" r="6" fill="white" opacity="0.25"/>
+</svg>
