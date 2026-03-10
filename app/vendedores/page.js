@@ -633,12 +633,15 @@ export default function VendedoresPage() {
   // Cargar lista de períodos disponibles
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      console.log('[SOL-VEN] iniciando query periodos...');
+      const { data, error } = await supabase
         .from('neo_items_facturados')
         .select('periodo_reporte')
         .not('periodo_reporte', 'is', null)
         .limit(500);
+      console.log('[SOL-VEN] data:', data?.length, 'error:', error?.message, 'data[0]:', JSON.stringify(data?.[0]));
       const unicos = [...new Set((data||[]).map(r=>r.periodo_reporte).filter(Boolean))].sort().reverse();
+      console.log('[SOL-VEN] periodos unicos:', unicos);
       setPeriodos(unicos);
       if (unicos.length) setPeriodoSel(unicos[0]);
       // Default rango: último mes
