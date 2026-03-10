@@ -410,8 +410,8 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
 //   - Acumular histórico de múltiples períodos en la misma tabla
 //   - Re-subir el mismo período sin duplicar datos
 async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
-  if (!records.length) return 0;
-  const BATCH = 50;
+  if (!records.length) return { total: 0, esNuevoPeriodo: true };
+  const BATCH = 500;
   const fechaCargaActual = records[0]?.fecha_carga;
 
   // Normalizar período: si no viene, usar fecha del día como clave única
@@ -547,12 +547,15 @@ function TabSubir() {
         console.log(`[SOL] cargarASupabase → ${cantidad2} insertados, nuevo período: ${esNuevoPeriodo}`);
         cantidad = cantidad2;
 
-        res.estado  = 'ok';
+        res.estado  = cantidad > 0 ? 'ok' : 'error';
         res.tipo    = tipo;
         res.filas   = cantidad;
         res.filasTotales = records.length;
         res.periodo = periodo;
         res.esNuevoPeriodo = esNuevoPeriodo;
+        if (cantidad === 0 && records.length > 0) {
+          res.error = 'Se procesaron ' + records.length + ' filas pero ninguna se guardó en la BD. Revisar consola (F12).';
+        }
       } catch(e) {
         res.estado = 'error';
         res.error  = e.message;
