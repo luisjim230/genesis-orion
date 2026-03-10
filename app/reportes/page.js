@@ -216,15 +216,31 @@ function detectarTipo(filas, nombreArchivo) {
 }
 
 function extraerPeriodo(filas) {
+  let fechaReporte = null;
   for (let i = 0; i < Math.min(10, filas.length); i++) {
-    // Scan ALL columns in each row (period can be in any column due to merges)
     const fila = Array.isArray(filas[i]) ? filas[i] : [];
     for (const v of fila) {
       const s = String(v||'').trim();
+      // Caso 1: rango explícito "Del X al Y"
       if (s && (s.includes('Del ') || s.includes('del ')) && s.includes('/')) return s;
+      // Caso 2: capturar fecha del reporte formato DD/MM/YYYY HH:MM
+      if (!fechaReporte && s.match(/^\d{2}\/\d{2}\/\d{4}/)) fechaReporte = s;
     }
   }
-  return 'Sin período';
+  // Usar fecha del reporte como período (ej: "Día 2026-03-10")
+  if (fechaReporte) {
+    const parts = fechaReporte.split(' ')[0].split('/');
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      return `Día ${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+    }
+  }
+  // Fallback: usar fecha de hoy
+  const hoy = new Date();
+  const yy = hoy.getFullYear();
+  const mm = String(hoy.getMonth()+1).padStart(2,'0');
+  const dd = String(hoy.getDate()).padStart(2,'0');
+  return `Día ${yy}-${mm}-${dd}`;
 }
 
 function procesarExcel(filas, tabla, fechaCarga, periodo) {
