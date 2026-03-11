@@ -315,9 +315,7 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
           const fc = data[0].fecha_carga
           setFechaCarga(fc)
           try {
-            const utc = new Date(fc)
-            const cr = new Date(utc.getTime() - 6 * 3600000)
-            setFechaLegible(cr.toLocaleString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
+            setFechaLegible(new Date(fc).toLocaleString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Costa_Rica' }))
           } catch { setFechaLegible(fc?.substring(0, 16) || fc) }
           // Auto-ejecutar match al detectar fecha nueva
           ejecutarMatchRef.current = fc
