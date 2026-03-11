@@ -221,7 +221,7 @@ export default function Inventario() {
   const stats = calc.reduce((a, i) => { a[i._alerta] = (a[i._alerta] || 0) + 1; return a; }, {});
   const totalTCods = Object.keys(transitoMap).length;
   const totalTUnids = Object.values(transitoMap).reduce((s, v) => s + v, 0);
-  const calcAComprar = calc.filter(i => i._cantComprar > 0);
+  const calcAComprar = calc.filter(i => i._cantComprar > 0 || i._alerta === '🟡 Prestar atención');
 
   const porProveedor = {};
   calcAComprar.forEach(i => {
@@ -695,7 +695,7 @@ export default function Inventario() {
                           <td style={{ textAlign: 'right' }}>{fmtN(item.promedio_mensual, 0)}</td>
                           <td style={{ textAlign: 'right', color: parseFloat(item.existencias) <= 0 ? '#E53E3E' : undefined }}>{fmtN(item.existencias, 0)}</td>
                           <td style={{ textAlign: 'center', color: '#3182CE' }}>{item._transito > 0 ? `🚢 ${item._transito}` : '–'}</td>
-                          <td style={{ textAlign: 'right', fontWeight: item._cantComprar > 0 ? 700 : 400, color: item._cantComprar > 0 ? '#E53E3E' : '#ccc' }}>{item._cantComprar || '–'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: item._cantComprar > 0 ? 700 : 400, color: item._cantComprar > 0 ? '#E53E3E' : item._alerta === '🟡 Prestar atención' ? '#D69E2E' : '#ccc' }}>{item._cantComprar > 0 ? item._cantComprar : item._alerta === '🟡 Prestar atención' ? 0 : '–'}</td>
                           <td style={{ textAlign: 'right' }}>{fmtN(item.ultimo_costo)}</td>
                         </tr>
                       );
