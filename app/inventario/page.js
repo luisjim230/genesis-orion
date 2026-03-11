@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import KronosTab from './KronosTab';
 
 // ── Lógica de alertas ────────────────────────────────────────────────────────
 function calcularAlertas(items, transitoMap, dias) {
@@ -496,7 +497,7 @@ export default function Inventario() {
 
           {/* Tabs */}
           <div className="module-tabs">
-            {[`📋 Sugerencia de Compras (${calcAComprar.length})`, `🔍 Orden Manual (${ordenItems.length})`, `📊 Exportar Excel`].map((t, i) => (
+            {[`📋 Sugerencia de Compras (${calcAComprar.length})`, `🔍 Orden Manual (${ordenItems.length})`, `📊 Exportar Excel`, `📈 Proyección`].map((t, i) => (
               <button key={i} className={`module-tab${tab === i ? ' active' : ''}`} onClick={() => setTab(i)}>{t}</button>
             ))}
           </div>
@@ -757,6 +758,12 @@ export default function Inventario() {
               <div className="info-banner" style={{ marginTop: 16 }}>
                 <strong>El Excel incluye:</strong> Hoja "Filtrado agrupado" con alertas + columna 🚢 En tránsito, agrupado por proveedor. Hoja "Resumen por Proveedor".
               </div>
+            </div>
+          )}
+          {tab === 3 && (
+            <div style={{ padding: "4px 0" }}>
+              <p style={{ fontSize: "0.82rem", color: "#666", marginBottom: 16 }}>Proyección de cobertura por producto. Configurá el lead time por proveedor para calcular cuándo debés pedir.</p>
+              <KronosTab calc={calc} transitoMap={transitoMap} />
             </div>
           )}
         </>
