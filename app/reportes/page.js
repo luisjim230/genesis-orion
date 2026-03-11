@@ -579,6 +579,20 @@ function TabSubir() {
           }
         }
 
+        // ── Auto-match trazabilidad si es lista de ítems comprados ────────
+        if (tipo === 'neo_items_comprados' && cantidad > 0) {
+          try {
+            const matchRes = await fetch('/api/procesar-match', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fecha_carga: fechaCarga }),
+            });
+            const matchData = await matchRes.json();
+            console.log('[SOL] Match trazabilidad auto:', matchData);
+            if (matchData.ok) res.matchTrazabilidad = `✅ Match: ${matchData.completados} completos, ${matchData.parciales} parciales`;
+          } catch(e) { console.warn('[SOL] Match auto falló:', e.message); }
+        }
+
         res.estado  = cantidad > 0 ? 'ok' : 'error';
         res.tipo    = tipo;
         res.filas   = cantidad;
