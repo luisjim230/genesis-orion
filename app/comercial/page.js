@@ -152,27 +152,34 @@ function useItems(modo, periodoSel, fechaDesde, fechaHasta) {
 }
 
 // ── Hook: informe por vendedor (NC reales) ────────────────────────────────────
-function useInformeVendedor(modo, periodoSel) {
+function useInformeVendedor(modo, periodoSel, fechaDesde, fechaHasta) {
   const [informe, setInforme] = useState([]);
+  const [cargando, setCargando] = useState(false);
+
   useEffect(() => {
-    if (modo !== 'carga' || !periodoSel) { setInforme([]); return; }
+    const ready = modo === 'carga' ? !!periodoSel : !!(fechaDesde && fechaHasta);
+    if (!ready) { setInforme([]); return; }
+    setCargando(true);
     (async () => {
       let todos = [], off = 0;
       while (true) {
-        const { data } = await supabase
+        let q = supabase
           .from('neo_informe_ventas_vendedor')
           .select('*')
-          .eq('periodo_reporte', periodoSel)
           .range(off, off + 499);
+        if (modo === 'carga') q = q.eq('periodo_reporte', periodoSel);
+        const { data } = await q;
         if (!data?.length) break;
         todos = [...todos, ...data];
         if (data.length < 500) break;
         off += 500;
       }
       setInforme(todos);
+      setCargando(false);
     })();
-  }, [modo, periodoSel]);
-  return informe;
+  }, [modo, periodoSel, fechaDesde, fechaHasta]);
+
+  return { informe, cargando };
 }
 
 // ── Hook: metas por vendedor ─────────────────────────────────────────────────
@@ -224,97 +231,110 @@ function useHistorial() {
   return { historial, loading };
 }
 
-// ── Cálculo de métricas desde ítems facturados ────────────────────────────────
+// ── Cálculo de métricas — usa ítems si hay, sino usa informe de vendedor ──────
 function useMétricas(items, informeVendedor) {
   return useMemo(() => {
-    if (!items.length) return { vendedores: [], productos: [], marcas: [] };
+    // Si hay ítems facturados, calcular desde ahí (más detallado)
+    if (items.length > 0) {
+      const vMap = {}, pMap = {}, mMap = {};
 
-    const vMap = {}, pMap = {}, mMap = {};
+      for (const r of items) {
+        const vendedor = (r.vendedor || 'Sin vendedor').trim();
+        const prod     = (r.item || 'Sin descripción').trim();
+        const codigo   = (r.codigo_interno || '').trim();
+        const factura  = (r.factura || '').trim();
+        const cant     = Math.max(0, N(r.cantidad_facturada) - N(r.cantidad_devuelta));
+        const sub      = N(r.subtotal);
+        const desc     = N(r.descuento);
+        const venta    = sub - desc;
+        const costo    = N(r.costo_unitario) * cant;
+        const util     = venta - costo;
 
-    for (const r of items) {
-      const vendedor = (r.vendedor || 'Sin vendedor').trim();
-      const prod     = (r.item || 'Sin descripción').trim();
-      const codigo   = (r.codigo_interno || '').trim();
-      const factura  = (r.factura || '').trim();
-      const marca    = (r.territorio || '').trim() || 'Sin marca';
-      const cant     = Math.max(0, N(r.cantidad_facturada) - N(r.cantidad_devuelta));
-      const sub      = N(r.subtotal);
-      const desc     = N(r.descuento);
-      const venta    = sub - desc;
-      const costo    = N(r.costo_unitario) * cant;
-      const util     = venta - costo;
+        if (!vMap[vendedor]) vMap[vendedor] = { vendedor, ventas: 0, costo: 0, util: 0, items: 0, facturas: new Set() };
+        vMap[vendedor].ventas   += venta;
+        vMap[vendedor].costo    += costo;
+        vMap[vendedor].util     += util;
+        vMap[vendedor].items    += cant;
+        if (factura) vMap[vendedor].facturas.add(factura);
 
-      // Por vendedor
-      if (!vMap[vendedor]) vMap[vendedor] = { vendedor, ventas: 0, costo: 0, util: 0, items: 0, facturas: new Set() };
-      vMap[vendedor].ventas   += venta;
-      vMap[vendedor].costo    += costo;
-      vMap[vendedor].util     += util;
-      vMap[vendedor].items    += cant;
-      if (factura) vMap[vendedor].facturas.add(factura);
+        const pk = codigo || prod;
+        if (!pMap[pk]) pMap[pk] = { item: prod, codigo, ventas: 0, costo: 0, util: 0, unidades: 0, vendedores: new Set() };
+        pMap[pk].ventas   += venta;
+        pMap[pk].costo    += costo;
+        pMap[pk].util     += util;
+        pMap[pk].unidades += cant;
+        if (vendedor) pMap[pk].vendedores.add(vendedor);
 
-      // Por producto
-      const pk = codigo || prod;
-      if (!pMap[pk]) pMap[pk] = { item: prod, codigo, ventas: 0, costo: 0, util: 0, unidades: 0, vendedores: new Set() };
-      pMap[pk].ventas   += venta;
-      pMap[pk].costo    += costo;
-      pMap[pk].util     += util;
-      pMap[pk].unidades += cant;
-      if (vendedor) pMap[pk].vendedores.add(vendedor);
+        const bodega = (r.bodega || '').trim() || 'Sin bodega';
+        if (!mMap[bodega]) mMap[bodega] = { marca: bodega, ventas: 0, util: 0, unidades: 0 };
+        mMap[bodega].ventas   += venta;
+        mMap[bodega].util     += util;
+        mMap[bodega].unidades += cant;
+      }
 
-      // Por marca/bodega (proxy de proveedor)
-      const bodega = (r.bodega || '').trim() || 'Sin bodega';
-      if (!mMap[bodega]) mMap[bodega] = { marca: bodega, ventas: 0, util: 0, unidades: 0 };
-      mMap[bodega].ventas   += venta;
-      mMap[bodega].util     += util;
-      mMap[bodega].unidades += cant;
+      // Enriquecer con NC del informe oficial
+      const ncMap = {};
+      for (const r of informeVendedor) {
+        const v = (r.vendedor || '').trim();
+        if (!ncMap[v]) ncMap[v] = { nc: 0, ventas_netas_oficial: 0, util_oficial: 0 };
+        ncMap[v].nc                   += N(r.notas_sin_imp);
+        ncMap[v].ventas_netas_oficial += N(r.ventas_netas);
+        ncMap[v].util_oficial         += N(r.utilidad);
+      }
+
+      const vendedores = Object.values(vMap).map(v => {
+        const nc = ncMap[v.vendedor] || {};
+        const ventasNetas = nc.ventas_netas_oficial || v.ventas;
+        const utilNeta    = nc.util_oficial         || v.util;
+        const margen      = ventasNetas > 0 ? utilNeta / ventasNetas * 100 : 0;
+        return { ...v, facturas: v.facturas.size, nc: nc.nc || 0, ventasNetas, utilNeta, margen, _scoreMonto: ventasNetas, _scoreMargen: margen };
+      }).sort((a, b) => b.ventasNetas - a.ventasNetas);
+
+      const maxVentas = Math.max(...vendedores.map(v => v.ventasNetas), 1);
+      const maxMargen = Math.max(...vendedores.map(v => v.margen), 1);
+      for (const v of vendedores) v.scorePonderado = 0.6 * (v.ventasNetas / maxVentas) + 0.4 * (v.margen / maxMargen);
+
+      const productos = Object.values(pMap).map(p => ({
+        ...p, vendedores: [...p.vendedores].join(', '), margen: p.ventas > 0 ? p.util / p.ventas * 100 : 0,
+      })).sort((a, b) => b.util - a.util);
+
+      const marcas = Object.values(mMap).map(m => ({
+        ...m, margen: m.ventas > 0 ? m.util / m.ventas * 100 : 0,
+      })).sort((a, b) => b.util - a.util);
+
+      return { vendedores, productos, marcas };
     }
 
-    // Enriquecer vendedores con NC del informe oficial
-    const ncMap = {};
-    for (const r of informeVendedor) {
-      const v = (r.vendedor || '').trim();
-      if (!ncMap[v]) ncMap[v] = { nc: 0, ventas_netas_oficial: 0, util_oficial: 0 };
-      ncMap[v].nc                   += N(r.notas_sin_imp);
-      ncMap[v].ventas_netas_oficial += N(r.ventas_netas);
-      ncMap[v].util_oficial         += N(r.utilidad);
+    // Sin ítems — construir desde el informe de vendedor directamente
+    if (informeVendedor.length > 0) {
+      const vendedores = informeVendedor.map(r => {
+        const ventasNetas = N(r.ventas_netas);
+        const utilNeta    = N(r.utilidad);
+        const margen      = ventasNetas > 0 ? utilNeta / ventasNetas * 100 : 0;
+        const pctUtil     = N(String(r.pct_utilidad || '').replace('%', ''));
+        return {
+          vendedor:    (r.vendedor || '').trim(),
+          ventas:      N(r.ventas_sin_imp),
+          ventasNetas,
+          nc:          N(r.notas_sin_imp),
+          utilNeta,
+          costo:       N(r.costo),
+          items:       N(r.unidades_vendidas),
+          facturas:    N(r.transacciones),
+          margen:      margen || pctUtil,
+          _scoreMonto: ventasNetas,
+          _scoreMargen: margen || pctUtil,
+        };
+      }).filter(v => v.vendedor).sort((a, b) => b.ventasNetas - a.ventasNetas);
+
+      const maxVentas = Math.max(...vendedores.map(v => v.ventasNetas), 1);
+      const maxMargen = Math.max(...vendedores.map(v => v.margen), 1);
+      for (const v of vendedores) v.scorePonderado = 0.6 * (v.ventasNetas / maxVentas) + 0.4 * (v.margen / maxMargen);
+
+      return { vendedores, productos: [], marcas: [] };
     }
 
-    const vendedores = Object.values(vMap).map(v => {
-      const nc = ncMap[v.vendedor] || {};
-      const ventasNetas = nc.ventas_netas_oficial || v.ventas;
-      const utilNeta    = nc.util_oficial         || v.util;
-      const margen      = ventasNetas > 0 ? utilNeta / ventasNetas * 100 : 0;
-      return {
-        ...v,
-        facturas:       v.facturas.size,
-        nc:             nc.nc || 0,
-        ventasNetas,
-        utilNeta,
-        margen,
-        // Score ponderado: 60% monto, 40% margen (normalizado después)
-        _scoreMonto:  ventasNetas,
-        _scoreMargen: margen,
-      };
-    }).sort((a, b) => b.ventasNetas - a.ventasNetas);
-
-    const maxVentas = Math.max(...vendedores.map(v => v.ventasNetas), 1);
-    const maxMargen = Math.max(...vendedores.map(v => v.margen), 1);
-    for (const v of vendedores) {
-      v.scorePonderado = 0.6 * (v.ventasNetas / maxVentas) + 0.4 * (v.margen / maxMargen);
-    }
-
-    const productos = Object.values(pMap).map(p => ({
-      ...p,
-      vendedores: [...p.vendedores].join(', '),
-      margen: p.ventas > 0 ? p.util / p.ventas * 100 : 0,
-    })).sort((a, b) => b.util - a.util);
-
-    const marcas = Object.values(mMap).map(m => ({
-      ...m,
-      margen: m.ventas > 0 ? m.util / m.ventas * 100 : 0,
-    })).sort((a, b) => b.util - a.util);
-
-    return { vendedores, productos, marcas };
+    return { vendedores: [], productos: [], marcas: [] };
   }, [items, informeVendedor]);
 }
 
@@ -1084,15 +1104,20 @@ export default function ComercialPage() {
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
 
-  // Cargar períodos disponibles
+  // Cargar períodos disponibles — unión de todas las tablas comerciales
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from('neo_items_facturados')
-        .select('periodo_reporte')
-        .not('periodo_reporte', 'is', null)
-        .limit(500);
-      const unicos = [...new Set((data || []).map(r => r.periodo_reporte).filter(Boolean))].sort().reverse();
+      const [r1, r2, r3] = await Promise.all([
+        supabase.from('neo_items_facturados').select('periodo_reporte').not('periodo_reporte', 'is', null).limit(500),
+        supabase.from('neo_informe_ventas_vendedor').select('periodo_reporte').not('periodo_reporte', 'is', null).limit(500),
+        supabase.from('neo_informe_ventas_categoria').select('periodo_reporte').not('periodo_reporte', 'is', null).limit(500),
+      ]);
+      const todos = [
+        ...(r1.data || []),
+        ...(r2.data || []),
+        ...(r3.data || []),
+      ].map(r => r.periodo_reporte).filter(Boolean);
+      const unicos = [...new Set(todos)].sort().reverse();
       setPeriodos(unicos);
       if (unicos.length) setPeriodoSel(unicos[0]);
       const hoy = new Date();
@@ -1103,10 +1128,11 @@ export default function ComercialPage() {
   }, []);
 
   const { items, cargando }   = useItems(modo, periodoSel, fechaDesde, fechaHasta);
-  const informeVendedor       = useInformeVendedor(modo, periodoSel);
+  const { informe: informeVendedor, cargando: cargandoInforme } = useInformeVendedor(modo, periodoSel, fechaDesde, fechaHasta);
   const { metas, guardar }    = useMetas();
   const { historial, loading: histLoading } = useHistorial();
   const { vendedores, productos, marcas } = useMétricas(items, informeVendedor);
+  const cargandoTotal = cargando || cargandoInforme;
 
   const tabs = [
     { key: 'resumen',    label: '📊 Resumen' },
@@ -1143,12 +1169,12 @@ export default function ComercialPage() {
         ))}
       </div>
 
-      {tab === 'resumen'    && <TabResumen    vendedores={vendedores} cargando={cargando} metas={metas} periodoSel={periodoSel} />}
-      {tab === 'comisiones' && <TabComisiones vendedores={vendedores} cargando={cargando} metas={metas} guardarMeta={guardar} />}
+      {tab === 'resumen'    && <TabResumen    vendedores={vendedores} cargando={cargandoTotal} metas={metas} periodoSel={periodoSel} />}
+      {tab === 'comisiones' && <TabComisiones vendedores={vendedores} cargando={cargandoTotal} metas={metas} guardarMeta={guardar} />}
       {tab === 'historial'  && <TabHistorial  historial={historial} loading={histLoading} />}
       {tab === 'categorias' && <TabCategorias modo={modo} periodoSel={periodoSel} fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
-      {tab === 'productos'  && <TabProductos  productos={productos} cargando={cargando} />}
-      {tab === 'bodegas'    && <TabBodegas    marcas={marcas} cargando={cargando} />}
+      {tab === 'productos'  && <TabProductos  productos={productos} cargando={cargandoTotal} />}
+      {tab === 'bodegas'    && <TabBodegas    marcas={marcas} cargando={cargandoTotal} />}
     </div>
   );
 }
