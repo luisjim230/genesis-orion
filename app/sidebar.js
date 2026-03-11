@@ -18,6 +18,7 @@ const navGroups = [
       { href: '/inventario',   icon: '📦', name: 'Compras' },
       { href: '/trazabilidad', icon: '🔴', name: 'Trazabilidad de inventario y compras' },
       { href: '/rotacion',     icon: '🔄', name: 'Rotación de productos' },
+      { href: '/kronos',      icon: '📈', name: 'Proyección de inventario' },
       { href: '/reportes',     icon: '📊', name: 'Carga de reportes' },
       // { href: '/helios',    icon: '💡', name: 'Inteligencia Comercial' },  // oculto
     ],
