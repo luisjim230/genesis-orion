@@ -1173,7 +1173,7 @@ export default function ComercialPage() {
   const cargandoTotal = cargando || cargandoInforme;
 
   const tabs = [
-    { key: 'resumen',    label: '📊 Resumen' },
+    // { key: 'resumen',    label: '📊 Resumen' }, // oculto
     { key: 'comisiones', label: '💰 Comisiones' },
     { key: 'historial',  label: '📈 Historial' },
     { key: 'categorias', label: '📦 Categorías' },
@@ -1206,7 +1206,7 @@ export default function ComercialPage() {
         ))}
       </div>
 
-      {tab === 'resumen'    && <TabResumen    vendedores={vendedores} cargando={cargandoTotal} metas={metas} periodoSel={periodoSel} />}
+      {/* tab resumen oculto */}
       {tab === 'comisiones' && <TabComisiones vendedores={vendedores} cargando={cargandoTotal} metas={metas} guardarMeta={guardar} />}
       {tab === 'historial'  && <TabHistorial  historial={historial} loading={histLoading} />}
       {tab === 'categorias' && <TabCategorias modo={modo} periodoSel={periodoSel} fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
