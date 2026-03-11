@@ -24,14 +24,14 @@ export default function KronosPage() {
         // 2. En tránsito (ordenes_compra_items con recibido=false)
         const { data: transito, error: eTrans } = await supabase
           .from('ordenes_compra_items')
-          .select('codigo, cantidad_pedida, cantidad_recibida, recibido')
-          .eq('recibido', false);
+          .select('codigo, cantidad_ordenada, cantidad_recibida, estado_item')
+          .neq('estado_item', 'recibido');
         if (eTrans) throw eTrans;
 
         // Construir transitoMap: { codigo: cantidadEnTransito }
         const tMap = {};
         (transito || []).forEach(t => {
-          const pendiente = (parseFloat(t.cantidad_pedida) || 0) - (parseFloat(t.cantidad_recibida) || 0);
+          const pendiente = (parseFloat(t.cantidad_ordenada) || 0) - (parseFloat(t.cantidad_recibida) || 0);
           if (pendiente > 0) {
             tMap[t.codigo] = (tMap[t.codigo] || 0) + pendiente;
           }
