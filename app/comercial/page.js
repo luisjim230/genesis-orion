@@ -231,13 +231,8 @@ function useMetas() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const guardar = async (vendedor, campos) => {
-    const existe = !!metas[vendedor];
     const payload = { vendedor, ...campos };
-    if (existe) {
-      await supabase.from('sol_metas_vendedor').update(payload).eq('vendedor', vendedor);
-    } else {
-      await supabase.from('sol_metas_vendedor').insert(payload);
-    }
+    await supabase.from('sol_metas_vendedor').upsert(payload, { onConflict: 'vendedor' });
     await cargar();
   };
 
