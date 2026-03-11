@@ -152,6 +152,26 @@ function useItems(modo, periodoSel, fechaDesde, fechaHasta) {
 }
 
 // ── Hook: informe por vendedor (NC reales) ────────────────────────────────────
+// Parsea el string de período para obtener fechas reales
+function parsarPeriodo(periodoStr) {
+  // "Del DD/MM/YYYY al DD/MM/YYYY"
+  const m1 = periodoStr?.match(/Del\s+(\d{2})\/(\d{2})\/(\d{4})\s+al\s+(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m1) {
+    const [, d1, mo1, y1, d2, mo2, y2] = m1;
+    return {
+      desde: new Date(`${y1}-${mo1}-${d1}`),
+      hasta: new Date(`${y2}-${mo2}-${d2}`),
+    };
+  }
+  // "Día YYYY-MM-DD"
+  const m2 = periodoStr?.match(/Día\s+(\d{4}-\d{2}-\d{2})/);
+  if (m2) {
+    const d = new Date(m2[1]);
+    return { desde: d, hasta: d };
+  }
+  return null;
+}
+
 function useInformeVendedor(modo, periodoSel, fechaDesde, fechaHasta) {
   const [informe, setInforme] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -174,6 +194,19 @@ function useInformeVendedor(modo, periodoSel, fechaDesde, fechaHasta) {
         if (data.length < 500) break;
         off += 500;
       }
+
+      // En modo rango: filtrar sólo los períodos cuyas fechas caigan dentro del rango seleccionado
+      if (modo === 'rango') {
+        const desde = new Date(fechaDesde);
+        const hasta = new Date(fechaHasta + 'T23:59:59');
+        todos = todos.filter(r => {
+          const rango = parsarPeriodo(r.periodo_reporte);
+          if (!rango) return false;
+          // Incluir si hay solapamiento: el período empieza antes del hasta Y termina después del desde
+          return rango.desde <= hasta && rango.hasta >= desde;
+        });
+      }
+
       setInforme(todos);
       setCargando(false);
     })();
@@ -844,6 +877,16 @@ function TabCategorias({ modo, periodoSel, fechaDesde, fechaHasta }) {
         if (data.length < 1000) break;
         off += 1000;
       }
+      // En modo rango: filtrar por solapamiento de fechas
+      if (modo === 'rango') {
+        const desde = new Date(fechaDesde);
+        const hasta = new Date(fechaHasta + 'T23:59:59');
+        todos = todos.filter(r => {
+          const rango = parsarPeriodo(r.periodo_reporte);
+          if (!rango) return false;
+          return rango.desde <= hasta && rango.hasta >= desde;
+        });
+      }
       setDatos(todos.filter(r => r.categoria && r.categoria.trim()));
       setCarg(false);
     })();
@@ -1140,7 +1183,6 @@ export default function ComercialPage() {
     { key: 'historial',  label: '📈 Historial' },
     { key: 'categorias', label: '📦 Categorías' },
     { key: 'productos',  label: '🔍 Productos' },
-    { key: 'bodegas',    label: '🏭 Bodegas' },
   ];
 
   return (
@@ -1174,7 +1216,6 @@ export default function ComercialPage() {
       {tab === 'historial'  && <TabHistorial  historial={historial} loading={histLoading} />}
       {tab === 'categorias' && <TabCategorias modo={modo} periodoSel={periodoSel} fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
       {tab === 'productos'  && <TabProductos  productos={productos} cargando={cargandoTotal} />}
-      {tab === 'bodegas'    && <TabBodegas    marcas={marcas} cargando={cargandoTotal} />}
     </div>
   );
 }

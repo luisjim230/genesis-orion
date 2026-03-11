@@ -547,6 +547,38 @@ function TabSubir() {
         console.log(`[SOL] cargarASupabase → ${cantidad2} insertados, nuevo período: ${esNuevoPeriodo}`);
         cantidad = cantidad2;
 
+        // ── Auto-crear vendedores en sol_metas_vendedor ───────────────────
+        // Si es un informe de ventas por vendedor, crear filas en sol_metas_vendedor
+        // para los vendedores nuevos (sin pisar parámetros ya configurados)
+        if (tipo === 'neo_informe_ventas_vendedor' && records.length > 0) {
+          try {
+            const vendedoresEnReporte = [...new Set(records.map(r => r.vendedor).filter(Boolean))];
+            // Traer los que ya existen
+            const { data: yaExisten } = await supabase
+              .from('sol_metas_vendedor')
+              .select('vendedor');
+            const setExistentes = new Set((yaExisten || []).map(r => r.vendedor));
+            const nuevosVendedores = vendedoresEnReporte.filter(v => !setExistentes.has(v));
+            if (nuevosVendedores.length > 0) {
+              const filas = nuevosVendedores.map(v => ({
+                vendedor: v,
+                meta_ventas: 0,
+                meta_utilidad: 0,
+                pct_comision: 3,
+                bono_meta: 1,
+                bono_margen: 1,
+                umbral_margen: 35,
+              }));
+              await supabase.from('sol_metas_vendedor').insert(filas);
+              console.log(`[SOL] Auto-creados ${nuevosVendedores.length} vendedores nuevos:`, nuevosVendedores.join(', '));
+            } else {
+              console.log('[SOL] Todos los vendedores ya existen en sol_metas_vendedor');
+            }
+          } catch(e) {
+            console.warn('[SOL] No se pudieron auto-crear vendedores:', e.message);
+          }
+        }
+
         res.estado  = cantidad > 0 ? 'ok' : 'error';
         res.tipo    = tipo;
         res.filas   = cantidad;
