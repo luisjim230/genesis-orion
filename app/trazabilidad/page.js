@@ -45,8 +45,19 @@ function TabAlertas({ ordenes, items, loading }) {
   const [filtroProv, setFiltroProv] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [busqueda, setBusqueda] = useState('')
+  const [confirmandoCancelar, setConfirmandoCancelar] = useState(null)
+  const [cancelando, setCancelando] = useState(false)
 
   const proveedores = useMemo(() => [...new Set(items.map(it => it.proveedor).filter(Boolean))].sort(), [items])
+
+  async function cancelarItem(item) {
+    setCancelando(true)
+    try {
+      await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).eq('id', item.id)
+      setConfirmandoCancelar(null)
+    } catch(e) { console.error(e) }
+    setCancelando(false)
+  }
 
   const pendientes = useMemo(() => {
     return items
@@ -126,7 +137,7 @@ function TabAlertas({ ordenes, items, loading }) {
         <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 480, border: '1px solid var(--border-soft)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83em' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}><tr>
-              {['Estado', '⏱️ Días', 'Código', 'Nombre del producto', 'Proveedor', 'Orden / Lote', 'Cant. ordenada', 'Cant. recibida', 'Pendiente'].map(h => (
+              {['Estado', '⏱️ Días', 'Código', 'Nombre del producto', 'Proveedor', 'Orden / Lote', 'Cant. ordenada', 'Cant. recibida', 'Pendiente', ''].map(h => (
                 <th key={h} style={S.th}>{h}</th>
               ))}
             </tr></thead>
@@ -149,12 +160,31 @@ function TabAlertas({ ordenes, items, loading }) {
                     <td style={{ ...S.td, textAlign: 'right' }}>{it.cantidad_ordenada || 0}</td>
                     <td style={{ ...S.td, textAlign: 'right', color: '#68d391' }}>{it.cantidad_recibida || 0}</td>
                     <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: '#f6ad55' }}>{it.pendiente}</td>
+                    <td style={S.td}><button onClick={() => setConfirmandoCancelar(it)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fc818166', borderRadius: 6, color: '#fc8181', cursor: 'pointer', fontSize: '0.78em', whiteSpace: 'nowrap' }}>✕ Cancelar</button></td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
           <div style={{ fontSize: '0.75em', color: MUTED, marginTop: 8, textAlign: 'right' }}>{pendientes.length} ítem(s) pendientes</div>
+        </div>
+      )}
+
+      {confirmandoCancelar && (
+        <div style={{ position: 'fixed', inset: 0, background: '#00000066', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', border: '1px solid #fc818155', borderRadius: 12, padding: 24, maxWidth: 420, width: '90%', boxShadow: '0 8px 32px #0003' }}>
+            <div style={{ fontSize: '1.1em', fontWeight: 700, color: '#fc8181', marginBottom: 10 }}>⚠️ Cancelar ítem</div>
+            <p style={{ color: '#555', fontSize: '0.88em', marginBottom: 8 }}>¿Confirmás que este ítem <strong>nunca va a llegar</strong>?</p>
+            <div style={{ background: '#f7f9fc', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.85em' }}>
+              <div style={{ fontWeight: 600, color: '#2a3a50' }}>{confirmandoCancelar.nombre}</div>
+              <div style={{ color: '#888', marginTop: 2 }}>{confirmandoCancelar.proveedor} · {confirmandoCancelar.dias} días esperando</div>
+            </div>
+            <p style={{ color: '#aaa', fontSize: '0.78em', marginBottom: 16 }}>El ítem se marcará como <strong style={{ color: '#fc8181' }}>cancelado</strong>. Dejará de aparecer en tránsito y en alertas, pero quedará en el historial de la orden.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmandoCancelar(null)} style={{ ...S.btnSm(), padding: '8px 16px' }}>Mantener en tránsito</button>
+              <button onClick={() => cancelarItem(confirmandoCancelar)} disabled={cancelando} style={{ ...S.btn('#fc8181'), opacity: cancelando ? 0.6 : 1 }}>{cancelando ? 'Cancelando...' : 'Sí, cancelar ítem'}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
