@@ -18,7 +18,7 @@ export default function KronosPage() {
         const { data: inv, error: eInv } = await supabase
           .from('neo_minimos_maximos')
           .select('*')
-          .eq('activo', true);
+          .eq('activo', 'Sí');
         if (eInv) throw eInv;
 
         // 2. En tránsito (ordenes_compra_items con recibido=false)
