@@ -1182,7 +1182,7 @@ export default function ComercialPage() {
     { key: 'comisiones', label: '💰 Comisiones' },
     { key: 'historial',  label: '📈 Historial' },
     { key: 'categorias', label: '📦 Categorías' },
-    { key: 'productos',  label: '🔍 Productos' },
+    
   ];
 
   return (
@@ -1192,7 +1192,7 @@ export default function ComercialPage() {
         💼 Comercial
       </h1>
       <p style={{ color: C.muted, margin: '0 0 20px', fontSize: '0.9rem' }}>
-        Ventas netas · Comisiones · Historial y proyecciones · Categorías · Productos
+        Ventas netas · Comisiones · Historial y proyecciones · Categorías
       </p>
 
       <SelectorPeriodo
@@ -1215,7 +1215,7 @@ export default function ComercialPage() {
       {tab === 'comisiones' && <TabComisiones vendedores={vendedores} cargando={cargandoTotal} metas={metas} guardarMeta={guardar} />}
       {tab === 'historial'  && <TabHistorial  historial={historial} loading={histLoading} />}
       {tab === 'categorias' && <TabCategorias modo={modo} periodoSel={periodoSel} fechaDesde={fechaDesde} fechaHasta={fechaHasta} />}
-      {tab === 'productos'  && <TabProductos  productos={productos} cargando={cargandoTotal} />}
+      
     </div>
   );
 }
