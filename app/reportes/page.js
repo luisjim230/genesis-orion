@@ -644,7 +644,7 @@ function TabSubir() {
                 ['🏆 Ítems más vendidos',                 '🔄 Rotación · 👥 Equipo de ventas'],
                 ['💰 Rentabilidad por proveedor',         '👥 Equipo de ventas'],
                 ['📋 Lista de ítems',                     '🔄 Rotación de productos'],
-                ['🧾 Lista de ítems facturados',          '👥 Ventas — Pestaña Productos'],
+                ['🧾 Lista de ítems facturados',          '👥 Ventas — Pestaña Productos · 📈 Proyección de inventario'],
                 ['👤 Informe de ventas por vendedor',     '👥 Ventas — Resumen + Comisiones'],
                 ['📦 Informe de ventas por Categoría',   '👥 Ventas — Categorías'],
                 ['📑 Consolidado de facturas',            '👥 Equipo de ventas'],
