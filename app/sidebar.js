@@ -25,7 +25,7 @@ const navGroups = [
   {
     label: 'Comercial',
     items: [
-      // { href: '/vendedores',   icon: '👥', name: 'Equipo de ventas' }, // DESACTIVADO TEMPORALMENTE
+      { href: '/comercial', icon: '💼', name: 'Comercial' },
     ],
   },
   {
