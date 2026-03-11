@@ -4,41 +4,49 @@ import { supabase } from '../../lib/supabase';
 import KronosTab from '../inventario/KronosTab';
 
 export default function KronosPage() {
-  const [calc, setCalc]           = useState([]);
+  const [calc, setCalc] = useState([]);
   const [transitoMap, setTransitoMap] = useState({});
-  const [cargando, setCargando]   = useState(true);
-  const [error, setError]         = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+  const [progreso, setProgreso] = useState(0);
 
   useEffect(() => {
     async function cargarDatos() {
       setCargando(true);
       setError(null);
       try {
-        // 1. Inventario principal
-        const { data: inv, error: eInv } = await supabase
-          .from('neo_minimos_maximos')
-          .select('*')
-          .eq('activo', 'Sí');
-        if (eInv) throw eInv;
+        // Paginar para traer todos los productos (Supabase limita 1000 por request)
+        const BATCH = 1000;
+        let allInv = [];
+        let offset = 0;
+        while (true) {
+          const { data: inv, error: eInv } = await supabase
+            .from('neo_minimos_maximos')
+            .select('*')
+            .eq('activo', 'Sí')
+            .range(offset, offset + BATCH - 1);
+          if (eInv) throw eInv;
+          if (!inv || inv.length === 0) break;
+          allInv = allInv.concat(inv);
+          setProgreso(allInv.length);
+          if (inv.length < BATCH) break;
+          offset += BATCH;
+        }
 
-        // 2. En tránsito (ordenes_compra_items con recibido=false)
         const { data: transito, error: eTrans } = await supabase
           .from('ordenes_compra_items')
           .select('codigo, cantidad_ordenada, cantidad_recibida, estado_item')
           .neq('estado_item', 'recibido');
         if (eTrans) throw eTrans;
 
-        // Construir transitoMap: { codigo: cantidadEnTransito }
         const tMap = {};
         (transito || []).forEach(t => {
           const pendiente = (parseFloat(t.cantidad_ordenada) || 0) - (parseFloat(t.cantidad_recibida) || 0);
-          if (pendiente > 0) {
-            tMap[t.codigo] = (tMap[t.codigo] || 0) + pendiente;
-          }
+          if (pendiente > 0) tMap[t.codigo] = (tMap[t.codigo] || 0) + pendiente;
         });
 
         setTransitoMap(tMap);
-        setCalc(inv || []);
+        setCalc(allInv);
       } catch (err) {
         console.error('[Kronos] Error cargando datos:', err);
         setError(err.message || 'Error al cargar datos');
@@ -63,7 +71,7 @@ export default function KronosPage() {
       {cargando && (
         <div style={{ textAlign: 'center', padding: 60, color: '#666' }}>
           <div style={{ fontSize: '2rem', marginBottom: 12 }}>⏳</div>
-          Cargando inventario...
+          Cargando inventario{progreso > 0 ? ` (${progreso} productos cargados...)` : '...'}
         </div>
       )}
 
