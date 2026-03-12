@@ -47,7 +47,7 @@ export default function Sidebar(){
             <rect x="0"  y="26" width="10" height="9" rx="2" fill="#ED6E2E"/>
             <rect x="14" y="26" width="30" height="9" rx="2" fill="#ED6E2E"/>
           </svg>
-          {!collapsed&&<div style={{lineHeight:1.1}}><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:700,color:'rgba(253,244,244,0.50)',fontSize:7,letterSpacing:'0.10em',textTransform:'uppercase',marginBottom:1}}>DEPÓSITO JIMÉNEZ</div><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:900,color:'#ED6E2E',fontSize:18,letterSpacing:'0.04em',lineHeight:1}}>SOL</div><div style={{fontFamily:"'Rubik',sans-serif",fontWeight:400,color:'rgba(253,244,244,0.40)',fontSize:7.5,letterSpacing:'0.06em',textTransform:'uppercase',marginTop:2}}>Operaciones y Logística</div></div>}
+          {!collapsed&&<div style={{lineHeight:1.1}}><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:700,color:'rgba(253,244,244,0.50)',fontSize:7,letterSpacing:'0.10em',textTransform:'uppercase',marginBottom:1}}>DEPÓSITO JIMÉNEZ</div><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:900,color:'#ED6E2E',fontSize:18,letterSpacing:'0.04em',lineHeight:1}}>SOL</div><div style={{fontFamily:"'Rubik',sans-serif",fontWeight:400,color:'rgba(253,244,244,0.40)',fontSize:7.5,letterSpacing:'0.06em',textTransform:'uppercase',marginTop:2}}>Sistema de Operaciones y Logística</div></div>}
         </div>
         {!loading&&perfil&&!collapsed&&(
           <div style={{padding:'10px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
