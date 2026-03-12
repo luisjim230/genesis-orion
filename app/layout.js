@@ -31,7 +31,7 @@ export default function RootLayout({ children }) {
       <body className={rubik.className} style={{
         margin: 0,
         display: 'flex',
-        background: '#FDF4F4',
+        background: '#0f1115',
         minHeight: '100vh',
       }}>
         <Sidebar />
@@ -39,7 +39,7 @@ export default function RootLayout({ children }) {
           flex: 1,
           marginLeft: '240px',
           minHeight: '100vh',
-          background: '#FDF4F4',
+          background: '#0f1115',
           padding: '32px 36px',
         }}>
           {children}
