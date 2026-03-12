@@ -31,7 +31,7 @@ export default function LoginPage() {
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'linear-gradient(135deg, #5E2733 0%, #3a1520 60%, #1a0a0e 100%)', fontFamily:"'Rubik','DM Sans',sans-serif" }}>
         <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.10)', borderRadius:20, padding:'48px 44px', width:'100%', maxWidth:400, boxShadow:'0 24px 64px rgba(0,0,0,0.40)' }}>
           <div style={{ textAlign:'center', marginBottom:36 }}>
-            <svg width="56" height="48" viewBox="0 0 56 48" style={{ marginBottom:10 }}>
+            <svg width="56" height="48" viewBox="0 0 56 48" style={{ marginBottom:10, display:'block', margin:'0 auto 10px' }}>
               {/* Fila 1 */}
               <rect x="0"  y="0"  width="16" height="9" rx="2" fill="rgba(255,255,255,0.90)"/>
               <rect x="20" y="0"  width="24" height="9" rx="2" fill="#ED6E2E"/>
