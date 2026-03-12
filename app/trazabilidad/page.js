@@ -98,7 +98,7 @@ function TabAlertas({ ordenes, items, loading }) {
         ].map(([l, v, c]) => (
           <div key={l} style={{ background: SURF, border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: '0.72em', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
-            <div style={{ fontSize: '1.8em', fontWeight: 700, color: '#fff', marginTop: 4 }}>{v}</div>
+            <div style={{ fontSize: '1.8em', fontWeight: 700, color: c, marginTop: 4 }}>{v}</div>
           </div>
         ))}
       </div>

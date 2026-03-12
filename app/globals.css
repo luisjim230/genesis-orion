@@ -29,8 +29,8 @@
 html, body {
   height: 100%;
   font-family: var(--font-body);
-  background: var(--cream);
-  color: var(--text-primary);
+  background: #0f1115;
+  color: rgba(253,244,244,0.88);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
