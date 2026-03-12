@@ -308,12 +308,16 @@ export default function Inventario() {
       for (const prov of proveedoresSeleccionados) {
         const items = porProveedor[prov] || [];
         if (!items.length) continue;
-        payload[prov] = items.map(i => ({
-          codigo: i.codigo,
-          cantidad: getCantidad(prov, i.codigo, i._cantComprar),
-          costo: parseFloat(i.ultimo_costo) || 0,
-          descuento: 0,
-        }));
+        const itemsFiltrados = items
+          .map(i => ({
+            codigo: i.codigo,
+            cantidad: getCantidad(prov, i.codigo, i._cantComprar),
+            costo: parseFloat(i.ultimo_costo) || 0,
+            descuento: 0,
+          }))
+          .filter(i => i.cantidad > 0);
+        if (!itemsFiltrados.length) continue;
+        payload[prov] = itemsFiltrados;
       }
 
       // ── Dividir cada proveedor en lotes de máx 20 líneas ──────────────────
