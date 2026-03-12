@@ -39,15 +39,18 @@ export default function Sidebar(){
       <style>{nunitoStyle}</style>
       <aside style={{width:collapsed?64:240,background:'#5E2733',borderRight:'1px solid rgba(255,255,255,0.06)',position:'fixed',top:0,left:0,height:'100vh',overflowY:'auto',overflowX:'hidden',display:'flex',flexDirection:'column',zIndex:100,transition:'width 0.2s ease'}}>
         <div style={{padding:collapsed?'16px 12px':'18px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-          <svg width={collapsed?32:40} height={collapsed?28:34} viewBox="0 0 56 48" style={{flexShrink:0}}>
-            <rect x="0"  y="0"  width="16" height="9" rx="2" fill="rgba(255,255,255,0.90)"/>
-            <rect x="20" y="0"  width="24" height="9" rx="2" fill="#ED6E2E"/>
-            <rect x="0"  y="13" width="24" height="9" rx="2" fill="#ED6E2E"/>
-            <rect x="28" y="13" width="16" height="9" rx="2" fill="#ED6E2E"/>
-            <rect x="0"  y="26" width="10" height="9" rx="2" fill="#ED6E2E"/>
-            <rect x="14" y="26" width="30" height="9" rx="2" fill="#ED6E2E"/>
+          <svg width={collapsed?32:36} height={collapsed?32:36} viewBox="0 0 36 36" style={{flexShrink:0}}>
+            <circle cx="18" cy="18" r="7" fill="#ED6E2E"/>
+            <line x1="18" y1="2" x2="18" y2="8" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="18" y1="28" x2="18" y2="34" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="2" y1="18" x2="8" y2="18" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="28" y1="18" x2="34" y2="18" stroke="rgba(253,244,244,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+            <line x1="6.1" y1="6.1" x2="10.3" y2="10.3" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="25.7" y1="25.7" x2="29.9" y2="29.9" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="29.9" y1="6.1" x2="25.7" y2="10.3" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
+            <line x1="10.3" y1="25.7" x2="6.1" y2="29.9" stroke="#ED6E2E" strokeWidth="2.2" strokeLinecap="round" opacity="0.75"/>
           </svg>
-          {!collapsed&&<div style={{lineHeight:1.1}}><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:700,color:'rgba(253,244,244,0.50)',fontSize:7,letterSpacing:'0.10em',textTransform:'uppercase',marginBottom:1}}>DEPÓSITO JIMÉNEZ</div><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:900,color:'#ED6E2E',fontSize:18,letterSpacing:'0.04em',lineHeight:1}}>SOL</div><div style={{fontFamily:"'Rubik',sans-serif",fontWeight:400,color:'rgba(253,244,244,0.40)',fontSize:7.5,letterSpacing:'0.06em',textTransform:'uppercase',marginTop:2}}>Operaciones y Logística</div></div>}
+          {!collapsed&&<div style={{lineHeight:1}}><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:800,color:'rgba(253,244,244,0.55)',fontSize:6.5,letterSpacing:'0.10em',textTransform:'uppercase',marginBottom:2}}>SISTEMA DE OPERACIONES Y</div><div style={{fontFamily:"'Nunito',sans-serif",fontWeight:900,color:'#ED6E2E',fontSize:19,letterSpacing:'0.02em',lineHeight:1.05}}>LOGÍSTICA</div></div>}
         </div>
         {!loading&&perfil&&!collapsed&&(
           <div style={{padding:'10px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
