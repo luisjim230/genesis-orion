@@ -232,7 +232,7 @@ export default function Contenedores() {
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px',marginBottom:'14px'}}>
                   <div>
                     <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-                      <span style={{fontWeight:700,color:'#fff',fontSize:'1.05em'}}>🚢 {env.nombre}</span>
+                      <span style={{fontWeight:700,color:'var(--text-primary)',fontSize:'1.05em'}}>🚢 {env.nombre}</span>
                       <span style={S.badge(color)}>{env.estado}</span>
                       {env.incoterm && <span style={{fontSize:'0.78em',color:'#c8a84b',fontWeight:600}}>{env.incoterm}</span>}
                     </div>
@@ -257,7 +257,7 @@ export default function Contenedores() {
                   ].map(([l,v,delta])=>(
                     <div key={l} style={{background:'var(--cream)',borderRadius:'8px',padding:'8px 10px'}}>
                       <div style={{fontSize:'0.65em',color:'var(--text-muted)',textTransform:'uppercase'}}>{l}</div>
-                      <div style={{fontSize:'0.92em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
+                      <div style={{fontSize:'0.92em',fontWeight:600,color:'var(--text-primary)',marginTop:'2px'}}>{v}</div>
                       {delta && <div style={{fontSize:'0.68em',color:delta.color,marginTop:'2px'}}>{delta.label}</div>}
                     </div>
                   ))}
@@ -311,7 +311,7 @@ export default function Contenedores() {
       {/* ── TAB 1: FORMULARIO ── */}
       {tab===1 && (
         <div style={S.card}>
-          <div style={{fontWeight:700,color:'#fff',marginBottom:'20px',fontSize:'1.05em'}}>{editId?'✏️ Editar expediente':'➕ Registrar nuevo envío'}</div>
+          <div style={{fontWeight:700,color:'var(--text-primary)',marginBottom:'20px',fontSize:'1.05em'}}>{editId?'✏️ Editar expediente':'➕ Registrar nuevo envío'}</div>
 
           <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>📋 Datos generales</div>
           <div style={S.grid3}>
@@ -403,7 +403,7 @@ export default function Contenedores() {
               <div key={env.id} style={{...S.card,borderLeft:'3px solid '+color,marginBottom:'12px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px',marginBottom:'12px'}}>
                   <div>
-                    <div style={{fontWeight:700,color:'#fff'}}>🚢 {env.nombre}</div>
+                    <div style={{fontWeight:700,color:'var(--text-primary)'}}>🚢 {env.nombre}</div>
                     <div style={{fontSize:'0.82em',color:'#8899aa'}}>{env.proveedor}{env.naviero?' · '+env.naviero:''}</div>
                   </div>
                   <div style={{display:'flex',gap:'8px'}}>
@@ -415,7 +415,7 @@ export default function Contenedores() {
                   {[['ETA',fmtF(env.eta)],['ETD',fmtF(env.etd)],['Comprometido',usd(comprometido)],['Pendiente',usd(pendiente)],['Docs',docs+'/5'],['TLC',env.tlc?'✅ Sí':'❌ No']].map(([l,v])=>(
                     <div key={l} style={{background:'var(--cream)',borderRadius:'8px',padding:'8px 10px'}}>
                       <div style={{fontSize:'0.65em',color:'var(--text-muted)',textTransform:'uppercase'}}>{l}</div>
-                      <div style={{fontSize:'0.9em',fontWeight:600,color:'#fff',marginTop:'2px'}}>{v}</div>
+                      <div style={{fontSize:'0.9em',fontWeight:600,color:'var(--text-primary)',marginTop:'2px'}}>{v}</div>
                     </div>
                   ))}
                 </div>
