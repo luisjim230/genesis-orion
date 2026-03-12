@@ -890,7 +890,7 @@ export default function SocialPage() {
   const [tab, setTab] = useState('listos')
 
   return (
-    <div style={{ fontFamily:'DM Sans,sans-serif', color:TEXT, padding:'28px 32px', minHeight:'100vh', background:BG }}>
+    <div style={{ fontFamily:'DM Sans,sans-serif', color:TEXT, padding:'28px 32px', minHeight:'100vh', background:BG, margin:'-32px -36px', minWidth:'calc(100% + 72px)' }}>
       <div style={{ marginBottom:24 }}>
         <span style={{ fontSize:'0.68rem', fontWeight:700, letterSpacing:'0.10em', textTransform:'uppercase', color:GOLD, display:'block', marginBottom:4 }}>
           Redes Sociales · SOL
