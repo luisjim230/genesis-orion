@@ -43,8 +43,6 @@ export default function EntregasTrazabilidad() {
   const [filtroMes, setFiltroMes] = useState(new Date().getMonth())
   const [filtroAnio, setFiltroAnio] = useState(new Date().getFullYear())
   const [filtroEstado, setFiltroEstado] = useState('todos')
-  const [pagina, setPagina] = useState(1)
-  const POR_PAGINA = 20
   const [busqueda, setBusqueda] = useState('')
   const [vista, setVista] = useState('lista')
   const [confirm, setConfirm] = useState(null)
@@ -67,7 +65,6 @@ export default function EntregasTrazabilidad() {
   useEffect(() => { fetchRegistros() }, [fetchRegistros])
 
   const registrosFiltrados = registros.filter(r => {
-
     const matchEstado = filtroEstado === 'todos' || r.estado === filtroEstado
     const q = busqueda.toLowerCase()
     const matchBusq = !q || r.nombre_cliente?.toLowerCase().includes(q) || r.numero_factura?.toLowerCase().includes(q) || r.chofer?.toLowerCase().includes(q) || r.facturador?.toLowerCase().includes(q) || r.lugar_entrega?.toLowerCase().includes(q)
@@ -217,7 +214,7 @@ export default function EntregasTrazabilidad() {
             {!loading && registrosFiltrados.length === 0 && (
               <div style={s.empty}>No hay entregas que coincidan con los filtros.</div>
             )}
-            {registrosFiltrados.slice((pagina-1)*20, pagina*20).map(r => {
+            {registrosFiltrados.map(r => {
               const est = estadoInfo(r.estado)
               const isExp = expandido === r.id
               const saldo = Number(r.saldo_pendiente||0)
@@ -266,13 +263,6 @@ export default function EntregasTrazabilidad() {
                 </div>
               )
             })}
-            {Math.ceil(registrosFiltrados.length / 20) > 1 && (
-              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:'20px 0'}}>
-                <button onClick={()=>setPagina(p=>Math.max(1,p-1))} disabled={pagina===1} style={{padding:'7px 18px',borderRadius:8,border:'1px solid #EAE0E0',background:pagina===1?'#f5f0f0':'#fff',color:pagina===1?'#ccc':'#5E2733',cursor:pagina===1?'default':'pointer',fontWeight:600}}>← Anterior</button>
-                <span style={{fontSize:'0.85rem',color:'#8a7070'}}>Página {pagina} de {Math.ceil(registrosFiltrados.length/20)}</span>
-                <button onClick={()=>setPagina(p=>Math.min(Math.ceil(registrosFiltrados.length/20),p+1))} disabled={pagina===Math.ceil(registrosFiltrados.length/20)} style={{padding:'7px 18px',borderRadius:8,border:'1px solid #EAE0E0',background:pagina===Math.ceil(registrosFiltrados.length/20)?'#f5f0f0':'#fff',color:pagina===Math.ceil(registrosFiltrados.length/20)?'#ccc':'#5E2733',cursor:pagina===Math.ceil(registrosFiltrados.length/20)?'default':'pointer',fontWeight:600}}>Siguiente →</button>
-              </div>
-            )}
           </div>
         </>
       )}
