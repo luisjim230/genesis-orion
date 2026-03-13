@@ -48,10 +48,60 @@ const S = {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+// plat puede ser string (legacy) o array
+function normPlat(plat) {
+  if (!plat) return []
+  if (Array.isArray(plat)) return plat
+  return [plat]
+}
+
 function PlatBadge({ plat }) {
-  if (!plat || !PLAT[plat]) return null
-  const p = PLAT[plat]
-  return <span style={S.badge(p.color)}>{p.icon} {p.label}</span>
+  const plats = normPlat(plat).filter(k => PLAT[k])
+  if (plats.length === 0) return null
+  return (
+    <span style={{display:'inline-flex', gap:4, flexWrap:'wrap'}}>
+      {plats.map(k => {
+        const p = PLAT[k]
+        return <span key={k} style={S.badge(p.color)}>{p.icon} {p.label}</span>
+      })}
+    </span>
+  )
+}
+
+// Selector multi-plataforma con checkboxes
+function PlatSelector({ value, onChange }) {
+  const selected = normPlat(value)
+  function toggle(k) {
+    const next = selected.includes(k) ? selected.filter(x=>x!==k) : [...selected, k]
+    onChange(next)
+  }
+  return (
+    <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+      {Object.entries(PLAT).map(([k,p])=>{
+        const on = selected.includes(k)
+        return (
+          <div key={k} onClick={()=>toggle(k)} style={{
+            display:'flex', alignItems:'center', gap:6,
+            padding:'7px 14px', borderRadius:8, cursor:'pointer',
+            background: on ? p.color+'22' : SURF2,
+            border: `1px solid ${on ? p.color+'88' : BORDER}`,
+            color: on ? p.color : MUTED,
+            fontSize:'0.84em', fontWeight: on?600:400,
+            transition:'all 0.12s', userSelect:'none',
+          }}>
+            <span style={{
+              width:14, height:14, borderRadius:3, border:`2px solid ${on?p.color:BORDER}`,
+              background: on ? p.color : 'transparent',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:'0.7em', color:'#fff', flexShrink:0,
+            }}>{on?'✓':''}</span>
+            {p.icon} {p.label}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function EstadoBadge({ estado }) {
@@ -69,6 +119,20 @@ function Sel({ value, onChange, options, style={} }) {
   )
 }
 
+function FiltroPlat({ value, onChange }) {
+  return (
+    <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+      {[['todas','🎬 Todas'],['tiktok','🎵 TikTok'],['instagram','📸 Instagram'],['facebook','👍 Facebook'],['youtube','▶️ YouTube']].map(([v,l])=>(
+        <button key={v} onClick={()=>onChange(v)} style={{
+          padding:'6px 14px', borderRadius:20, border:`1px solid ${BORDER}`,
+          background: value===v ? GOLD : SURF2, color: value===v ? '#fff' : MUTED,
+          cursor:'pointer', fontSize:'0.8em', fontFamily:'DM Sans,sans-serif'
+        }}>{l}</button>
+      ))}
+    </div>
+  )
+}
+
 function Msg({ msg }) {
   if (!msg) return null
   return (
@@ -82,7 +146,7 @@ function Msg({ msg }) {
 // ─── FORM CONTENIDO ──────────────────────────────────────────────────────────
 function FormContenido({ item, onClose, onSaved }) {
   const EMPTY = {
-    titulo:'', plataforma:'tiktok', estado:'idea',
+    titulo:'', plataforma:['tiktok'], estado:'idea',
     descripcion:'', link_archivo:'', caption:'', hashtags:'', notas:'',
     fecha_programada:'', hora_programada:'12:00', prioridad:'media',
   }
@@ -119,10 +183,9 @@ function FormContenido({ item, onClose, onSaved }) {
           <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>TÍTULO *</label>
           <input style={S.input} value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} placeholder="Nombre del video/post"/>
         </div>
-        <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PLATAFORMA</label>
-          <Sel value={form.plataforma} onChange={v=>setForm({...form,plataforma:v})}
-            options={Object.entries(PLAT).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:8}}>PLATAFORMA <span style={{color:MUTED, fontWeight:400}}>(podés seleccionar varias)</span></label>
+          <PlatSelector value={form.plataforma} onChange={v=>setForm({...form,plataforma:v})}/>
         </div>
         <div>
           <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ESTADO EN EL FLUJO</label>
@@ -357,7 +420,7 @@ function TabLista({ items, loading, onNuevo, onDetalle, estadoFiltro }) {
     ? items.filter(x => x.estado !== 'publicado')
     : items.filter(x => x.estado === estadoFiltro)
 
-  if (filtroPlat !== 'todas') filtrados = filtrados.filter(x => x.plataforma === filtroPlat)
+  if (filtroPlat !== 'todas') filtrados = filtrados.filter(x => normPlat(x.plataforma).includes(filtroPlat))
 
   const PRIOR_COLOR = { alta:'#fc8181', media:'#f6ad55', baja:'#68d391' }
 
@@ -391,15 +454,7 @@ function TabLista({ items, loading, onNuevo, onDetalle, estadoFiltro }) {
       )}
 
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:16}}>
-        <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-          {[['todas','🎬 Todas'],['tiktok','🎵 TikTok'],['instagram','📸 Instagram'],['facebook','👍 Facebook'],['youtube','▶️ YouTube']].map(([v,l])=>(
-            <button key={v} onClick={()=>setFiltroPlat(v)} style={{
-              padding:'6px 14px', borderRadius:20, border:`1px solid ${BORDER}`,
-              background: filtroPlat===v ? GOLD : SURF2, color: filtroPlat===v ? '#fff' : MUTED,
-              cursor:'pointer', fontSize:'0.8em', fontFamily:'DM Sans,sans-serif'
-            }}>{l}</button>
-          ))}
-        </div>
+        <FiltroPlat value={filtroPlat} onChange={setFiltroPlat}/>
         <button style={S.btn()} onClick={onNuevo}>+ Agregar contenido</button>
       </div>
 
@@ -544,8 +599,8 @@ function CalendarioMes({ items, onDetalle }) {
                     display:'flex', alignItems:'center', justifyContent:'center',
                   }}>{dia}</div>
                   {its.slice(0,3).map((item,j)=>{
-                    const p = PLAT[item.plataforma]
-                    const e = ESTADOS[item.estado]
+                    const plats = normPlat(item.plataforma)
+                    const p = PLAT[plats[0]] // color del primero para el calendario
                     return (
                       <div key={j} onClick={()=>onDetalle(item)} style={{
                         background: (p?.color||GOLD)+'22',
@@ -559,7 +614,7 @@ function CalendarioMes({ items, onDetalle }) {
                         color:TEXT,
                         overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                       }}>
-                        {p?.icon} {item.titulo}
+                        {plats.map(k=>PLAT[k]?.icon).join('')} {item.titulo}
                       </div>
                     )
                   })}
@@ -670,7 +725,8 @@ function CalendarioSemana({ items, onDetalle }) {
               {its.length === 0
                 ? <div style={{fontSize:'0.7em', color:BORDER, textAlign:'center', marginTop:8}}>—</div>
                 : its.map((item,j)=>{
-                    const p = PLAT[item.plataforma]
+                    const plats = normPlat(item.plataforma)
+                    const p = PLAT[plats[0]]
                     const e = ESTADOS[item.estado]
                     return (
                       <div key={j} onClick={()=>onDetalle(item)} style={{
@@ -682,7 +738,7 @@ function CalendarioSemana({ items, onDetalle }) {
                         marginBottom:5,
                         cursor:'pointer',
                       }}>
-                        <div style={{fontSize:'0.72em', color:TEXT, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p?.icon} {item.titulo}</div>
+                        <div style={{fontSize:'0.72em', color:TEXT, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{plats.map(k=>PLAT[k]?.icon).join('')} {item.titulo}</div>
                         <div style={{fontSize:'0.65em', color:MUTED, marginTop:2}}>{e?.icon} {e?.label}</div>
                         {item.hora_programada && <div style={{fontSize:'0.65em', color:p?.color||GOLD}}>🕐 {item.hora_programada}</div>}
                       </div>
