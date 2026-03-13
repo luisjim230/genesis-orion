@@ -30,6 +30,7 @@ const EMPTY_FORM = {
   saldo_pendiente: '',
   facturador: '',
   observaciones: '',
+  responsable_problema: '',
 }
 
 export default function EntregasTrazabilidad() {
@@ -93,6 +94,7 @@ export default function EntregasTrazabilidad() {
       saldo_pendiente: saldo,
       facturador: form.facturador || null,
       observaciones: form.observaciones || null,
+        responsable_problema: form.responsable_problema || null,
       updated_at: new Date().toISOString(),
     }
     let error
@@ -123,6 +125,7 @@ export default function EntregasTrazabilidad() {
       saldo_pendiente: r.saldo_pendiente || '',
       facturador: r.facturador || '',
       observaciones: r.observaciones || '',
+      responsable_problema: r.responsable_problema || '',
     })
     setEditId(r.id); setVista('form')
   }
@@ -246,6 +249,7 @@ export default function EntregasTrazabilidad() {
                         <div style={s.detItem}><span style={s.detLabel}>Saldo</span><span style={{ ...s.detVal, color: saldo > 0 ? '#e05252' : '#4caf7d' }}>{fmt(saldo)}</span></div>
                         <div style={s.detItem}><span style={s.detLabel}>Facturador</span><span style={s.detVal}>{r.facturador || '—'}</span></div>
                         <div style={s.detItem}><span style={s.detLabel}>Chofer</span><span style={s.detVal}>{r.chofer || '—'}</span></div>
+                        {r.responsable_problema && <div style={s.detItem}><span style={s.detLabel}>Responsable</span><span style={{...s.detVal,color:'#e05252',fontWeight:600}}>{r.responsable_problema}</span></div>}
                       </div>
                       {r.observaciones && (
                         <div style={s.detObs}><span style={s.detLabel}>Observaciones: </span>{r.observaciones}</div>
@@ -291,6 +295,9 @@ export default function EntregasTrazabilidad() {
 
           <div style={s.sectionTitle}>Cobro</div>
           <div style={s.formGrid3}>
+            {form.estado !== 'pendiente' && form.estado !== 'entregado_ok' && (
+              <div style={s.field}><label style={s.label}>Responsable del problema</label><select style={s.input} value={form.responsable_problema} onChange={e => setForm(f=>({...f,responsable_problema:e.target.value}))}><option value=''>— Seleccionar —</option><option>Chofer</option><option>Bodega / Despacho</option><option>Facturador</option><option>Cliente</option><option>Otro</option></select></div>
+            )}
             <div style={s.field}><label style={s.label}>Monto a cobrar</label><input style={s.input} type="number" placeholder="0" value={form.monto_cobrar} onChange={e => setForm(f=>({...f,monto_cobrar:e.target.value}))} /></div>
             <div style={s.field}>
               <label style={s.label}>Forma de pago</label>
