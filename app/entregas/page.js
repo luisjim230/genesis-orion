@@ -337,8 +337,8 @@ export default function EntregasTrazabilidad() {
 }
 
 const s = {
-  page: { background:'#0f1115', minHeight:'100vh', color:'#f0ede6', fontFamily:'sans-serif', padding:'0 0 40px' },
-  header: { background:'#1c1f26', borderBottom:'1px solid rgba(200,168,75,0.18)', padding:'16px 28px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 },
+  page: { background:'#FDF4F4', minHeight:'100vh', color:'#1a1a1a', fontFamily:'sans-serif', padding:'0 0 40px' },
+  header: { background:'#5E2733', borderBottom:'1px solid rgba(200,168,75,0.18)', padding:'16px 28px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 },
   headerLeft: { display:'flex', alignItems:'center', gap:12 },
   logoCircle: { width:36, height:36, background:'#c8a84b', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' },
   brandName: { fontSize:18, fontWeight:700, color:'#c8a84b', letterSpacing:1 },
