@@ -7,28 +7,48 @@ const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunit
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const [login, setLogin]   = useState('');
-  const [pass, setPass]     = useState('');
-  const [error, setError]   = useState(null);
-  const [loading, setLoading] = useState(false);
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+  const [credential, setCredential] = useState('');
+  const [pass, setPass]             = useState('');
+  const [error, setError]           = useState(null);
+  const [loading, setLoading]       = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
     setLoading(true); setError(null);
-    let authEmail = login.trim().toLowerCase();
-    if (!authEmail.includes('@')) {
-      const res  = await fetch(`/api/admin/usuarios?username=${encodeURIComponent(authEmail)}`);
-      const data = await res.json();
-      if (!res.ok || !data?.email) { setError('Usuario no encontrado.'); setLoading(false); return; }
-      authEmail = data.email;
-    }
-    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: pass });
-    if (error) { setError('Credenciales incorrectas.'); setLoading(false); return; }
-    router.push('/'); router.refresh();
-  }
 
-  const inputStyle = { width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', borderRadius:10, padding:'11px 14px', color:'rgba(253,244,244,0.92)', fontSize:'0.9rem', fontFamily:'inherit', outline:'none' };
+    let emailToUse = credential.trim();
+
+    // Si no tiene @, asumir que es username → buscar email real
+    if (!emailToUse.includes('@')) {
+      try {
+        const res = await fetch(`/api/admin/usuarios?username=${encodeURIComponent(emailToUse.toLowerCase())}`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          setError('Usuario no encontrado.');
+          setLoading(false);
+          return;
+        }
+        emailToUse = data[0].email;
+      } catch {
+        setError('Error al buscar usuario.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password: pass });
+    if (error) {
+      setError('Credenciales incorrectas. Verificá tu usuario y contraseña.');
+      setLoading(false);
+      return;
+    }
+    router.push('/');
+    router.refresh();
+  }
 
   return (
     <>
@@ -51,14 +71,35 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <div>
               <label style={{ fontSize:'0.72rem', color:'rgba(253,244,244,0.45)', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:6 }}>Usuario o correo</label>
-              <input type="text" required autoComplete="username" value={login} onChange={e=>setLogin(e.target.value)} style={inputStyle} placeholder="luis.jimenez o usuario@rojimo.com"/>
+              <input
+                type="text"
+                required
+                autoComplete="username"
+                value={credential}
+                onChange={e=>setCredential(e.target.value)}
+                style={{ width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', borderRadius:10, padding:'11px 14px', color:'rgba(253,244,244,0.92)', fontSize:'0.9rem', fontFamily:'inherit', outline:'none' }}
+                placeholder="luisjim  o  usuario@rojimo.com"
+              />
             </div>
             <div>
               <label style={{ fontSize:'0.72rem', color:'rgba(253,244,244,0.45)', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:6 }}>Contraseña</label>
-              <input type="password" required autoComplete="current-password" value={pass} onChange={e=>setPass(e.target.value)} style={inputStyle} placeholder="••••••••"/>
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={pass}
+                onChange={e=>setPass(e.target.value)}
+                style={{ width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', borderRadius:10, padding:'11px 14px', color:'rgba(253,244,244,0.92)', fontSize:'0.9rem', fontFamily:'inherit', outline:'none' }}
+                placeholder="••••••••"
+              />
             </div>
-            {error && <div style={{ background:'rgba(252,129,129,0.12)', border:'1px solid rgba(252,129,129,0.35)', borderRadius:8, padding:'10px 14px', color:'#fc8181', fontSize:'0.82rem' }}>❌ {error}</div>}
-            <button type="submit" disabled={loading} style={{ marginTop:8, padding:'13px', borderRadius:10, border:'none', background:loading?'rgba(237,110,46,0.5)':'#ED6E2E', color:'#fff', fontWeight:600, fontSize:'0.95rem', fontFamily:'inherit', cursor:loading?'not-allowed':'pointer' }}>
+            {error && (
+              <div style={{ background:'rgba(252,129,129,0.12)', border:'1px solid rgba(252,129,129,0.35)', borderRadius:8, padding:'10px 14px', color:'#fc8181', fontSize:'0.82rem' }}>
+                ❌ {error}
+              </div>
+            )}
+            <button type="submit" disabled={loading}
+              style={{ marginTop:8, padding:'13px', borderRadius:10, border:'none', background:loading?'rgba(237,110,46,0.5)':'#ED6E2E', color:'#fff', fontWeight:600, fontSize:'0.95rem', fontFamily:'inherit', cursor:loading?'not-allowed':'pointer' }}>
               {loading ? 'Ingresando...' : 'Ingresar →'}
             </button>
           </form>
