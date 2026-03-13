@@ -31,6 +31,8 @@ const MODULOS = [
   { key:'rotacion',     label:'Rotación',        emoji:'🔄' },
   { key:'tareas',       label:'Tareas',          emoji:'✅' },
   { key:'social',       label:'Redes Sociales',  emoji:'📱' },
+  { key:'cajas-aurora', label:'Cajas',    emoji:'🌅' },
+  { key:'entregas',     label:'Entregas', emoji:'🚛' },
   { key:'admin',        label:'Admin',           emoji:'🔐' },
 ]
 
@@ -38,7 +40,7 @@ const PERMISOS_ROL = {
   admin:     MODULOS.map(m => m.key),
   bodega:    ['dashboard','inventario','trazabilidad','rotacion','kronos','contenedores'],
   ventas:    ['dashboard','trazabilidad','comercial','reportes'],
-  finanzas:  ['dashboard','contenedores','mercado','ponderacion','finanzas'],
+  finanzas:  ['cajas-aurora','entregas','dashboard','contenedores','mercado','ponderacion','finanzas'],
   logistica: ['dashboard','contenedores','cif','mercado','reportes'],
 }
 
