@@ -7,43 +7,68 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-export async function POST(req) {
+export async function GET(req) {
   try {
-    const { nombre, email, username, password, rol, modulos } = await req.json()
-    if (!nombre?.trim() || !password?.trim() || (!email?.trim() && !username?.trim()))
-      return NextResponse.json({ error: 'nombre, password y email o username son requeridos' }, { status: 400 })
+    const { searchParams } = new URL(req.url)
+    const username = searchParams.get('username')
 
-    const authEmail = email?.trim()
-      ? email.trim().toLowerCase()
-      : `${username.trim().toLowerCase()}@sol.internal`
-    const usernameClean = username?.trim().toLowerCase() || null
+    let query = supabaseAdmin
+      .from('usuarios_sol')
+      .select('*')
+      .order('creado_en', { ascending: false })
 
-    if (usernameClean) {
-      const { data: existe } = await supabaseAdmin.from('usuarios_sol').select('id').eq('username', usernameClean).maybeSingle()
-      if (existe) return NextResponse.json({ error: 'Ese nombre de usuario ya existe' }, { status: 409 })
+    if (username) {
+      query = query.eq('username', username.toLowerCase())
     }
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: authEmail,
-      password,
-      email_confirm: true,
-      user_metadata: { nombre: nombre.trim(), username: usernameClean }
-    })
-    if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+    const { data, error } = await query
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
 
-    const auth_id = authData.user.id
-    const { data, error } = await supabaseAdmin.from('usuarios_sol').insert([{
-      auth_id, nombre: nombre.trim(), email: authEmail,
-      username: usernameClean, rol: rol || 'bodega',
-      activo: true, permisos_extra: modulos || null,
-      creado_en: new Date().toISOString(),
-    }]).select().single()
+export async function PATCH(req) {
+  try {
+    const body = await req.json()
+    const { id, nueva_password, ...campos } = body
 
-    if (error) {
-      await supabaseAdmin.auth.admin.deleteUser(auth_id)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+
+    // Si viene nueva_password, actualizarla en Auth
+    if (nueva_password) {
+      // Buscar auth_id del usuario
+      const { data: usuario, error: fetchErr } = await supabaseAdmin
+        .from('usuarios_sol')
+        .select('auth_id')
+        .eq('id', id)
+        .single()
+
+      if (fetchErr || !usuario?.auth_id) {
+        return NextResponse.json({ error: 'No se encontró auth_id para este usuario' }, { status: 400 })
+      }
+
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
+        usuario.auth_id,
+        { password: nueva_password }
+      )
+      if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
+
+      // Si solo era cambio de password, retornar éxito
+      if (Object.keys(campos).length === 0) {
+        return NextResponse.json({ ok: true })
+      }
     }
-    return NextResponse.json(data, { status: 201 })
+
+    // Actualizar campos en usuarios_sol
+    const { error } = await supabaseAdmin
+      .from('usuarios_sol')
+      .update(campos)
+      .eq('id', id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
