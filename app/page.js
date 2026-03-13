@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/useAuth'
 
 const GOLD = '#c8a84b'
 
@@ -97,6 +98,9 @@ export default function DashboardPage() {
   const [alertas, setAlertas] = useState([])
   const [contenedores, setContenedores] = useState([])
   const [tareas, setTareas] = useState([])
+  const { perfil } = useAuth()
+
+  const puedeVerFinanzas = perfil?.rol === 'admin' || perfil?.rol === 'finanzas'
 
   useEffect(() => {
     async function cargar() {
@@ -196,16 +200,20 @@ export default function DashboardPage() {
         <KpiCard icon="⚠️" label="Stock crítico"      value={kpis.stockCritico ?? '—'}        sub="ítems bajo mínimo"       color="#f43f5e" loading={loading} />
         <KpiCard icon="🚢" label="Contenedores"       value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"     color="#0284c7" loading={loading} />
         <KpiCard icon="✨" label="Tareas"             value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"          color="#7c3aed" loading={loading} />
-        <KpiCard icon="💸" label="Por pagar"          value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores"   color="#f43f5e" loading={loading} />
-        <KpiCard icon="📥" label="Por cobrar"         value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"      color="#0d9488" loading={loading} />
-        <KpiCard
-          icon={posPositiva ? '🟢' : '🔴'}
-          label="Posición neta"
-          value={fmt_crc(kpis.posicionCaja)}
-          sub={posPositiva ? 'Flujo positivo' : 'Revisar pagos'}
-          color={posPositiva ? '#059669' : '#f43f5e'}
-          loading={loading}
-        />
+        {puedeVerFinanzas && (
+          <>
+            <KpiCard icon="💸" label="Por pagar"  value={fmt_crc(kpis.totalPagar)}  sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
+            <KpiCard icon="📥" label="Por cobrar" value={fmt_crc(kpis.totalCobrar)} sub="cuentas a clientes"    color="#0d9488" loading={loading} />
+            <KpiCard
+              icon={posPositiva ? '🟢' : '🔴'}
+              label="Posición neta"
+              value={fmt_crc(kpis.posicionCaja)}
+              sub={posPositiva ? 'Flujo positivo' : 'Revisar pagos'}
+              color={posPositiva ? '#059669' : '#f43f5e'}
+              loading={loading}
+            />
+          </>
+        )}
       </div>
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
