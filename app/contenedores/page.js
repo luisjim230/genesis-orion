@@ -240,7 +240,7 @@ export default function Contenedores() {
                   </div>
                   <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
                     <button style={S.btnSm()} onClick={()=>editar(env)}>✏️ Editar</button>
-                    <button style={S.btnSm('#1e2330')} onClick={()=>archivar(env.id)}>⚓ Archivar</button>
+                    <button style={S.btnSm('#f5eaea')} onClick={()=>archivar(env.id)}>⚓ Archivar</button>
                     <button style={S.btnSm()} onClick={()=>setExpandido(expandido===env.id?null:env.id)}>📋 {expandido===env.id?'Cerrar':'Expediente'}</button>
                   </div>
                 </div>
@@ -299,7 +299,7 @@ export default function Contenedores() {
                     </div>
                     {env.notas && <div style={{marginTop:'12px',background:'var(--cream)',borderRadius:'8px',padding:'10px',fontSize:'0.82em',color:'#8899aa'}}>📝 {env.notas}</div>}
                     <div style={{marginTop:'10px',fontSize:'0.72em',color:'#3a4a5a'}}>Creado: {env.creado||'—'} · Actualizado: {env.actualizado||'—'}</div>
-                    <button style={{...S.btnSm('#3d1515'),marginTop:'10px'}} onClick={()=>eliminar(env.id)}>🗑️ Eliminar registro</button>
+                    <button style={{...S.btnSm('#fff5f5'),marginTop:'10px'}} onClick={()=>eliminar(env.id)}>🗑️ Eliminar registro</button>
                   </div>
                 )}
               </div>
@@ -408,7 +408,7 @@ export default function Contenedores() {
                   </div>
                   <div style={{display:'flex',gap:'8px'}}>
                     <button style={S.btnSm()} onClick={()=>desarchivar(env.id)}>🌊 Devolver a activos</button>
-                    <button style={S.btnSm('#3d1515')} onClick={()=>eliminar(env.id)}>🗑️</button>
+                    <button style={S.btnSm('#fff5f5')} onClick={()=>eliminar(env.id)}>🗑️</button>
                   </div>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'8px'}}>
