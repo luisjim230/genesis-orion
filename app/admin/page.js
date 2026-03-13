@@ -11,10 +11,11 @@ const MUTED  = 'rgba(253,244,244,0.40)'
 const GOLD   = '#ED6E2E'
 
 const ROL_COLOR = {
+  laura:'#e879a0',
   admin:'#ED6E2E', bodega:'#63b3ed', ventas:'#68d391',
   finanzas:'#c8a84b', logistica:'#b794f4'
 }
-const ROLES = ['admin','bodega','ventas','finanzas','logistica']
+const ROLES = ['admin','bodega','ventas','finanzas','logistica','laura']
 
 const MODULOS = [
   { key:'dashboard',    label:'Dashboard',       emoji:'🏠' },
@@ -37,6 +38,7 @@ const MODULOS = [
 ]
 
 const PERMISOS_ROL = {
+  laura:     ['dashboard','cajas-aurora'],
   admin:     MODULOS.map(m => m.key),
   bodega:    ['dashboard','inventario','trazabilidad','rotacion','kronos','contenedores'],
   ventas:    ['dashboard','trazabilidad','comercial','reportes'],
