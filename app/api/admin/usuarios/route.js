@@ -1,31 +1,36 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
+// GET /api/admin/usuarios → lista todos los usuarios
 export async function GET() {
-  const { data, error } = await supabaseAdmin
-    .from('genesis_usuarios')
+  const { data, error } = await supabase
+    .from('usuarios_sol')
     .select('*')
     .order('creado_en', { ascending: false })
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data || [])
 }
 
+// PATCH /api/admin/usuarios → actualiza rol, activo o permisos_extra
 export async function PATCH(req) {
-  try {
-    const { id, ...campos } = await req.json()
-    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
-    const { error } = await supabaseAdmin
-      .from('genesis_usuarios')
-      .update(campos)
-      .eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
-  } catch(e) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
-  }
+  const body = await req.json()
+  const { id, ...campos } = body
+
+  if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+
+  const { data, error } = await supabase
+    .from('usuarios_sol')
+    .update(campos)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
 }

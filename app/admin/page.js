@@ -16,29 +16,25 @@ const ROL_COLOR = {
 }
 const ROLES = ['admin','bodega','ventas','finanzas','logistica']
 
-// Todos los módulos disponibles con etiqueta y emoji
 const MODULOS = [
-  { key:'dashboard',    label:'Dashboard',       emoji:'🏠' },
-  { key:'inventario',   label:'Inventario',      emoji:'🪐' },
-  { key:'trazabilidad', label:'Trazabilidad',    emoji:'🔬' },
-  { key:'kronos',       label:'Kronos',          emoji:'⚡' },
-  { key:'contenedores', label:'Contenedores',    emoji:'🚢' },
-  { key:'mercado',      label:'Mercado',         emoji:'💱' },
-  { key:'ponderacion',  label:'Ponderación',     emoji:'⚖️' },
-  { key:'comercial',    label:'Comercial',       emoji:'📈' },
-  { key:'reportes',     label:'Reportes',        emoji:'📊' },
-  { key:'finanzas',     label:'Finanzas',        emoji:'💰' },
-  { key:'cif',          label:'CIF',             emoji:'📦' },
-  { key:'rotacion',     label:'Rotación',        emoji:'🔄' },
-  { key:'tareas',       label:'Tareas',          emoji:'✅' },
-  { key:'social',       label:'Redes Sociales',  emoji:'📱' },
-  { key:'admin',        label:'Admin',           emoji:'🔐' },
+  { key:'dashboard',    label:'Dashboard',         emoji:'🏠' },
+  { key:'inventario',   label:'Compras',           emoji:'📦' },
+  { key:'trazabilidad', label:'Trazabilidad',      emoji:'🔴' },
+  { key:'reportes',     label:'Carga de Reportes', emoji:'📊' },
+  { key:'contenedores', label:'Contenedores',      emoji:'🚢' },
+  { key:'mercado',      label:'Mercado',           emoji:'⚡' },
+  { key:'ponderacion',  label:'Promedios Pond.',   emoji:'⚖️' },
+  { key:'comercial',    label:'Comercial',         emoji:'📈' },
+  { key:'finanzas',     label:'Finanzas',          emoji:'💰' },
+  { key:'cif',          label:'Calc. Importación', emoji:'🧮' },
+  { key:'rotacion',     label:'Rotación',          emoji:'🔄' },
+  { key:'tareas',       label:'Tareas',            emoji:'✅' },
+  { key:'admin',        label:'Admin',             emoji:'🔐' },
 ]
 
-// Permisos por defecto de cada rol
 const PERMISOS_ROL = {
   admin:     MODULOS.map(m => m.key),
-  bodega:    ['dashboard','inventario','trazabilidad','rotacion','kronos','contenedores'],
+  bodega:    ['dashboard','inventario','trazabilidad','rotacion','contenedores'],
   ventas:    ['dashboard','trazabilidad','comercial','reportes'],
   finanzas:  ['dashboard','contenedores','mercado','ponderacion','finanzas'],
   logistica: ['dashboard','contenedores','cif','mercado','reportes'],
@@ -87,7 +83,57 @@ function Msg({ msg }) {
   )
 }
 
-// Panel de permisos por módulo para un usuario
+// ── Selector de módulos para el form de creación ──
+function SelectorModulos({ value, onChange }) {
+  function toggle(key) {
+    onChange({ ...value, [key]: !value[key] })
+  }
+  function todos()  { const a={}; MODULOS.forEach(m=>{a[m.key]=true});  onChange(a) }
+  function ninguno(){ const a={}; MODULOS.forEach(m=>{a[m.key]=false}); onChange(a) }
+
+  const activos = Object.values(value).filter(Boolean).length
+
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+        <span style={{ fontSize:'0.72em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.06em' }}>
+          Acceso a módulos — {activos} seleccionados
+        </span>
+        <button type="button" onClick={todos}   style={{ ...S.btnSm(), fontSize:'0.72em', padding:'3px 8px' }}>☑ Todos</button>
+        <button type="button" onClick={ninguno} style={{ ...S.btnSm(), fontSize:'0.72em', padding:'3px 8px' }}>☐ Ninguno</button>
+      </div>
+      <div style={{
+        display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(155px, 1fr))',
+        gap:7
+      }}>
+        {MODULOS.map(m => {
+          const activo = !!value[m.key]
+          return (
+            <label key={m.key} style={{
+              display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+              background: activo ? '#ED6E2E18' : SURF2,
+              border:`1px solid ${activo ? GOLD+'55' : BORDER}`,
+              borderRadius:8, padding:'7px 11px',
+              transition:'all 0.15s', userSelect:'none'
+            }}>
+              <input
+                type="checkbox"
+                checked={activo}
+                onChange={() => toggle(m.key)}
+                style={{ accentColor:GOLD, width:14, height:14, cursor:'pointer' }}
+              />
+              <span style={{ fontSize:'0.82em', color: activo ? TEXT : MUTED }}>
+                {m.emoji} {m.label}
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Panel de permisos por módulo para un usuario existente ──
 function PanelPermisos({ usuario, onGuardar, onCerrar }) {
   const rolBase = usuario.rol || 'bodega'
   const permisosExtra = usuario.permisos_extra || {}
@@ -96,11 +142,8 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
     const base = PERMISOS_ROL[rolBase] || []
     const result = {}
     MODULOS.forEach(m => {
-      if (permisosExtra[m.key] !== undefined) {
-        result[m.key] = permisosExtra[m.key]
-      } else {
-        result[m.key] = base.includes(m.key)
-      }
+      if (permisosExtra[m.key] !== undefined) result[m.key] = permisosExtra[m.key]
+      else result[m.key] = base.includes(m.key)
     })
     return result
   })
@@ -118,21 +161,16 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
   }
 
   const rolBaseModulos = PERMISOS_ROL[rolBase] || []
-  const hayOverride = MODULOS.some(m => {
-    const enRol = rolBaseModulos.includes(m.key)
-    return checks[m.key] !== enRol
-  })
+  const hayOverride = MODULOS.some(m => checks[m.key] !== rolBaseModulos.includes(m.key))
 
   async function guardar() {
     setSaving(true)
-    const nuevosExtra = {}
-    MODULOS.forEach(m => {
-      const enRol = rolBaseModulos.includes(m.key)
-      if (checks[m.key] !== enRol) {
-        nuevosExtra[m.key] = checks[m.key]
-      }
+    // Guardar todos los módulos como permisos_extra explícitos
+    const res = await fetch('/api/admin/usuarios', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: usuario.id, permisos_extra: checks })
     })
-    const res = await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: usuario.id, permisos_extra: Object.keys(nuevosExtra).length ? nuevosExtra : null }) })
     const result = await res.json()
     if (!res.ok || result.error) {
       showMsg('Error al guardar: ' + (result.error||'desconocido'), false)
@@ -171,7 +209,7 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
 
       <div style={{ marginBottom:14 }}>
         <span style={{ fontSize:'0.72em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.06em', marginRight:8 }}>
-          Preset:
+          Preset rápido:
         </span>
         {ROLES.map(r => (
           <button key={r} onClick={() => aplicarRol(r)}
@@ -222,11 +260,7 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
       </div>
 
       <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-        <button
-          style={S.btn(saving ? '#555' : GOLD)}
-          onClick={guardar}
-          disabled={saving}
-        >
+        <button style={S.btn(saving ? '#555' : GOLD)} onClick={guardar} disabled={saving}>
           {saving ? 'Guardando...' : '💾 Guardar permisos'}
         </button>
         <span style={{ fontSize:'0.78em', color:MUTED }}>
@@ -238,23 +272,31 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
   )
 }
 
+// ── Página principal ──
 export default function AdminPage() {
-  const [usuarios, setUsuarios]   = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [form, setForm]           = useState({ email:'', password:'', nombre:'', rol:'bodega' })
-  const [saving, setSaving]       = useState(false)
-  const [msg, setMsg]             = useState(null)
+  const [usuarios, setUsuarios] = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [msg,      setMsg]      = useState(null)
   const [expandPermisos, setExpandPermisos] = useState({})
+
+  // Form de creación — módulos como objeto {key: bool}
+  const modulosInicial = () => {
+    const m = {}
+    MODULOS.forEach(mod => { m[mod.key] = mod.key === 'dashboard' })
+    return m
+  }
+  const [form, setForm] = useState({ nombre:'', email:'', password:'', modulos: modulosInicial() })
 
   function showMsg(t, ok=true) { setMsg({t,ok}); setTimeout(()=>setMsg(null),4000) }
 
   async function cargar() {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/usuarios')
+      const res  = await fetch('/api/admin/usuarios')
       const data = await res.json()
       setUsuarios(Array.isArray(data) ? data : [])
-    } catch(e) { setUsuarios([]) }
+    } catch { setUsuarios([]) }
     setLoading(false)
   }
 
@@ -262,18 +304,29 @@ export default function AdminPage() {
 
   async function crearUsuario() {
     if (!form.email.trim() || !form.password.trim() || !form.nombre.trim())
-      return showMsg('Completá todos los campos.', false)
+      return showMsg('Completá nombre, email y contraseña.', false)
+
+    const modulosActivos = Object.values(form.modulos).filter(Boolean).length
+    if (modulosActivos === 0)
+      return showMsg('Seleccioná al menos un módulo.', false)
+
     setSaving(true)
     try {
       const res = await fetch('/api/admin/crear-usuario', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          nombre:   form.nombre.trim(),
+          email:    form.email.trim(),
+          password: form.password,
+          rol:      'bodega',            // rol interno por defecto
+          modulos:  form.modulos,        // permisos_extra con todos los módulos
+        })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
-      showMsg(`Usuario ${form.email} creado correctamente.`)
-      setForm({ email:'', password:'', nombre:'', rol:'bodega' })
+      showMsg(`✅ Usuario ${form.email} creado correctamente.`)
+      setForm({ nombre:'', email:'', password:'', modulos: modulosInicial() })
       cargar()
     } catch(e) {
       showMsg(e.message, false)
@@ -282,13 +335,19 @@ export default function AdminPage() {
   }
 
   async function cambiarRol(uid, nuevoRol) {
-    await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: uid, rol: nuevoRol }) })
+    await fetch('/api/admin/usuarios', {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: uid, rol: nuevoRol })
+    })
     showMsg('Rol actualizado.')
     cargar()
   }
 
   async function toggleActivo(u) {
-    await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: u.id, activo: !u.activo }) })
+    await fetch('/api/admin/usuarios', {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: u.id, activo: !u.activo })
+    })
     showMsg(u.activo ? 'Usuario desactivado.' : 'Usuario activado.')
     cargar()
   }
@@ -303,6 +362,7 @@ export default function AdminPage() {
       padding:'28px 32px', minHeight:'100vh', background:BG,
       margin:'-32px -36px', minWidth:'calc(100% + 72px)'
     }}>
+      {/* Header */}
       <div style={{ marginBottom:28 }}>
         <span style={{ fontSize:'0.68rem', fontWeight:700, letterSpacing:'0.10em', textTransform:'uppercase', color:GOLD, display:'block', marginBottom:4 }}>
           Admin · SOL
@@ -313,11 +373,12 @@ export default function AdminPage() {
         <p style={{ fontSize:'0.82rem', color:MUTED, marginTop:4 }}>Administración de accesos · Depósito Jiménez</p>
       </div>
 
+      {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:28 }}>
         {[
-          ['Total usuarios',  usuarios.length,                                            '#63b3ed'],
-          ['Activos',         usuarios.filter(u=>u.activo!==false).length,                '#68d391'],
-          ['Inactivos',       usuarios.filter(u=>u.activo===false).length,                '#fc8181'],
+          ['Total usuarios',  usuarios.length,                                                                               '#63b3ed'],
+          ['Activos',         usuarios.filter(u=>u.activo!==false).length,                                                   '#68d391'],
+          ['Inactivos',       usuarios.filter(u=>u.activo===false).length,                                                   '#fc8181'],
           ['Personalizados',  usuarios.filter(u=>u.permisos_extra&&Object.keys(u.permisos_extra||{}).length>0).length, GOLD],
         ].map(([l,v,c])=>(
           <div key={l} style={{ background:SURF, border:`1px solid ${c}33`, borderTop:`3px solid ${c}`, borderRadius:10, padding:'14px 16px' }}>
@@ -327,10 +388,11 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {/* Form crear usuario */}
       <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:'20px 22px', marginBottom:28 }}>
         <h2 style={{ color:TEXT, fontSize:'0.95em', fontWeight:700, marginBottom:16, marginTop:0 }}>➕ Crear nuevo usuario</h2>
         <Msg msg={msg}/>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:12, marginBottom:14 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:18 }}>
           <div>
             <label style={{ fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4 }}>NOMBRE</label>
             <input style={S.input} value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Luis Jiménez"/>
@@ -343,24 +405,35 @@ export default function AdminPage() {
             <label style={{ fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4 }}>CONTRASEÑA INICIAL</label>
             <input type="password" style={S.input} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="••••••••"/>
           </div>
-          <div>
-            <label style={{ fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4 }}>ROL BASE</label>
-            <select value={form.rol} onChange={e=>setForm({...form,rol:e.target.value})} style={{ ...S.input, cursor:'pointer' }}>
-              {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
         </div>
+
+        {/* Selector de módulos */}
+        <div style={{ marginBottom:18 }}>
+          <label style={{ fontSize:'0.72em', color:MUTED, display:'block', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em' }}>
+            MÓDULOS CON ACCESO
+          </label>
+          <SelectorModulos
+            value={form.modulos}
+            onChange={mods => setForm({...form, modulos:mods})}
+          />
+        </div>
+
         <button style={S.btn()} onClick={crearUsuario} disabled={saving}>
           {saving ? 'Creando...' : '💾 Crear usuario'}
         </button>
       </div>
 
+      {/* Tabla usuarios */}
       <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:0, overflow:'hidden' }}>
         <div style={{ padding:'12px 18px', borderBottom:`1px solid ${BORDER}`, fontWeight:600, color:TEXT, fontSize:'0.88em' }}>
           👥 Usuarios registrados
         </div>
         {loading
           ? <div style={{ textAlign:'center', padding:40, color:MUTED }}>Cargando...</div>
+          : usuarios.length === 0
+          ? <div style={{ textAlign:'center', padding:40, color:MUTED, fontSize:'0.85em' }}>
+              Sin usuarios registrados aún.
+            </div>
           : (
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -432,9 +505,7 @@ export default function AdminPage() {
                         </td>
                         <td style={S.td}>
                           <button
-                            style={{
-                              ...S.btnSm(u.activo!==false?'#7d1515':SURF2, u.activo!==false?'#fc8181':TEXT, u.activo!==false?'#fc818144':BORDER)
-                            }}
+                            style={S.btnSm(u.activo!==false?'#7d1515':SURF2, u.activo!==false?'#fc8181':TEXT, u.activo!==false?'#fc818144':BORDER)}
                             onClick={()=>toggleActivo(u)}>
                             {u.activo!==false?'Desactivar':'Activar'}
                           </button>

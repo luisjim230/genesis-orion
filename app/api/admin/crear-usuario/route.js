@@ -1,18 +1,55 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
 
+// POST /api/admin/crear-usuario
 export async function POST(req) {
   try {
-    const { email, password, nombre, rol, permisos_extra } = await req.json();
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({ email, password, email_confirm: true });
-    if (authError) return NextResponse.json({ ok:false, error: authError.message });
-    const { error: dbError } = await supabaseAdmin.from('genesis_usuarios').insert([{ user_id: authData.user.id, email, nombre, rol, permisos_extra: permisos_extra||{}, activo:true }]);
-    if (dbError) return NextResponse.json({ ok:false, error: dbError.message });
-    return NextResponse.json({ ok:true });
-  } catch(e) { return NextResponse.json({ ok:false, error: e.message }); }
+    const { nombre, email, password, rol, modulos } = await req.json()
+
+    if (!nombre?.trim() || !email?.trim() || !password?.trim()) {
+      return NextResponse.json({ error: 'nombre, email y password son requeridos' }, { status: 400 })
+    }
+
+    // Verificar que no exista ya ese email
+    const { data: existe } = await supabase
+      .from('usuarios_sol')
+      .select('id')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle()
+
+    if (existe) {
+      return NextResponse.json({ error: 'Ya existe un usuario con ese email' }, { status: 409 })
+    }
+
+    // Si vienen módulos personalizados los guardamos como permisos_extra explícitos
+    // (todos los módulos con true/false según lo seleccionado)
+    let permisos_extra = null
+    if (modulos && typeof modulos === 'object') {
+      permisos_extra = modulos
+    }
+
+    const { data, error } = await supabase
+      .from('usuarios_sol')
+      .insert([{
+        nombre: nombre.trim(),
+        email: email.trim().toLowerCase(),
+        rol: rol || 'bodega',
+        activo: true,
+        permisos_extra,
+        creado_en: new Date().toISOString(),
+      }])
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data, { status: 201 })
+
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }
