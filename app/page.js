@@ -92,20 +92,48 @@ function TareaRow({ tarea }) {
   )
 }
 
+function WelcomePage({ perfil }) {
+  const ROL_COLOR = { admin:'#ED6E2E', bodega:'#63b3ed', ventas:'#68d391', finanzas:'#c8a84b', logistica:'#b794f4' }
+  const color = ROL_COLOR[perfil?.rol] || '#888'
+  const hora = new Date().getHours()
+  const saludo = hora < 12 ? 'Buenos días' : hora < 18 ? 'Buenas tardes' : 'Buenas noches'
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center' }}>
+      <div style={{ fontSize: '3rem', marginBottom: 16 }}>☀️</div>
+      <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD, marginBottom: 8 }}>
+        Sistema de Operaciones y Logística
+      </div>
+      <h1 style={{ fontSize: '2rem', fontWeight: 700, color: '#1a1d24', letterSpacing: '-0.03em', margin: '0 0 8px' }}>
+        {saludo}, {perfil?.nombre?.split(' ')[0] || 'bienvenido'}
+      </h1>
+      <p style={{ fontSize: '0.92rem', color: '#6a7288', marginBottom: 28, maxWidth: 420 }}>
+        Usá el menú de la izquierda para acceder a los módulos disponibles para tu cuenta.
+      </p>
+      <span style={{
+        background: color + '22', color, border: `1px solid ${color}55`,
+        borderRadius: 20, padding: '4px 16px', fontSize: '0.78rem', fontWeight: 600
+      }}>
+        Rol: {perfil?.rol}
+      </span>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState({})
   const [alertas, setAlertas] = useState([])
   const [contenedores, setContenedores] = useState([])
   const [tareas, setTareas] = useState([])
-  const { perfil } = useAuth()
+  const { perfil, loading: authLoading } = useAuth()
 
-  const puedeVerFinanzas = perfil?.rol === 'admin' || perfil?.rol === 'finanzas'
+  const esAdmin = perfil?.rol === 'admin'
 
   useEffect(() => {
+    if (!esAdmin) { setLoading(false); return }
     async function cargar() {
       try {
-        // 1. Stock crítico
         const { data: stock } = await supabase
           .from('neo_minimos_maximos')
           .select('nombre, existencias, minimo, promedio_mensual')
@@ -118,7 +146,6 @@ export default function DashboardPage() {
           return exist < min && min > 0
         })
 
-        // 2. Contenedores activos
         const { data: envios } = await supabase
           .from('neptuno_envios')
           .select('*')
@@ -126,7 +153,6 @@ export default function DashboardPage() {
           .order('eta', { ascending: true })
           .limit(10)
 
-        // 3. Tareas pendientes
         const { data: tareasData } = await supabase
           .from('vega_tareas')
           .select('*')
@@ -134,7 +160,6 @@ export default function DashboardPage() {
           .order('creada', { ascending: false })
           .limit(8)
 
-        // 4. Cuentas por pagar
         const { data: pagos } = await supabase
           .from('fin_cuentas_pagar')
           .select('*')
@@ -145,7 +170,6 @@ export default function DashboardPage() {
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
 
-        // 5. Cuentas por cobrar
         const { data: cobros } = await supabase
           .from('fin_cuentas_cobrar')
           .select('*')
@@ -156,12 +180,6 @@ export default function DashboardPage() {
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
 
-        const alertasStock = criticos.slice(0, 5).map(i => ({
-          icon: '⚠️',
-          text: `${i.nombre} — Existencias: ${i.existencias} (mín. ${i.minimo})`,
-          color: '#f43f5e',
-        }))
-
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -170,7 +188,11 @@ export default function DashboardPage() {
           totalCobrar,
           posicionCaja: totalCobrar - totalPagar,
         })
-        setAlertas(alertasStock)
+        setAlertas(criticos.slice(0, 5).map(i => ({
+          icon: '⚠️',
+          text: `${i.nombre} — Existencias: ${i.existencias} (mín. ${i.minimo})`,
+          color: '#f43f5e',
+        })))
         setContenedores(envios || [])
         setTareas(tareasData || [])
       } catch (e) {
@@ -180,7 +202,13 @@ export default function DashboardPage() {
       }
     }
     cargar()
-  }, [])
+  }, [esAdmin])
+
+  // Esperar a que cargue el perfil antes de decidir qué mostrar
+  if (authLoading) return null
+
+  // No admin → pantalla de bienvenida
+  if (!esAdmin) return <WelcomePage perfil={perfil} />
 
   const posPositiva = kpis.posicionCaja >= 0
 
@@ -197,29 +225,24 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
-        <KpiCard icon="⚠️" label="Stock crítico"      value={kpis.stockCritico ?? '—'}        sub="ítems bajo mínimo"       color="#f43f5e" loading={loading} />
-        <KpiCard icon="🚢" label="Contenedores"       value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"     color="#0284c7" loading={loading} />
-        <KpiCard icon="✨" label="Tareas"             value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"          color="#7c3aed" loading={loading} />
-        {puedeVerFinanzas && (
-          <>
-            <KpiCard icon="💸" label="Por pagar"  value={fmt_crc(kpis.totalPagar)}  sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
-            <KpiCard icon="📥" label="Por cobrar" value={fmt_crc(kpis.totalCobrar)} sub="cuentas a clientes"    color="#0d9488" loading={loading} />
-            <KpiCard
-              icon={posPositiva ? '🟢' : '🔴'}
-              label="Posición neta"
-              value={fmt_crc(kpis.posicionCaja)}
-              sub={posPositiva ? 'Flujo positivo' : 'Revisar pagos'}
-              color={posPositiva ? '#059669' : '#f43f5e'}
-              loading={loading}
-            />
-          </>
-        )}
+        <KpiCard icon="⚠️" label="Stock crítico"  value={kpis.stockCritico ?? '—'}        sub="ítems bajo mínimo"     color="#f43f5e" loading={loading} />
+        <KpiCard icon="🚢" label="Contenedores"   value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"   color="#0284c7" loading={loading} />
+        <KpiCard icon="✨" label="Tareas"         value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"        color="#7c3aed" loading={loading} />
+        <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
+        <KpiCard icon="📥" label="Por cobrar"     value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"    color="#0d9488" loading={loading} />
+        <KpiCard
+          icon={posPositiva ? '🟢' : '🔴'}
+          label="Posición neta"
+          value={fmt_crc(kpis.posicionCaja)}
+          sub={posPositiva ? 'Flujo positivo' : 'Revisar pagos'}
+          color={posPositiva ? '#059669' : '#f43f5e'}
+          loading={loading}
+        />
       </div>
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-
         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚠️ Stock crítico</div>
           {loading
@@ -252,7 +275,6 @@ export default function DashboardPage() {
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
           }
         </div>
-
       </div>
 
       <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
