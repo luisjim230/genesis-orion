@@ -36,18 +36,15 @@ export async function PATCH(req) {
 
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
-    // Si viene nueva_password, actualizarla en Auth
     if (nueva_password) {
-      // Buscar auth_id del usuario
       const { data: usuario, error: fetchErr } = await supabaseAdmin
         .from('usuarios_sol')
         .select('auth_id')
         .eq('id', id)
         .single()
 
-      if (fetchErr || !usuario?.auth_id) {
+      if (fetchErr || !usuario?.auth_id)
         return NextResponse.json({ error: 'No se encontró auth_id para este usuario' }, { status: 400 })
-      }
 
       const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
         usuario.auth_id,
@@ -55,19 +52,49 @@ export async function PATCH(req) {
       )
       if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
 
-      // Si solo era cambio de password, retornar éxito
-      if (Object.keys(campos).length === 0) {
-        return NextResponse.json({ ok: true })
-      }
+      if (Object.keys(campos).length === 0) return NextResponse.json({ ok: true })
     }
 
-    // Actualizar campos en usuarios_sol
     const { error } = await supabaseAdmin
       .from('usuarios_sol')
       .update(campos)
       .eq('id', id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
+
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+
+    // Obtener auth_id antes de borrar
+    const { data: usuario, error: fetchErr } = await supabaseAdmin
+      .from('usuarios_sol')
+      .select('auth_id')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+
+    // Borrar de la tabla
+    const { error: delErr } = await supabaseAdmin
+      .from('usuarios_sol')
+      .delete()
+      .eq('id', id)
+
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+
+    // Borrar de Auth si tiene auth_id
+    if (usuario?.auth_id) {
+      await supabaseAdmin.auth.admin.deleteUser(usuario.auth_id)
+    }
+
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
