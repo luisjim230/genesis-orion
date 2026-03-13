@@ -1,70 +1,929 @@
-'use client';
-import { useState } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
-import { useRouter } from 'next/navigation';
+'use client'
+import { useState, useEffect, useMemo } from 'react'
+import { supabase } from '../../lib/supabase'
 
-const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@800;900&display=swap');`;
+// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
+const GOLD   = '#ED6E2E'
+const BG     = '#0f1115'
+const SURF   = '#1c1f26'
+const SURF2  = '#22262f'
+const BORDER = 'rgba(255,255,255,0.08)'
+const TEXT   = 'rgba(253,244,244,0.88)'
+const MUTED  = 'rgba(253,244,244,0.40)'
 
-export default function LoginPage() {
-  const router = useRouter();
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const [login, setLogin]   = useState('');
-  const [pass, setPass]     = useState('');
-  const [error, setError]   = useState(null);
-  const [loading, setLoading] = useState(false);
+const PLAT = {
+  tiktok:    { label:'TikTok',    color:'#69C9D0', icon:'🎵' },
+  instagram: { label:'Instagram', color:'#E1306C', icon:'📸' },
+  facebook:  { label:'Facebook',  color:'#4267B2', icon:'👍' },
+  youtube:   { label:'YouTube',   color:'#FF0000', icon:'▶️' },
+}
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setLoading(true); setError(null);
-    let authEmail = login.trim().toLowerCase();
-    if (!authEmail.includes('@')) {
-      const res  = await fetch(`/api/admin/usuarios?username=${encodeURIComponent(authEmail)}`);
-      const data = await res.json();
-      if (!res.ok || !data?.email) { setError('Usuario no encontrado.'); setLoading(false); return; }
-      authEmail = data.email;
+// Estado unificado del flujo
+const ESTADOS = {
+  idea:       { label:'Idea',              color:'#a78bfa', icon:'💡', next:'por_grabar' },
+  por_grabar: { label:'Por grabar',        color:'#f6ad55', icon:'🎬', next:'en_revision' },
+  en_revision:{ label:'En revisión',       color:'#63b3ed', icon:'👀', next:'listo' },
+  listo:      { label:'Listo',             color:'#68d391', icon:'✅', next:'programado' },
+  programado: { label:'Programado',        color:GOLD,      icon:'📅', next:'publicado' },
+  publicado:  { label:'Publicado',         color:'#718096', icon:'✔️', next:null },
+}
+
+// ─── STYLES ──────────────────────────────────────────────────────────────────
+const S = {
+  card: { background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:'16px 18px', marginBottom:12 },
+  th:   { textAlign:'left', padding:'9px 12px', background:SURF2, color:MUTED, fontSize:'0.68em',
+          textTransform:'uppercase', letterSpacing:'0.06em', borderBottom:`1px solid ${BORDER}`, whiteSpace:'nowrap' },
+  td:   { padding:'9px 12px', borderBottom:`1px solid ${BORDER}`, color:TEXT, verticalAlign:'middle', fontSize:'0.84em' },
+  input:{ background:SURF2, border:`1px solid ${BORDER}`, borderRadius:8, padding:'8px 12px',
+          color:TEXT, fontSize:'0.85em', fontFamily:'DM Sans,sans-serif', outline:'none', width:'100%', boxSizing:'border-box' },
+  btn:  (c=GOLD)=>({ background:c, color:'#fff', border:'none', borderRadius:8, padding:'8px 16px',
+          cursor:'pointer', fontSize:'0.82em', fontWeight:600, fontFamily:'DM Sans,sans-serif' }),
+  btnSm:(c=SURF2)=>({ background:c, color:TEXT, border:`1px solid ${BORDER}`, borderRadius:6,
+          padding:'5px 11px', cursor:'pointer', fontSize:'0.77em', fontFamily:'DM Sans,sans-serif' }),
+  badge:(c)=>({ background:c+'22', color:c, border:`1px solid ${c}44`, borderRadius:20,
+          padding:'3px 10px', fontSize:'0.72em', fontWeight:600, whiteSpace:'nowrap', display:'inline-block' }),
+  textarea:{ background:SURF2, border:`1px solid ${BORDER}`, borderRadius:8, padding:'8px 12px',
+             color:TEXT, fontSize:'0.84em', fontFamily:'DM Sans,sans-serif', outline:'none',
+             width:'100%', boxSizing:'border-box', resize:'vertical', minHeight:72 },
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function PlatBadge({ plat }) {
+  if (!plat || !PLAT[plat]) return null
+  const p = PLAT[plat]
+  return <span style={S.badge(p.color)}>{p.icon} {p.label}</span>
+}
+
+function EstadoBadge({ estado }) {
+  const e = ESTADOS[estado]
+  if (!e) return null
+  return <span style={S.badge(e.color)}>{e.icon} {e.label}</span>
+}
+
+function Sel({ value, onChange, options, style={} }) {
+  return (
+    <select value={value} onChange={ev=>onChange(ev.target.value)}
+      style={{ ...S.input, cursor:'pointer', ...style }}>
+      {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+    </select>
+  )
+}
+
+function Msg({ msg }) {
+  if (!msg) return null
+  return (
+    <div style={{ background:msg.ok?'#68d39122':'#fc818122', border:`1px solid ${msg.ok?'#68d391':'#fc8181'}55`,
+      borderRadius:8, padding:'9px 14px', marginBottom:12, color:msg.ok?'#68d391':'#fc8181', fontSize:'0.84em' }}>
+      {msg.t}
+    </div>
+  )
+}
+
+// ─── FORM CONTENIDO ──────────────────────────────────────────────────────────
+function FormContenido({ item, onClose, onSaved }) {
+  const EMPTY = {
+    titulo:'', plataforma:'tiktok', estado:'idea',
+    descripcion:'', link_archivo:'', caption:'', hashtags:'', notas:'',
+    fecha_programada:'', hora_programada:'12:00', prioridad:'media',
+  }
+  const [form, setForm] = useState(item ? {...item} : {...EMPTY})
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  function showMsg(t, ok=true) { setMsg({t,ok}); setTimeout(()=>setMsg(null),3500) }
+
+  async function guardar() {
+    if (!form.titulo.trim()) return showMsg('El título es requerido.', false)
+    setSaving(true)
+    const payload = { ...form }
+    if (form.id) {
+      await supabase.from('social_contenido').update(payload).eq('id', form.id)
+    } else {
+      await supabase.from('social_contenido').insert({...payload, creado_en: new Date().toISOString()})
     }
-    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: pass });
-    if (error) { setError('Credenciales incorrectas.'); setLoading(false); return; }
-    router.push('/'); router.refresh();
+    setSaving(false)
+    showMsg('Guardado.')
+    setTimeout(()=>{ onSaved() }, 800)
   }
 
-  const inputStyle = { width:'100%', boxSizing:'border-box', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', borderRadius:10, padding:'11px 14px', color:'rgba(253,244,244,0.92)', fontSize:'0.9rem', fontFamily:'inherit', outline:'none' };
+  const esProgramado = form.estado === 'programado' || form.estado === 'publicado'
 
   return (
-    <>
-      <style>{nunitoStyle}</style>
-      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'linear-gradient(135deg, #5E2733 0%, #3a1520 60%, #1a0a0e 100%)', fontFamily:"'Rubik','DM Sans',sans-serif" }}>
-        <div style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.10)', borderRadius:20, padding:'48px 44px', width:'100%', maxWidth:400, boxShadow:'0 24px 64px rgba(0,0,0,0.40)' }}>
-          <div style={{ textAlign:'center', marginBottom:36 }}>
-            <svg width="56" height="48" viewBox="0 0 56 48" style={{ display:'block', margin:'0 auto 10px' }}>
-              <rect x="0"  y="0"  width="16" height="9" rx="2" fill="rgba(255,255,255,0.90)"/>
-              <rect x="20" y="0"  width="24" height="9" rx="2" fill="#ED6E2E"/>
-              <rect x="0"  y="13" width="24" height="9" rx="2" fill="#ED6E2E"/>
-              <rect x="28" y="13" width="16" height="9" rx="2" fill="#ED6E2E"/>
-              <rect x="0"  y="26" width="10" height="9" rx="2" fill="#ED6E2E"/>
-              <rect x="14" y="26" width="30" height="9" rx="2" fill="#ED6E2E"/>
-            </svg>
-            <div style={{ fontFamily:"'Nunito',sans-serif", fontWeight:900, color:'#ED6E2E', fontSize:13, letterSpacing:'0.18em', textTransform:'uppercase', marginBottom:2 }}>DEPÓSITO JIMÉNEZ</div>
-            <div style={{ fontFamily:"'Nunito',sans-serif", fontWeight:900, color:'rgba(253,244,244,0.95)', fontSize:26, letterSpacing:'0.04em', lineHeight:1 }}>SOL</div>
-            <div style={{ color:'rgba(253,244,244,0.45)', fontSize:'0.65rem', letterSpacing:'0.10em', textTransform:'uppercase', marginTop:4 }}>Sistema de Operaciones y Logística</div>
+    <div>
+      <button style={{...S.btnSm(), marginBottom:16}} onClick={onClose}>← Volver</button>
+      <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>
+        {form.id ? '✏️ Editar contenido' : '➕ Nuevo contenido'}
+      </h2>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12}}>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>TÍTULO *</label>
+          <input style={S.input} value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} placeholder="Nombre del video/post"/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PLATAFORMA</label>
+          <Sel value={form.plataforma} onChange={v=>setForm({...form,plataforma:v})}
+            options={Object.entries(PLAT).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ESTADO EN EL FLUJO</label>
+          <Sel value={form.estado} onChange={v=>setForm({...form,estado:v})}
+            options={Object.entries(ESTADOS).map(([k,e])=>[k,`${e.icon} ${e.label}`])}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PRIORIDAD</label>
+          <Sel value={form.prioridad} onChange={v=>setForm({...form,prioridad:v})}
+            options={[['alta','🔴 Alta'],['media','🟡 Media'],['baja','🟢 Baja']]}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>
+            {esProgramado ? 'FECHA PROGRAMADA' : 'FECHA SUGERIDA'}
+          </label>
+          <input type="date" style={S.input} value={form.fecha_programada} onChange={e=>setForm({...form,fecha_programada:e.target.value})}/>
+        </div>
+        {(form.fecha_programada || esProgramado) && (
+          <div>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>HORA</label>
+            <input type="time" style={S.input} value={form.hora_programada} onChange={e=>setForm({...form,hora_programada:e.target.value})}/>
           </div>
-          <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <div>
-              <label style={{ fontSize:'0.72rem', color:'rgba(253,244,244,0.45)', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:6 }}>Usuario o correo</label>
-              <input type="text" required autoComplete="username" value={login} onChange={e=>setLogin(e.target.value)} style={inputStyle} placeholder="luis.jimenez o usuario@rojimo.com"/>
-            </div>
-            <div>
-              <label style={{ fontSize:'0.72rem', color:'rgba(253,244,244,0.45)', textTransform:'uppercase', letterSpacing:'0.08em', display:'block', marginBottom:6 }}>Contraseña</label>
-              <input type="password" required autoComplete="current-password" value={pass} onChange={e=>setPass(e.target.value)} style={inputStyle} placeholder="••••••••"/>
-            </div>
-            {error && <div style={{ background:'rgba(252,129,129,0.12)', border:'1px solid rgba(252,129,129,0.35)', borderRadius:8, padding:'10px 14px', color:'#fc8181', fontSize:'0.82rem' }}>❌ {error}</div>}
-            <button type="submit" disabled={loading} style={{ marginTop:8, padding:'13px', borderRadius:10, border:'none', background:loading?'rgba(237,110,46,0.5)':'#ED6E2E', color:'#fff', fontWeight:600, fontSize:'0.95rem', fontFamily:'inherit', cursor:loading?'not-allowed':'pointer' }}>
-              {loading ? 'Ingresando...' : 'Ingresar →'}
-            </button>
-          </form>
-          <div style={{ textAlign:'center', marginTop:28, fontSize:'0.68rem', color:'rgba(253,244,244,0.20)' }}>SOL v1.0 · 2026 · Acceso restringido</div>
+        )}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>LINK AL ARCHIVO (Drive / Dropbox)</label>
+          <input style={S.input} value={form.link_archivo} onChange={e=>setForm({...form,link_archivo:e.target.value})} placeholder="https://drive.google.com/..."/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>DESCRIPCIÓN / GUIÓN</label>
+          <textarea style={S.textarea} value={form.descripcion} onChange={e=>setForm({...form,descripcion:e.target.value})} placeholder="Qué debe mostrar, puntos clave, guión..."/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>CAPTION</label>
+          <textarea style={{...S.textarea, minHeight:56}} value={form.caption} onChange={e=>setForm({...form,caption:e.target.value})} placeholder="Texto que va con la publicación..."/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>HASHTAGS</label>
+          <input style={S.input} value={form.hashtags} onChange={e=>setForm({...form,hashtags:e.target.value})} placeholder="#construccion #costarica"/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NOTAS INTERNAS</label>
+          <textarea style={{...S.textarea, minHeight:52}} value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})} placeholder="Detalles para el equipo..."/>
         </div>
       </div>
-    </>
-  );
+      <Msg msg={msg}/>
+      <div style={{display:'flex', gap:10}}>
+        <button style={S.btn()} onClick={guardar} disabled={saving}>{saving?'Guardando...':'💾 Guardar'}</button>
+        <button style={S.btnSm()} onClick={onClose}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── DETALLE CONTENIDO ────────────────────────────────────────────────────────
+function DetalleContenido({ item, onClose, onEdit, onRefresh }) {
+  const [msg, setMsg] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [nuevoComentario, setNuevoComentario] = useState('')
+
+  function showMsg(t, ok=true) { setMsg({t,ok}); setTimeout(()=>setMsg(null),3500) }
+
+  async function avanzarEstado() {
+    const siguiente = ESTADOS[item.estado]?.next
+    if (!siguiente) return
+    setSaving(true)
+    const extra = {}
+    if (siguiente === 'publicado') extra.fecha_publicacion = new Date().toISOString()
+    await supabase.from('social_contenido').update({ estado: siguiente, ...extra }).eq('id', item.id)
+    setSaving(false)
+    showMsg(`Movido a: ${ESTADOS[siguiente].label} ✓`)
+    setTimeout(()=>{ onRefresh() }, 800)
+  }
+
+  async function cambiarEstado(nuevoEstado) {
+    setSaving(true)
+    const extra = {}
+    if (nuevoEstado === 'publicado') extra.fecha_publicacion = new Date().toISOString()
+    await supabase.from('social_contenido').update({ estado: nuevoEstado, ...extra }).eq('id', item.id)
+    setSaving(false)
+    showMsg(`Estado: ${ESTADOS[nuevoEstado].label}`)
+    setTimeout(()=>{ onRefresh() }, 600)
+  }
+
+  async function agregarComentario() {
+    if (!nuevoComentario.trim()) return
+    const comentarios = [...(item.comentarios||[]), { texto: nuevoComentario.trim(), fecha: new Date().toISOString() }]
+    await supabase.from('social_contenido').update({ comentarios }).eq('id', item.id)
+    setNuevoComentario('')
+    showMsg('Comentario agregado.')
+    onRefresh()
+  }
+
+  async function eliminar() {
+    if (!confirm('¿Eliminar este contenido?')) return
+    await supabase.from('social_contenido').delete().eq('id', item.id)
+    onClose()
+    onRefresh()
+  }
+
+  const sig = ESTADOS[item.estado]?.next
+  const PRIOR_COLOR = { alta:'#fc8181', media:'#f6ad55', baja:'#68d391' }
+
+  return (
+    <div>
+      <button style={{...S.btnSm(), marginBottom:16}} onClick={onClose}>← Volver</button>
+      <Msg msg={msg}/>
+
+      {/* Header */}
+      <div style={S.card}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10, marginBottom:16}}>
+          <div>
+            <div style={{fontWeight:700, color:TEXT, fontSize:'1.1em', marginBottom:8}}>{item.titulo}</div>
+            <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
+              <PlatBadge plat={item.plataforma}/>
+              <EstadoBadge estado={item.estado}/>
+              {item.prioridad && <span style={S.badge(PRIOR_COLOR[item.prioridad]||MUTED)}>{item.prioridad}</span>}
+            </div>
+          </div>
+          <button style={S.btnSm()} onClick={onEdit}>✏️ Editar</button>
+        </div>
+
+        {/* Flujo visual */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:'0.7em', color:MUTED, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.06em'}}>Flujo del contenido</div>
+          <div style={{display:'flex', alignItems:'center', gap:4, flexWrap:'wrap'}}>
+            {Object.entries(ESTADOS).map(([k, e], i, arr)=>{
+              const isActive = k === item.estado
+              const isPast = Object.keys(ESTADOS).indexOf(k) < Object.keys(ESTADOS).indexOf(item.estado)
+              return (
+                <div key={k} style={{display:'flex', alignItems:'center', gap:4}}>
+                  <button
+                    onClick={()=> k !== item.estado && cambiarEstado(k)}
+                    style={{
+                      padding:'4px 10px', borderRadius:20, border:`1px solid ${isActive ? e.color : isPast ? e.color+'44' : BORDER}`,
+                      background: isActive ? e.color+'33' : isPast ? e.color+'11' : 'transparent',
+                      color: isActive ? e.color : isPast ? e.color+'88' : MUTED,
+                      cursor: k !== item.estado ? 'pointer' : 'default',
+                      fontSize:'0.72em', fontWeight: isActive ? 700 : 400, fontFamily:'DM Sans,sans-serif',
+                      transition:'all 0.15s'
+                    }}
+                  >{e.icon} {e.label}</button>
+                  {i < arr.length-1 && <span style={{color:BORDER, fontSize:'0.8em'}}>›</span>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Botón avanzar */}
+        {sig && (
+          <button style={{...S.btn(ESTADOS[sig].color), marginBottom:4}} onClick={avanzarEstado} disabled={saving}>
+            {saving ? 'Guardando...' : `→ Pasar a ${ESTADOS[sig].label}`}
+          </button>
+        )}
+      </div>
+
+      {/* Datos */}
+      <div style={S.card}>
+        {item.fecha_programada && (
+          <div style={{marginBottom:12, fontSize:'0.84em', color:MUTED}}>
+            📅 {item.fecha_programada} {item.hora_programada && `· ${item.hora_programada}`}
+            {item.fecha_publicacion && <span style={{marginLeft:16, color:'#68d391'}}>✔️ Publicado: {new Date(item.fecha_publicacion).toLocaleDateString('es-CR')}</span>}
+          </div>
+        )}
+        {item.link_archivo && (
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:'0.7em', color:MUTED, marginBottom:4}}>ARCHIVO</div>
+            <a href={item.link_archivo} target="_blank" rel="noreferrer" style={{color:GOLD, fontSize:'0.84em', wordBreak:'break-all'}}>🔗 {item.link_archivo}</a>
+          </div>
+        )}
+        {item.descripcion && (
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:'0.7em', color:MUTED, marginBottom:4}}>DESCRIPCIÓN / GUIÓN</div>
+            <div style={{background:SURF2, borderRadius:8, padding:'10px 14px', fontSize:'0.84em', color:TEXT, lineHeight:1.5, whiteSpace:'pre-wrap'}}>{item.descripcion}</div>
+          </div>
+        )}
+        {item.caption && (
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:'0.7em', color:MUTED, marginBottom:4}}>CAPTION</div>
+            <div style={{background:SURF2, borderRadius:8, padding:'10px 14px', fontSize:'0.84em', color:TEXT, lineHeight:1.5, whiteSpace:'pre-wrap'}}>{item.caption}</div>
+          </div>
+        )}
+        {item.hashtags && (
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:'0.7em', color:MUTED, marginBottom:4}}>HASHTAGS</div>
+            <div style={{fontSize:'0.84em', color:'#63b3ed'}}>{item.hashtags}</div>
+          </div>
+        )}
+        {item.notas && (
+          <div>
+            <div style={{fontSize:'0.7em', color:MUTED, marginBottom:4}}>NOTAS</div>
+            <div style={{background:SURF2, borderRadius:8, padding:'10px 14px', fontSize:'0.83em', color:MUTED, lineHeight:1.5}}>{item.notas}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Comentarios */}
+      <div style={S.card}>
+        <div style={{fontSize:'0.7em', color:MUTED, marginBottom:10, textTransform:'uppercase', letterSpacing:'0.06em'}}>
+          Comentarios ({(item.comentarios||[]).length})
+        </div>
+        <div style={{maxHeight:200, overflowY:'auto', marginBottom:10}}>
+          {(item.comentarios||[]).length === 0
+            ? <div style={{color:MUTED, fontSize:'0.83em'}}>Sin comentarios aún.</div>
+            : (item.comentarios||[]).map((c,i)=>(
+              <div key={i} style={{background:SURF2, borderRadius:8, padding:'9px 12px', marginBottom:6}}>
+                <div style={{fontSize:'0.84em', color:TEXT}}>{c.texto}</div>
+                <div style={{fontSize:'0.7em', color:MUTED, marginTop:4}}>{new Date(c.fecha).toLocaleString('es-CR')}</div>
+              </div>
+            ))
+          }
+        </div>
+        <div style={{display:'flex', gap:8}}>
+          <input style={{...S.input, flex:1}} value={nuevoComentario}
+            onChange={e=>setNuevoComentario(e.target.value)}
+            placeholder="Agregar comentario..." onKeyDown={e=>e.key==='Enter'&&agregarComentario()}/>
+          <button style={S.btn()} onClick={agregarComentario}>Enviar</button>
+        </div>
+      </div>
+
+      <hr style={{border:'none', borderTop:`1px solid ${BORDER}`, margin:'4px 0 12px'}}/>
+      <button style={S.btn('#7d1515')} onClick={eliminar}>🗑️ Eliminar</button>
+    </div>
+  )
+}
+
+// ─── TAB: LISTA (filtro por estado) ──────────────────────────────────────────
+function TabLista({ items, loading, onNuevo, onDetalle, estadoFiltro }) {
+  const [filtroPlat, setFiltroPlat] = useState('todas')
+
+  let filtrados = estadoFiltro === 'todos'
+    ? items.filter(x => x.estado !== 'publicado')
+    : items.filter(x => x.estado === estadoFiltro)
+
+  if (filtroPlat !== 'todas') filtrados = filtrados.filter(x => x.plataforma === filtroPlat)
+
+  const PRIOR_COLOR = { alta:'#fc8181', media:'#f6ad55', baja:'#68d391' }
+
+  // Stats para "listo"
+  const listos = items.filter(x=>x.estado==='listo')
+  const publicados = items.filter(x=>x.estado==='publicado')
+  const proxSemana = items.filter(x=>{
+    if (!x.fecha_programada || (x.estado!=='programado'&&x.estado!=='listo')) return false
+    const d = new Date(x.fecha_programada), hoy = new Date()
+    const diff = (d - hoy) / 86400000
+    return diff >= 0 && diff <= 7
+  }).length
+  const sinFecha = items.filter(x=>x.estado==='listo'&&!x.fecha_programada).length
+
+  return (
+    <div>
+      {estadoFiltro === 'listo' && (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20}}>
+          {[
+            ['🟢 En cola', listos.length, '#63b3ed'],
+            ['✅ Publicados', publicados.length, '#68d391'],
+            ['📅 Esta semana', proxSemana, GOLD],
+            ['⏰ Sin fecha', sinFecha, '#f6ad55'],
+          ].map(([l,v,c])=>(
+            <div key={l} style={{background:SURF, border:`1px solid ${c}33`, borderTop:`3px solid ${c}`, borderRadius:10, padding:'14px 16px'}}>
+              <div style={{fontSize:'0.7em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.06em'}}>{l}</div>
+              <div style={{fontSize:'1.8em', fontWeight:700, color:c, marginTop:4}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:16}}>
+        <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+          {[['todas','🎬 Todas'],['tiktok','🎵 TikTok'],['instagram','📸 Instagram'],['facebook','👍 Facebook'],['youtube','▶️ YouTube']].map(([v,l])=>(
+            <button key={v} onClick={()=>setFiltroPlat(v)} style={{
+              padding:'6px 14px', borderRadius:20, border:`1px solid ${BORDER}`,
+              background: filtroPlat===v ? GOLD : SURF2, color: filtroPlat===v ? '#fff' : MUTED,
+              cursor:'pointer', fontSize:'0.8em', fontFamily:'DM Sans,sans-serif'
+            }}>{l}</button>
+          ))}
+        </div>
+        <button style={S.btn()} onClick={onNuevo}>+ Agregar contenido</button>
+      </div>
+
+      {loading ? <div style={{textAlign:'center', padding:40, color:MUTED}}>Cargando...</div>
+      : filtrados.length===0
+        ? <div style={{...S.card, textAlign:'center', padding:40, color:MUTED}}>No hay contenido aquí aún.</div>
+        : (
+          <div style={{display:'grid', gap:8}}>
+            {filtrados.map(item=>{
+              const e = ESTADOS[item.estado]||{}
+              const sig = e.next
+              const d = item.fecha_programada ? new Date(item.fecha_programada) : null
+              const diff = d ? (d - new Date()) / 86400000 : null
+              const fColor = diff===null ? MUTED : diff<0 ? '#fc8181' : diff<=3 ? '#f6ad55' : '#68d391'
+              return (
+                <div key={item.id} style={{...S.card, marginBottom:0, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:12}}
+                  onClick={()=>onDetalle(item)}>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontWeight:600, color:TEXT, fontSize:'0.9em', marginBottom:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{item.titulo}</div>
+                    <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                      <PlatBadge plat={item.plataforma}/>
+                      <EstadoBadge estado={item.estado}/>
+                      {item.prioridad && item.prioridad!=='media' && <span style={S.badge(PRIOR_COLOR[item.prioridad])}>{item.prioridad}</span>}
+                      {item.fecha_programada && <span style={{fontSize:'0.75em', color:fColor}}>📅 {item.fecha_programada}</span>}
+                      {(item.comentarios||[]).length>0 && <span style={{fontSize:'0.75em', color:MUTED}}>💬 {item.comentarios.length}</span>}
+                    </div>
+                  </div>
+                  <div style={{display:'flex', gap:6}} onClick={ev=>ev.stopPropagation()}>
+                    {item.link_archivo && <a href={item.link_archivo} target="_blank" rel="noreferrer" style={{...S.btnSm(), textDecoration:'none', color:GOLD}}>🔗</a>}
+                    {sig && (
+                      <button style={{...S.btn(ESTADOS[sig]?.color||GOLD), fontSize:'0.76em', padding:'5px 12px'}}
+                        onClick={async ev=>{ ev.stopPropagation(); await supabase.from('social_contenido').update({estado:sig}).eq('id',item.id); onDetalle(null); window.location.reload() }}>
+                        → {ESTADOS[sig]?.label}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      }
+
+      {/* Historial publicados (solo en tab listo) */}
+      {estadoFiltro === 'listo' && publicados.length > 0 && (
+        <div style={{...S.card, padding:0, overflow:'hidden', marginTop:20}}>
+          <div style={{padding:'12px 18px', borderBottom:`1px solid ${BORDER}`, fontWeight:600, color:MUTED, fontSize:'0.85em'}}>
+            ✔️ Historial publicados — {publicados.length}
+          </div>
+          <div style={{overflowX:'auto', maxHeight:280, overflowY:'auto'}}>
+            <table style={{width:'100%', borderCollapse:'collapse'}}>
+              <thead><tr>{['Plataforma','Título','Publicado',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {publicados.map(item=>(
+                  <tr key={item.id} onClick={()=>onDetalle(item)} style={{cursor:'pointer'}}>
+                    <td style={S.td}><PlatBadge plat={item.plataforma}/></td>
+                    <td style={{...S.td, fontWeight:500}}>{item.titulo}</td>
+                    <td style={{...S.td, color:MUTED}}>{item.fecha_publicacion ? new Date(item.fecha_publicacion).toLocaleDateString('es-CR') : '—'}</td>
+                    <td style={S.td}><button style={S.btnSm()}>Ver</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── VISTA CALENDARIO MES ────────────────────────────────────────────────────
+function CalendarioMes({ items, onDetalle }) {
+  const hoy = new Date()
+  const [ano, setAno] = useState(hoy.getFullYear())
+  const [mes, setMes] = useState(hoy.getMonth())
+
+  const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const DIAS_ES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+
+  const primerDia = new Date(ano, mes, 1).getDay()
+  const diasEnMes = new Date(ano, mes+1, 0).getDate()
+
+  // Items con fecha en este mes
+  const itemsDelMes = useMemo(()=>{
+    return items.filter(x => {
+      if (!x.fecha_programada) return false
+      const d = new Date(x.fecha_programada)
+      return d.getFullYear()===ano && d.getMonth()===mes
+    })
+  }, [items, ano, mes])
+
+  function itemsDelDia(dia) {
+    return itemsDelMes.filter(x => {
+      const d = new Date(x.fecha_programada)
+      return d.getDate() === dia
+    })
+  }
+
+  const celdas = []
+  for (let i=0; i<primerDia; i++) celdas.push(null)
+  for (let d=1; d<=diasEnMes; d++) celdas.push(d)
+
+  const esHoy = (dia) => dia && hoy.getFullYear()===ano && hoy.getMonth()===mes && hoy.getDate()===dia
+
+  return (
+    <div>
+      {/* Nav mes */}
+      <div style={{display:'flex', alignItems:'center', gap:16, marginBottom:20}}>
+        <button style={S.btnSm()} onClick={()=>{ if(mes===0){setMes(11);setAno(a=>a-1)}else setMes(m=>m-1) }}>‹</button>
+        <div style={{fontWeight:700, color:TEXT, fontSize:'1em', minWidth:180, textAlign:'center'}}>
+          {MESES_ES[mes]} {ano}
+        </div>
+        <button style={S.btnSm()} onClick={()=>{ if(mes===11){setMes(0);setAno(a=>a+1)}else setMes(m=>m+1) }}>›</button>
+        <button style={{...S.btnSm(), marginLeft:8}} onClick={()=>{setMes(hoy.getMonth());setAno(hoy.getFullYear())}}>Hoy</button>
+      </div>
+
+      {/* Grid */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1, background:BORDER, borderRadius:10, overflow:'hidden'}}>
+        {DIAS_ES.map(d=>(
+          <div key={d} style={{background:SURF2, padding:'8px 0', textAlign:'center', fontSize:'0.72em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:600}}>
+            {d}
+          </div>
+        ))}
+        {celdas.map((dia, i)=>{
+          const its = dia ? itemsDelDia(dia) : []
+          return (
+            <div key={i} style={{
+              background: esHoy(dia) ? '#ED6E2E11' : SURF,
+              minHeight:90,
+              padding:'6px 5px',
+              border: esHoy(dia) ? `1px solid ${GOLD}44` : 'none',
+              position:'relative',
+            }}>
+              {dia && (
+                <>
+                  <div style={{
+                    fontSize:'0.8em', fontWeight: esHoy(dia)?700:400,
+                    color: esHoy(dia) ? GOLD : MUTED,
+                    marginBottom:4,
+                    width:22, height:22, borderRadius:'50%',
+                    background: esHoy(dia) ? GOLD+'22' : 'transparent',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}>{dia}</div>
+                  {its.slice(0,3).map((item,j)=>{
+                    const p = PLAT[item.plataforma]
+                    const e = ESTADOS[item.estado]
+                    return (
+                      <div key={j} onClick={()=>onDetalle(item)} style={{
+                        background: (p?.color||GOLD)+'22',
+                        border:`1px solid ${p?.color||GOLD}44`,
+                        borderLeft:`3px solid ${p?.color||GOLD}`,
+                        borderRadius:4,
+                        padding:'2px 5px',
+                        marginBottom:2,
+                        cursor:'pointer',
+                        fontSize:'0.68em',
+                        color:TEXT,
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                      }}>
+                        {p?.icon} {item.titulo}
+                      </div>
+                    )
+                  })}
+                  {its.length>3 && <div style={{fontSize:'0.65em', color:MUTED, marginTop:2}}>+{its.length-3} más</div>}
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Leyenda */}
+      <div style={{display:'flex', gap:16, marginTop:16, flexWrap:'wrap'}}>
+        {Object.entries(PLAT).map(([k,p])=>(
+          <div key={k} style={{display:'flex', alignItems:'center', gap:6, fontSize:'0.78em', color:MUTED}}>
+            <div style={{width:10, height:10, borderRadius:2, background:p.color, flexShrink:0}}/>
+            {p.label}
+          </div>
+        ))}
+        <div style={{display:'flex', alignItems:'center', gap:6, fontSize:'0.78em', color:MUTED, marginLeft:'auto'}}>
+          {Object.entries(ESTADOS).filter(([k])=>k!=='publicado').map(([k,e])=>(
+            <span key={k} style={{...S.badge(e.color), fontSize:'0.7em'}}>{e.icon} {e.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── VISTA CALENDARIO SEMANA ─────────────────────────────────────────────────
+function CalendarioSemana({ items, onDetalle }) {
+  const hoy = new Date()
+  const [baseDate, setBaseDate] = useState(()=>{
+    const d = new Date()
+    d.setDate(d.getDate() - d.getDay())
+    return d
+  })
+
+  const DIAS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+  const DIAS_FULL = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+
+  function semanaActual() {
+    const d = new Date()
+    d.setDate(d.getDate() - d.getDay())
+    setBaseDate(d)
+  }
+
+  function navSemana(dir) {
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() + dir*7)
+    setBaseDate(d)
+  }
+
+  const diasSemana = Array.from({length:7}, (_,i)=>{
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() + i)
+    return d
+  })
+
+  function toKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+
+  function itemsDia(dia) {
+    const key = toKey(dia)
+    return items.filter(x => x.fecha_programada && x.fecha_programada.startsWith(key))
+  }
+
+  const esHoy = (d) => toKey(d) === toKey(hoy)
+
+  const inicio = diasSemana[0]
+  const fin = diasSemana[6]
+  const fmt = (d) => d.toLocaleDateString('es-CR', {day:'numeric', month:'short'})
+
+  return (
+    <div>
+      {/* Nav semana */}
+      <div style={{display:'flex', alignItems:'center', gap:16, marginBottom:20}}>
+        <button style={S.btnSm()} onClick={()=>navSemana(-1)}>‹ Anterior</button>
+        <div style={{fontWeight:700, color:TEXT, fontSize:'0.95em', minWidth:200, textAlign:'center'}}>
+          {fmt(inicio)} — {fmt(fin)}
+        </div>
+        <button style={S.btnSm()} onClick={()=>navSemana(1)}>Siguiente ›</button>
+        <button style={{...S.btnSm(), marginLeft:8}} onClick={semanaActual}>Esta semana</button>
+      </div>
+
+      {/* Grid semana */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:8}}>
+        {diasSemana.map((dia, i)=>{
+          const its = itemsDia(dia)
+          return (
+            <div key={i} style={{
+              background: esHoy(dia) ? '#ED6E2E0d' : SURF,
+              border: esHoy(dia) ? `1px solid ${GOLD}55` : `1px solid ${BORDER}`,
+              borderRadius:10,
+              padding:'10px 8px',
+              minHeight:160,
+            }}>
+              <div style={{textAlign:'center', marginBottom:10}}>
+                <div style={{fontSize:'0.68em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>{DIAS_ES[i]}</div>
+                <div style={{
+                  fontSize:'1.1em', fontWeight:700,
+                  color: esHoy(dia) ? GOLD : TEXT,
+                  width:32, height:32, borderRadius:'50%',
+                  background: esHoy(dia) ? GOLD+'22' : 'transparent',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  margin:'4px auto 0',
+                }}>{dia.getDate()}</div>
+              </div>
+              {its.length === 0
+                ? <div style={{fontSize:'0.7em', color:BORDER, textAlign:'center', marginTop:8}}>—</div>
+                : its.map((item,j)=>{
+                    const p = PLAT[item.plataforma]
+                    const e = ESTADOS[item.estado]
+                    return (
+                      <div key={j} onClick={()=>onDetalle(item)} style={{
+                        background: (p?.color||GOLD)+'22',
+                        border:`1px solid ${p?.color||GOLD}44`,
+                        borderLeft:`3px solid ${p?.color||GOLD}`,
+                        borderRadius:6,
+                        padding:'5px 7px',
+                        marginBottom:5,
+                        cursor:'pointer',
+                      }}>
+                        <div style={{fontSize:'0.72em', color:TEXT, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p?.icon} {item.titulo}</div>
+                        <div style={{fontSize:'0.65em', color:MUTED, marginTop:2}}>{e?.icon} {e?.label}</div>
+                        {item.hora_programada && <div style={{fontSize:'0.65em', color:p?.color||GOLD}}>🕐 {item.hora_programada}</div>}
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Total semana */}
+      <div style={{marginTop:14, fontSize:'0.8em', color:MUTED, textAlign:'right'}}>
+        {diasSemana.reduce((acc,d)=>acc+itemsDia(d).length,0)} publicación(es) esta semana
+      </div>
+    </div>
+  )
+}
+
+// ─── TAB: ESTADÍSTICAS ────────────────────────────────────────────────────────
+function TabEstadisticas() {
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const EMPTY = { mes:'', anio: new Date().getFullYear(), plataforma:'tiktok', seguidores:0, alcance:0, interacciones:0, videos_publicados:0, notas:'' }
+  const [registros, setRegistros] = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [form, setForm]           = useState(null)
+  const [saving, setSaving]       = useState(false)
+  const [msg, setMsg]             = useState(null)
+
+  function showMsg(t, ok=true) { setMsg({t,ok}); setTimeout(()=>setMsg(null),3000) }
+
+  async function cargar() {
+    setLoading(true)
+    const { data } = await supabase.from('social_estadisticas').select('*').order('anio',{ascending:false}).order('mes',{ascending:false})
+    setRegistros(data||[])
+    setLoading(false)
+  }
+  useEffect(()=>{ cargar() },[])
+
+  async function guardar() {
+    if (!form.mes||!form.plataforma) return showMsg('Mes y plataforma requeridos.', false)
+    setSaving(true)
+    if (form.id) await supabase.from('social_estadisticas').update(form).eq('id', form.id)
+    else await supabase.from('social_estadisticas').insert({...form, creado_en: new Date().toISOString()})
+    setSaving(false); setForm(null); showMsg('Guardado.'); cargar()
+  }
+
+  async function eliminar(id) {
+    if (!confirm('¿Eliminar?')) return
+    await supabase.from('social_estadisticas').delete().eq('id', id); cargar()
+  }
+
+  if (form) return (
+    <div>
+      <button style={{...S.btnSm(), marginBottom:16}} onClick={()=>setForm(null)}>← Volver</button>
+      <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>📊 {form.id?'Editar métricas':'Registrar métricas del mes'}</h2>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:12}}>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MES *</label>
+          <Sel value={form.mes} onChange={v=>setForm({...form,mes:v})}
+            options={[['','Seleccioná'],...MESES.map((m,i)=>[String(i+1).padStart(2,'0'),m])]}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>AÑO</label>
+          <input type="number" style={S.input} value={form.anio} onChange={e=>setForm({...form,anio:parseInt(e.target.value)})}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PLATAFORMA *</label>
+          <Sel value={form.plataforma} onChange={v=>setForm({...form,plataforma:v})}
+            options={Object.entries(PLAT).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
+        </div>
+        {[['seguidores','SEGUIDORES'],['alcance','ALCANCE'],['interacciones','INTERACCIONES'],['videos_publicados','VIDEOS']].map(([k,l])=>(
+          <div key={k}>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>{l}</label>
+            <input type="number" style={S.input} value={form[k]} onChange={e=>setForm({...form,[k]:parseInt(e.target.value)||0})}/>
+          </div>
+        ))}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NOTAS</label>
+          <textarea style={{...S.textarea, minHeight:56}} value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})}/>
+        </div>
+      </div>
+      <Msg msg={msg}/>
+      <div style={{display:'flex', gap:10}}>
+        <button style={S.btn()} onClick={guardar} disabled={saving}>{saving?'Guardando...':'💾 Guardar'}</button>
+        <button style={S.btnSm()} onClick={()=>setForm(null)}>Cancelar</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+        <div style={{fontSize:'0.84em', color:MUTED}}>Métricas manuales por mes y plataforma</div>
+        <button style={S.btn()} onClick={()=>setForm({...EMPTY})}>+ Registrar métricas</button>
+      </div>
+      {loading ? <div style={{textAlign:'center', padding:40, color:MUTED}}>Cargando...</div>
+      : registros.length===0 ? <div style={{...S.card, textAlign:'center', padding:40, color:MUTED}}>Aún no hay métricas.</div>
+      : (
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%', borderCollapse:'collapse'}}>
+            <thead><tr>{['Mes','Plataforma','Seguidores','Alcance','Interacciones','Videos','Notas',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {registros.map(r=>(
+                <tr key={r.id}>
+                  <td style={{...S.td, fontWeight:600}}>{MESES[(parseInt(r.mes)||1)-1]} {r.anio}</td>
+                  <td style={S.td}><PlatBadge plat={r.plataforma}/></td>
+                  <td style={{...S.td, textAlign:'right', color:'#63b3ed', fontWeight:600}}>{(r.seguidores||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.alcance||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.interacciones||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{r.videos_publicados||0}</td>
+                  <td style={{...S.td, color:MUTED, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.notas||'—'}</td>
+                  <td style={S.td}>
+                    <div style={{display:'flex', gap:6}}>
+                      <button style={S.btnSm()} onClick={()=>setForm({...r})}>✏️</button>
+                      <button style={{...S.btnSm(), color:'#fc8181', borderColor:'#fc818144'}} onClick={()=>eliminar(r.id)}>✕</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
+const TABS = [
+  { id:'listo',        icon:'✅', label:'Listo para publicar', estadoFiltro:'listo' },
+  { id:'por_grabar',   icon:'🎬', label:'Por grabar',          estadoFiltro:'por_grabar' },
+  { id:'en_revision',  icon:'👀', label:'En revisión',         estadoFiltro:'en_revision' },
+  { id:'ideas',        icon:'💡', label:'Ideas',               estadoFiltro:'idea' },
+  { id:'calendario',   icon:'📅', label:'Calendario',          estadoFiltro:null },
+  { id:'estadisticas', icon:'📊', label:'Estadísticas',        estadoFiltro:null },
+]
+
+export default function SocialPage() {
+  const [tab, setTab]           = useState('listo')
+  const [items, setItems]       = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [vista, setVista]       = useState(null) // null | 'form' | 'detalle'
+  const [selItem, setSelItem]   = useState(null)
+  const [calVista, setCalVista] = useState('semana') // 'mes' | 'semana'
+
+  async function cargar() {
+    setLoading(true)
+    const { data } = await supabase.from('social_contenido')
+      .select('*').order('creado_en', { ascending:false })
+    setItems(data || [])
+    setLoading(false)
+  }
+
+  useEffect(()=>{ cargar() }, [])
+
+  function abrirNuevo() { setSelItem(null); setVista('form') }
+  function abrirDetalle(item) { if (!item) return; setSelItem(item); setVista('detalle') }
+  function cerrar() { setVista(null); setSelItem(null) }
+  function onSaved() { cerrar(); cargar() }
+  function onRefresh() { cargar() }
+
+  const tabActual = TABS.find(t=>t.id===tab)
+
+  return (
+    <div style={{ fontFamily:'DM Sans,sans-serif', color:TEXT, padding:'28px 32px', minHeight:'100vh', background:BG, margin:'-32px -36px', minWidth:'calc(100% + 72px)' }}>
+      <div style={{ marginBottom:24 }}>
+        <span style={{ fontSize:'0.68rem', fontWeight:700, letterSpacing:'0.10em', textTransform:'uppercase', color:GOLD, display:'block', marginBottom:4 }}>
+          Gestión de contenido · Depósito Jiménez
+        </span>
+        <h1 style={{ fontSize:'1.7rem', fontWeight:700, color:TEXT, letterSpacing:'-0.02em', lineHeight:1.2, margin:0 }}>
+          📱 Redes Sociales
+        </h1>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BORDER}`, marginBottom:24, overflowX:'auto' }}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>{ setTab(t.id); cerrar() }} style={{
+            padding:'10px 18px', border:'none', background:'none', cursor:'pointer',
+            fontSize:'0.85em', fontWeight: tab===t.id ? 700 : 400,
+            color: tab===t.id ? GOLD : MUTED,
+            borderBottom: tab===t.id ? `2px solid ${GOLD}` : '2px solid transparent',
+            marginBottom:-1, whiteSpace:'nowrap', fontFamily:'DM Sans,sans-serif', transition:'color 0.12s'
+          }}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenido */}
+      {vista === 'form' && (
+        <FormContenido
+          item={selItem}
+          onClose={cerrar}
+          onSaved={onSaved}
+        />
+      )}
+
+      {vista === 'detalle' && selItem && (
+        <DetalleContenido
+          item={selItem}
+          onClose={cerrar}
+          onEdit={()=>setVista('form')}
+          onRefresh={()=>{ cargar(); cerrar() }}
+        />
+      )}
+
+      {!vista && tab !== 'calendario' && tab !== 'estadisticas' && (
+        <TabLista
+          items={items}
+          loading={loading}
+          onNuevo={abrirNuevo}
+          onDetalle={abrirDetalle}
+          estadoFiltro={tabActual?.estadoFiltro || 'listo'}
+        />
+      )}
+
+      {!vista && tab === 'calendario' && (
+        <div>
+          {/* Toggle vista cal */}
+          <div style={{display:'flex', gap:8, marginBottom:20}}>
+            {[['semana','📅 Semana'],['mes','🗓️ Mes']].map(([v,l])=>(
+              <button key={v} onClick={()=>setCalVista(v)} style={{
+                padding:'7px 18px', borderRadius:20, border:`1px solid ${BORDER}`,
+                background: calVista===v ? GOLD : SURF2,
+                color: calVista===v ? '#fff' : MUTED,
+                cursor:'pointer', fontSize:'0.82em', fontWeight: calVista===v?700:400,
+                fontFamily:'DM Sans,sans-serif'
+              }}>{l}</button>
+            ))}
+            <button style={{...S.btn(), marginLeft:'auto'}} onClick={abrirNuevo}>+ Agregar contenido</button>
+          </div>
+          {calVista === 'semana'
+            ? <CalendarioSemana items={items} onDetalle={abrirDetalle}/>
+            : <CalendarioMes    items={items} onDetalle={abrirDetalle}/>
+          }
+        </div>
+      )}
+
+      {!vista && tab === 'estadisticas' && <TabEstadisticas/>}
+    </div>
+  )
 }
