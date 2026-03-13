@@ -1,6 +1,5 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
 
 const BG     = '#0f1115'
 const SURF   = '#1c1f26'
@@ -133,12 +132,10 @@ function PanelPermisos({ usuario, onGuardar, onCerrar }) {
         nuevosExtra[m.key] = checks[m.key]
       }
     })
-    const { error } = await supabase
-      .from('genesis_usuarios')
-      .update({ permisos_extra: Object.keys(nuevosExtra).length ? nuevosExtra : null })
-      .eq('id', usuario.id)
-    if (error) {
-      showMsg('Error al guardar: ' + error.message, false)
+    const res = await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: usuario.id, permisos_extra: Object.keys(nuevosExtra).length ? nuevosExtra : null }) })
+    const result = await res.json()
+    if (!res.ok || result.error) {
+      showMsg('Error al guardar: ' + (result.error||'desconocido'), false)
     } else {
       showMsg('✅ Permisos guardados.')
       setTimeout(() => { onGuardar() }, 1000)
@@ -253,11 +250,11 @@ export default function AdminPage() {
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase
-      .from('genesis_usuarios')
-      .select('*')
-      .order('creado_en', { ascending:false })
-    setUsuarios(data||[])
+    try {
+      const res = await fetch('/api/admin/usuarios')
+      const data = await res.json()
+      setUsuarios(Array.isArray(data) ? data : [])
+    } catch(e) { setUsuarios([]) }
     setLoading(false)
   }
 
@@ -285,13 +282,13 @@ export default function AdminPage() {
   }
 
   async function cambiarRol(uid, nuevoRol) {
-    await supabase.from('genesis_usuarios').update({ rol: nuevoRol }).eq('id', uid)
+    await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: uid, rol: nuevoRol }) })
     showMsg('Rol actualizado.')
     cargar()
   }
 
   async function toggleActivo(u) {
-    await supabase.from('genesis_usuarios').update({ activo: !u.activo }).eq('id', u.id)
+    await fetch('/api/admin/usuarios', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: u.id, activo: !u.activo }) })
     showMsg(u.activo ? 'Usuario desactivado.' : 'Usuario activado.')
     cargar()
   }
