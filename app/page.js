@@ -126,6 +126,7 @@ export default function DashboardPage() {
   const [alertas, setAlertas] = useState([])
   const [contenedores, setContenedores] = useState([])
   const [tareas, setTareas] = useState([])
+  const [recurrentesHoy, setRecurrentesHoy] = useState([])
   const { perfil, loading: authLoading } = useAuth()
 
   const esAdmin = perfil?.rol === 'admin'
@@ -195,6 +196,9 @@ export default function DashboardPage() {
         })))
         setContenedores(envios || [])
         setTareas(tareasData || [])
+        const hoyDia = new Date().getDate()
+        const { data: recData } = await supabase.from('vega_recurrentes').select('*')
+        setRecurrentesHoy((recData || []).filter(r => r.dia === hoyDia))
       } catch (e) {
         console.error(e)
       } finally {
@@ -225,7 +229,6 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
-        <KpiCard icon="⚠️" label="Stock crítico"  value={kpis.stockCritico ?? '—'}        sub="ítems bajo mínimo"     color="#f43f5e" loading={loading} />
         <KpiCard icon="🚢" label="Contenedores"   value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"   color="#0284c7" loading={loading} />
         <KpiCard icon="✨" label="Tareas"         value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"        color="#7c3aed" loading={loading} />
         <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
@@ -243,18 +246,7 @@ export default function DashboardPage() {
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚠️ Stock crítico</div>
-          {loading
-            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
-            : alertas.length === 0
-              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>✅ Sin alertas de stock</div>
-              : alertas.map((a, i) => <AlertRow key={i} {...a} />)
-          }
-          {!loading && kpis.stockCritico > 5 && (
-            <div style={{ fontSize: '0.72rem', color: '#9ba3b5', marginTop: 8 }}>+{kpis.stockCritico - 5} ítems más en Saturno</div>
-          )}
-        </div>
+
 
         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>🚢 Contenedores activos</div>
@@ -275,6 +267,17 @@ export default function DashboardPage() {
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
           }
         </div>
+        {recurrentesHoy.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            {recurrentesHoy.map((r, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f2f5', fontSize: '0.84rem', color: '#1a1d24' }}>
+                <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
+                {r.notas && <div style={{ fontSize: '0.75rem', color: '#9ba3b5', marginTop: 2 }}>{r.notas}</div>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
