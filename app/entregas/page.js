@@ -1,4 +1,5 @@
 'use client'
+import { useAuth } from '../../lib/useAuth'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 }
 
 export default function EntregasTrazabilidad() {
+  const { perfil } = useAuth()
   const [registros, setRegistros] = useState([])
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState(null)
@@ -257,7 +259,7 @@ export default function EntregasTrazabilidad() {
                       )}
                       <div style={s.detActions}>
                         <button style={s.btnEdit} onClick={() => handleEdit(r)}>Editar</button>
-                        <button style={s.btnDel} onClick={() => setConfirm(r.id)}>Eliminar</button>
+                        {perfil?.rol === "admin" && <button style={s.btnDel} onClick={() => setConfirm(r.id)}>Eliminar</button>}
                       </div>
                     </div>
                   )}
