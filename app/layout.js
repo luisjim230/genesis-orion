@@ -35,7 +35,7 @@ export default function RootLayout({ children }) {
         minHeight: '100vh',
       }}>
         <Sidebar />
-        <main style={{
+        <main id="sol-main" style={{
           flex: 1,
           marginLeft: '240px',
           minHeight: '100vh',

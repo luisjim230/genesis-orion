@@ -357,3 +357,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outlin
   color: #C53030;
   margin-bottom: 16px;
 }
+
+
+/* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  aside {
+    display: none !important;
+  }
+  #sol-main {
+    margin-left: 0 !important;
+    padding: 16px 14px !important;
+  }
+}
