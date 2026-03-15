@@ -1,5 +1,6 @@
 import { Rubik } from 'next/font/google';
 import Sidebar from './sidebar';
+import MobileNav from './mobile-nav';
 import './globals.css';
 
 const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
@@ -35,6 +36,7 @@ export default function RootLayout({ children }) {
         minHeight: '100vh',
       }}>
         <Sidebar />
+        <MobileNav />
         <main id="sol-main" style={{
           flex: 1,
           marginLeft: '240px',
