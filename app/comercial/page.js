@@ -11,12 +11,12 @@ const C = {
 };
 const S = {
   kicker:  { color: C.orange, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 },
-  card:    { background: '#fff', borderRadius: 14, border: `1px solid ${C.border}`, padding: '20px 24px', boxShadow: '0 1px 4px rgba(94,39,51,0.06)' },
-  cardSm:  { background: '#fff', borderRadius: 12, border: `1px solid ${C.border}`, padding: '14px 18px', boxShadow: '0 1px 3px rgba(94,39,51,0.05)' },
+  card:    { background: '#fff', borderRadius: 14, border: `1px solid ${C.border}`, padding: 'clamp(14px, 3vw, 20px) clamp(14px, 4vw, 24px)', boxShadow: '0 1px 4px rgba(94,39,51,0.06)' },
+  cardSm:  { background: '#fff', borderRadius: 12, border: `1px solid ${C.border}`, padding: 'clamp(10px, 2vw, 14px) clamp(12px, 3vw, 18px)', boxShadow: '0 1px 3px rgba(94,39,51,0.05)' },
   tab:     { padding: '8px 18px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: C.muted, transition: 'all .15s' },
   tabOn:   { padding: '8px 18px', borderRadius: 8, border: 'none', background: C.cream, cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, color: C.orange, borderBottom: `2px solid ${C.orange}`, transition: 'all .15s' },
-  th:      { padding: '9px 12px', fontSize: '0.73rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}`, textAlign: 'left', whiteSpace: 'nowrap', background: '#fdf8f8' },
-  td:      { padding: '9px 12px', fontSize: '0.84rem', borderBottom: `1px solid #f5eeee`, color: C.text },
+  th:      { padding: 'clamp(6px, 1.5vw, 9px) clamp(8px, 2vw, 12px)', fontSize: '0.73rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}`, textAlign: 'left', whiteSpace: 'nowrap', background: '#fdf8f8' },
+  td:      { padding: 'clamp(6px, 1.5vw, 9px) clamp(8px, 2vw, 12px)', fontSize: '0.84rem', borderBottom: `1px solid #f5eeee`, color: C.text },
   label:   { fontSize: '0.73rem', fontWeight: 700, color: C.muted, marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em' },
   select:  { padding: '7px 11px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', fontSize: '0.88rem', color: C.text, fontFamily: 'Rubik, sans-serif', outline: 'none' },
   input:   { padding: '7px 11px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', fontSize: '0.88rem', color: C.text, fontFamily: 'Rubik, sans-serif', outline: 'none' },
@@ -67,7 +67,7 @@ function Leyenda() {
 // ── Selector de período ──────────────────────────────────────────────────────
 function SelectorPeriodo({ modo, setModo, periodoSel, setPeriodoSel, periodos, fechaDesde, setFechaDesde, fechaHasta, setFechaHasta }) {
   return (
-    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px', marginBottom: 24, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 'clamp(12px, 3vw, 16px) clamp(12px, 3vw, 20px)', marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
       <div>
         <label style={S.label}>Modo de filtro</label>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -393,7 +393,7 @@ function TabResumen({ vendedores, cargando, metas, periodoSel }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* KPIs globales */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
         {[
           { label: 'Vendedores activos', val: vendedores.length,       color: C.orange, big: true },
           { label: 'Ventas netas',       val: CRC(totales.ventas),      color: C.teal },
@@ -412,7 +412,7 @@ function TabResumen({ vendedores, cargando, metas, periodoSel }) {
       <div style={S.card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={S.kicker}>Rendimiento por vendedor</div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span style={{ fontSize: '0.75rem', color: C.muted }}>Ordenar por:</span>
             {[
               ['ventasNetas', '₡ Ventas'],
@@ -647,7 +647,7 @@ function TabComisiones({ vendedores, cargando, metas, guardarMeta }) {
             <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 16 }}>
               ✏️ Parámetros — <span style={{ color: C.orange }}>{editando}</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14 }}>
               {[
                 ['meta_ventas',    'Meta ventas (₡)', '0', '100000000', '10000'],
                 ['meta_utilidad',  'Meta utilidad (₡)', '0', '100000000', '10000'],
@@ -752,7 +752,7 @@ function TabHistorial({ historial, loading }) {
       {proyeccion && (
         <div style={{ ...S.card, borderLeft: `4px solid ${C.orange}` }}>
           <div style={S.kicker}>📈 Proyección al cierre del período actual</div>
-          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
             <div>
               <div style={S.caption}>Período</div>
               <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{proyeccion.periodo}</div>
@@ -927,7 +927,7 @@ function TabCategorias({ modo, periodoSel, fechaDesde, fechaHasta }) {
         return (
           <div key={g.cat} style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
             <div onClick={() => g.subs.length && setExpand(e => ({ ...e, [g.cat]: !isOpen }))}
-              style={{ padding: '13px 18px', cursor: g.subs.length ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              style={{ padding: 'clamp(10px, 2vw, 13px) clamp(12px, 3vw, 18px)', cursor: g.subs.length ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ fontWeight: 700, color: C.muted, width: 24, textAlign: 'center', fontSize: '0.8rem' }}>{idx + 1}</div>
               <div style={{ flex: 1, minWidth: 160 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.93rem' }}>{semaforo(g.total.margen)} {g.cat}</div>
@@ -1007,7 +1007,7 @@ function TabProductos({ productos, cargando }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
         {[
           { label: 'Productos vendidos',    val: productos.length,                              color: C.text  },
           { label: '🟢 Margen alto (≥45%)', val: productos.filter(p => p.margen >= 45).length,  color: C.green },
@@ -1021,9 +1021,9 @@ function TabProductos({ productos, cargando }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', width: '100%' }}>
         <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="🔍 Buscar producto o código..."
-          style={{ ...S.input, flex: 1, minWidth: 200 }} />
+          style={{ ...S.input, flex: 1, minWidth: 0, width: '100%' }} />
         <select value={orden} onChange={e => setOrden(e.target.value)} style={S.select}>
           <option value="util">↓ Mayor utilidad</option>
           <option value="ventas">↓ Mayor ventas</option>
@@ -1181,9 +1181,9 @@ export default function ComercialPage() {
   ];
 
   return (
-    <div>
+    <div style={{ padding: 'clamp(12px, 4vw, 0px)' }}>
       <div style={S.kicker}>Comercial · Depósito Jiménez</div>
-      <h1 style={{ margin: '0 0 4px', fontSize: '1.9rem', fontWeight: 800, color: C.text }}>
+      <h1 style={{ margin: '0 0 4px', fontSize: 'clamp(1.4rem, 5vw, 1.9rem)', fontWeight: 800, color: C.text }}>
         💼 Comercial
       </h1>
       <p style={{ color: C.muted, margin: '0 0 20px', fontSize: '0.9rem' }}>
@@ -1197,10 +1197,10 @@ export default function ComercialPage() {
         fechaHasta={fechaHasta} setFechaHasta={setFechaHasta}
       />
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 22, borderBottom: `1px solid ${C.border}`, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 22, borderBottom: `1px solid ${C.border}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            style={tab === t.key ? S.tabOn : S.tab}>
+            style={{ ...(tab === t.key ? S.tabOn : S.tab), flexShrink: 0, whiteSpace: 'nowrap' }}>
             {t.label}
           </button>
         ))}
