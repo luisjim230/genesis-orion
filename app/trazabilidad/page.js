@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import SyncBadge from '../components/SyncBadge';
 
 const GOLD   = 'var(--orange)'
 const BG     = 'var(--cream)'
@@ -97,6 +98,9 @@ function TabAlertas({ ordenes, items, loading }) {
           ['🚨 Críticos (superan días)',totCritico, '#f43f5e'],
         ].map(([l, v, c]) => (
           <div key={l} style={{ background: SURF, border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: 10, padding: '14px 16px' }}>
+      <div style={{ marginBottom:12 }}>
+        <SyncBadge reporteIds={["items_comprados", "items_facturados"]} label="Datos trazabilidad" />
+      </div>
             <div style={{ fontSize: '0.72em', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
             <div style={{ fontSize: '1.8em', fontWeight: 700, color: c, marginTop: 4 }}>{v}</div>
           </div>

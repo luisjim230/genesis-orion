@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import SyncBadge from '../components/SyncBadge';
 import * as XLSX from 'xlsx';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
@@ -926,6 +927,9 @@ export default function EzequielCentrodeDatos() {
 
   return (
     <div style={S.page}>
+      <div style={{ marginBottom:12 }}>
+        <SyncBadge reporteIds={["minimos_maximos", "items_lista_general", "items_comprados", "items_facturados", "informe_ventas_vendedor", "informe_ventas_categoria", "antiguedad_saldos"]} label="Datos NEO" />
+      </div>
       <div style={S.kicker}>NEO · Reportes</div>
       <h1 style={S.title}>📂 Ezequiel – Centro de Datos</h1>
       <p style={S.caption}>Subí tus reportes de NEO y SOL los guarda con historial completo en la nube.</p>

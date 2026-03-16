@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import SyncBadge from '../components/SyncBadge';
 import KronosTab from './KronosTab';
 
 // ── Lógica de alertas ────────────────────────────────────────────────────────
@@ -65,7 +66,10 @@ function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.3 }}>{label}</span>
-      <button onClick={() => setOpen(o => !o)} style={{ background: isActive ? 'var(--orange, #f97316)' : '#e5e7eb', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: isActive ? 'white' : '#6b7280', flexShrink: 0 }} title="Filtrar / Ordenar">{isActive ? '▼' : '▾'}</button>
+      <button onClick={() => setOpen(o => !o)} style={{ background: isActive ? 'var(--orange, #f97316)' : '#e5e7eb', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: isActive ? 'white' : '#6b7280', flexShrink: 0 }} title="Filtrar / Ordenar">
+      <div style={{ marginBottom:12 }}>
+        <SyncBadge reporteIds={["minimos_maximos", "items_lista_general", "items_comprados"]} label="Datos inventario" />
+      </div>{isActive ? '▼' : '▾'}</button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 9999, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.14)', minWidth: 200, padding: 8 }}>
           <div style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: 6, marginBottom: 6 }}>
