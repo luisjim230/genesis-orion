@@ -121,6 +121,7 @@ export default function Inventario() {
   // ── NUEVO: cantidades editadas manualmente por proveedor ──────────────────
   // { [proveedor]: { [codigo]: cantidad } }
   const [cantidadesEditadas, setCantidadesEditadas] = useState({});
+  const [sortProveedores, setSortProveedores] = useState({});
 
   // ── NUEVO: estado de generación de ZIP ────────────────────────────────────
   const [zipGenerando, setZipGenerando] = useState(false);
@@ -242,6 +243,29 @@ export default function Inventario() {
   }, [calcAComprar.length]);
 
   // ── NUEVO: helper para obtener la cantidad de un item (editada o calculada) ─
+  function getSortedItems(prov, items) {
+    const s = sortProveedores[prov];
+    if (!s) return items;
+    return [...items].sort((a, b) => {
+      let va, vb;
+      if (s.col === '_cantComprar') { va = a._cantComprar; vb = b._cantComprar; }
+      else if (s.col === 'existencias') { va = parseFloat(a.existencias) || 0; vb = parseFloat(b.existencias) || 0; }
+      else if (s.col === '_transito') { va = a._transito || 0; vb = b._transito || 0; }
+      else if (s.col === 'ultimo_costo') { va = parseFloat(a.ultimo_costo) || 0; vb = parseFloat(b.ultimo_costo) || 0; }
+      else if (s.col === '_sugerencia') { va = a._sugerencia || 0; vb = b._sugerencia || 0; }
+      else { va = a[s.col] || 0; vb = b[s.col] || 0; }
+      return s.dir === 'asc' ? va - vb : vb - va;
+    });
+  }
+
+  function toggleSortProv(prov, col) {
+    setSortProveedores(prev => {
+      const cur = prev[prov];
+      const dir = cur?.col === col && cur?.dir === 'desc' ? 'asc' : 'desc';
+      return { ...prev, [prov]: { col, dir } };
+    });
+  }
+
   function getCantidad(proveedor, codigo, cantCalculada) {
     return cantidadesEditadas[proveedor]?.[codigo] ?? cantCalculada;
   }
@@ -589,11 +613,31 @@ export default function Inventario() {
                         <table className="module-table">
                           <thead>
                             <tr>
-                              {['Alerta', 'Código', 'Nombre', 'Existencias', '🚢 Tránsito', 'Cant. sugerida', 'Cant. a pedir ✏️', 'Último costo'].map(h => <th key={h}>{h}</th>)}
+                              <th>Alerta</th>
+                              <th>Código</th>
+                              <th>Nombre</th>
+                              {[
+                                { key: 'existencias', label: 'Existencias' },
+                                { key: '_transito', label: '🚢 Tránsito' },
+                                { key: '_sugerencia', label: 'Cant. sugerida' },
+                                { key: '_cantComprar', label: 'Cant. a pedir ✏️' },
+                                { key: 'ultimo_costo', label: 'Último costo' },
+                              ].map(col => {
+                                const active = sortProveedores[prov]?.col === col.key;
+                                const dir = sortProveedores[prov]?.dir;
+                                return (
+                                  <th key={col.key} onClick={() => toggleSortProv(prov, col.key)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                    {col.label}{' '}
+                                    <span style={{ fontSize: 10, color: active ? 'var(--orange,#f97316)' : '#aaa' }}>
+                                      {active ? (dir === 'desc' ? '↓' : '↑') : '↕'}
+                                    </span>
+                                  </th>
+                                );
+                              })}
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map((item, idx) => {
+                            {getSortedItems(prov, items).map((item, idx) => {
                               const cantEditada = cantidadesEditadas[prov]?.[item.codigo];
                               const cantFinal = cantEditada ?? item._cantComprar;
                               const modificada = cantEditada !== undefined && cantEditada !== item._cantComprar;
