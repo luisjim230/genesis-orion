@@ -308,7 +308,16 @@ export default function EntregasTrazabilidad() {
             {form.estado !== 'pendiente' && form.estado !== 'entregado_ok' && (
               <div style={s.field}><label style={s.label}>Responsable del problema</label><select style={s.input} value={form.responsable_problema} onChange={e => setForm(f=>({...f,responsable_problema:e.target.value}))}><option value=''>— Seleccionar —</option><option>Chofer</option><option>Bodega / Despacho</option><option>Facturador</option><option>Cliente</option><option>Otro</option></select></div>
             )}
-            <div style={s.field}><label style={s.label}>Monto a cobrar</label><input style={s.input} type="number" placeholder="0" value={form.monto_cobrar} onChange={e => setForm(f=>({...f,monto_cobrar:e.target.value}))} /></div>
+            <div style={s.field}>
+              <label style={s.label}>¿Hay cobro pendiente?</label>
+              <div style={{display:'flex',gap:8}}>
+                <button type="button" onClick={()=>setForm(f=>({...f,monto_cobrar:'',_hay_cobro:false,forma_pago:'Sin cobro'}))} style={{flex:1,padding:'8px 0',borderRadius:8,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,background:form._hay_cobro===false?'#c8a84b':'rgba(255,255,255,0.08)',color:form._hay_cobro===false?'#0f1115':'#eee',transition:'all 0.2s'}}>✅ Ya cancelado</button>
+                <button type="button" onClick={()=>setForm(f=>({...f,_hay_cobro:true,forma_pago:''}))} style={{flex:1,padding:'8px 0',borderRadius:8,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,background:form._hay_cobro===true?'#e05252':'rgba(255,255,255,0.08)',color:form._hay_cobro===true?'#fff':'#eee',transition:'all 0.2s'}}>💰 Sí, hay cobro</button>
+              </div>
+            </div>
+            {form._hay_cobro===true && (
+              <div style={s.field}><label style={s.label}>Monto a cobrar</label><input style={s.input} type="number" placeholder="0" value={form.monto_cobrar} onChange={e => setForm(f=>({...f,monto_cobrar:e.target.value}))} autoFocus /></div>
+            )}
             <div style={s.field}>
               <label style={s.label}>Forma de pago</label>
               <select style={s.input} value={form.forma_pago} onChange={e => setForm(f=>({...f,forma_pago:e.target.value}))}>
