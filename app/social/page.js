@@ -162,6 +162,8 @@ function FormContenido({ item, onClose, onSaved }) {
       return showMsg('⚠️ La fecha es obligatoria para estado "Programado" o "Publicado".', false)
     setSaving(true)
     const payload = { ...form }
+    if (!payload.fecha_programada) payload.fecha_programada = null
+    if (!payload.hora_programada) payload.hora_programada = null
     if (form.id) {
       await supabase.from('social_contenido').update(payload).eq('id', form.id)
     } else {
