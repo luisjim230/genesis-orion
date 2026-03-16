@@ -15,7 +15,7 @@ const ROL_COLOR = {
   admin:'#ED6E2E', bodega:'#63b3ed', ventas:'#68d391',
   finanzas:'#c8a84b', logistica:'#b794f4'
 }
-const ROLES = ['admin','bodega','ventas','finanzas','logistica','laura']
+const ROLES = ['admin','bodega','ventas','vendedor','finanzas','logistica','laura']
 
 const MODULOS = [
   { key:'dashboard',    label:'Dashboard',       emoji:'🏠' },
