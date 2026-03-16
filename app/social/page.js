@@ -158,6 +158,8 @@ function FormContenido({ item, onClose, onSaved }) {
 
   async function guardar() {
     if (!form.titulo.trim()) return showMsg('El título es requerido.', false)
+    if ((form.estado === 'programado' || form.estado === 'publicado') && !form.fecha_programada)
+      return showMsg('⚠️ La fecha es obligatoria para estado "Programado" o "Publicado".', false)
     setSaving(true)
     const payload = { ...form }
     if (form.id) {
@@ -198,10 +200,11 @@ function FormContenido({ item, onClose, onSaved }) {
             options={[['alta','🔴 Alta'],['media','🟡 Media'],['baja','🟢 Baja']]}/>
         </div>
         <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>
-            {esProgramado ? 'FECHA PROGRAMADA' : 'FECHA SUGERIDA'}
+          <label style={{fontSize:'0.72em', color: (esProgramado && !form.fecha_programada) ? '#fc8181' : MUTED, display:'block', marginBottom:4}}>
+            {esProgramado ? 'FECHA PROGRAMADA *' : 'FECHA SUGERIDA'}
+            {!esProgramado && !form.fecha_programada && <span style={{marginLeft:6, color:'#f6ad55', fontWeight:400}}>(sin fecha no aparece en calendario)</span>}
           </label>
-          <input type="date" style={S.input} value={form.fecha_programada} onChange={e=>setForm({...form,fecha_programada:e.target.value})}/>
+          <input type="date" style={{...S.input, borderColor: (esProgramado && !form.fecha_programada) ? '#fc818188' : undefined}} value={form.fecha_programada} onChange={e=>setForm({...form,fecha_programada:e.target.value})}/>
         </div>
         {(form.fecha_programada || esProgramado) && (
           <div>
