@@ -151,7 +151,7 @@ export default function KronosTab({ calc, transitoMap }) {
     const nuevoActivo = !(actual?.activo ?? true);
     try {
       await supabase.from('proveedores_leadtime').upsert({
-        proveedor, lead_time_dias: actual?.lead_time_dias || 30,
+        proveedor, lead_time_dias: actual?.lead_time_dias || 8,
         activo: nuevoActivo, notas: actual?.notas || '',
       }, { onConflict: 'proveedor' });
       setLeadTimes(prev => ({ ...prev, [proveedor]: { ...prev[proveedor], proveedor, activo: nuevoActivo } }));
@@ -178,7 +178,7 @@ export default function KronosTab({ calc, transitoMap }) {
       const consumoMensual = (consumoReal !== undefined && consumoReal > 0) ? consumoReal : consumoNeo;
       const fuenteConsumo = (consumoReal !== undefined && consumoReal > 0) ? 'real' : (consumoNeo > 0 ? 'neo' : null);
       const lt = leadTimes[prov];
-      const leadTimeDias = lt?.lead_time_dias || 30;
+      const leadTimeDias = lt?.lead_time_dias || 8;
       const activo = lt?.activo ?? true;
 
       if (!consumoMensual || consumoMensual <= 0) {
@@ -356,7 +356,7 @@ export default function KronosTab({ calc, transitoMap }) {
                   style={{ padding: '3px 6px', background: '#eee', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.72rem' }}>✕</button>
               </div>
             ) : (
-              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 30); setEditNotas(lt?.notas || ''); }}
+              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 8); setEditNotas(lt?.notas || ''); }}
                 style={{ fontSize: '0.72rem', color: 'var(--teal)', background: 'none', border: '1px solid var(--teal)',
                   borderRadius: 6, cursor: 'pointer', padding: '3px 8px', whiteSpace: 'nowrap' }}>
                 ⏱ {lt?.lead_time_dias ? `${lt.lead_time_dias}d` : 'Lead time'}
