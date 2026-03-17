@@ -188,18 +188,31 @@ function detectarTipo(filas, nombreArchivo) {
   // Algunos reportes tienen celdas mergeadas que XLSX.js no puede leer
   if (nombreArchivo) {
     const nom = nombreArchivo.toLowerCase();
+    // NEO exporta con fecha al final tipo "NombreReporte_16_03_09_17_12.xlsx"
+    // Normalizar: quitar fecha, quitar underscores, minúsculas
+    const nomNorm = nom
+      .replace(/_\d{2}_\d{2}_\d{2,4}.*$/, '')
+      .replace(/[_]+/g, ' ')
+      .trim();
+
     const mapaArchivo = [
-      { patron: 'consolidado_de_facturas', tabla: 'neo_consolidado_facturas' },
-      { patron: 'consolidado de facturas',  tabla: 'neo_consolidado_facturas' },
-      { patron: 'lista_de_i_tems_facturados', tabla: 'neo_items_facturados' },
-      { patron: 'lista de ítems facturados',  tabla: 'neo_items_facturados' },
-      { patron: 'items_facturados',           tabla: 'neo_items_facturados' },
-      // Detectar informe de ventas: vendedor vs categoría por contenido de fila 1
-      { patron: 'informe_de_ventas',          tabla: '_informe_ventas_check' },
-      { patron: 'informe de ventas',          tabla: '_informe_ventas_check' },
+      // Finanzas — coincide aunque tenga fecha al final
+      { patron: 'antigüedad de saldos de proveedores', tabla: 'fin_cuentas_pagar' },
+      { patron: 'antiguedad de saldos de proveedores', tabla: 'fin_cuentas_pagar' },
+      { patron: 'antigüedad de saldos proveedores',    tabla: 'fin_cuentas_pagar' },
+      { patron: 'saldos de proveedores',               tabla: 'fin_cuentas_pagar' },
+      { patron: 'antigüedad de saldos de clientes',    tabla: 'fin_cuentas_cobrar' },
+      { patron: 'antiguedad de saldos de clientes',    tabla: 'fin_cuentas_cobrar' },
+      { patron: 'saldos de clientes',                  tabla: 'fin_cuentas_cobrar' },
+      // Comercial
+      { patron: 'consolidado de facturas',             tabla: 'neo_consolidado_facturas' },
+      { patron: 'lista de i tems facturados',          tabla: 'neo_items_facturados' },
+      { patron: 'lista de items facturados',           tabla: 'neo_items_facturados' },
+      { patron: 'items facturados',                    tabla: 'neo_items_facturados' },
+      { patron: 'informe de ventas',                   tabla: '_informe_ventas_check' },
     ];
     for (const { patron, tabla } of mapaArchivo) {
-      if (nom.includes(patron)) {
+      if (nomNorm.includes(patron)) {
         if (tabla === '_informe_ventas_check') {
           // Distinguir por contenido de fila 1: "vendedor" vs "Categoría"
           for (let i = 0; i < Math.min(5, filas.length); i++) {
