@@ -75,7 +75,7 @@ const REPORTES = {
     header_row:9, titulo_valor:'Informe de antigüedad de saldos', titulo_col1:'Código',
     columnas:['codigo','proveedor','tipo','numero','fecha_compra','fecha_vencimiento','saldo_original','pagos_aplicados','notas_aplicadas','saldo_actual','moneda','sin_vencer','dias_1_8','dias_9_15','dias_16_22','dias_23_30','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'],
     columnas_originales:['Código','Proveedor','Tipo','Número','Fecha de la compra','Fecha de vencimiento','Saldo original','Pagos aplicados','Notas aplicadas','Saldo actual','Moneda','Sin vencer','1 - 8 Días','9 - 15 Días','16 - 22 Días','23 - 30 Días','1 - 30 Días','31 - 60 Días','61 - 90 Días','91 - 120 Días','Más de 120 Días'],
-  },
+  },fin_cuentas_pagar_detalle:{nombre:"Antigüedad saldos detalle — Proveedores",emoji:"💸",descripcion:"Detalle de facturas por proveedor con antigüedad. Se sincroniza con Finanzas.",header_row:9,titulo_valor:"Informe de antigüedad de saldos",titulo_col1:"Código",columnas:["codigo","proveedor","tipo","numero","fecha_compra","fecha_vencimiento","saldo_original","pagos_aplicados","notas_aplicadas","saldo_actual","moneda","sin_vencer","dias_1_8","dias_9_15","dias_16_22","dias_23_30","dias_1_30","dias_31_60","dias_61_90","dias_91_120","mas_120_dias"],columnas_originales:["Código","Proveedor","Tipo","Número","Fecha de la compra","Fecha de vencimiento","Saldo original","Pagos aplicados","Notas aplicadas","Saldo actual","Moneda","Sin vencer","1 - 8 Días","9 - 15 Días","16 - 22 Días","23 - 30 Días","1 - 30 Días","31 - 60 Días","61 - 90 Días","91 - 120 Días","Más de 120 Días"],filtrarSubtotales:true},
   fin_cuentas_cobrar: {
     nombre:'Antigüedad saldos — Clientes', emoji:'📥',
     descripcion:'Saldos pendientes de clientes por antigüedad. Se sincroniza con Finanzas.',
@@ -197,10 +197,10 @@ function detectarTipo(filas, nombreArchivo) {
 
     const mapaArchivo = [
       // Finanzas — coincide aunque tenga fecha al final
-      { patron: 'antigüedad de saldos de proveedores', tabla: 'fin_cuentas_pagar' },
+      { patron: 'antigüedad de saldos de proveedores', tabla: 'fin_cuentas_pagar', detectarDetalle: true },
       { patron: 'antiguedad de saldos de proveedores', tabla: 'fin_cuentas_pagar' },
       { patron: 'antigüedad de saldos proveedores',    tabla: 'fin_cuentas_pagar' },
-      { patron: 'saldos de proveedores',               tabla: 'fin_cuentas_pagar' },
+      { patron: 'saldos de proveedores',               tabla: 'fin_cuentas_pagar', detectarDetalle: true },
       { patron: 'antigüedad de saldos de clientes',    tabla: 'fin_cuentas_cobrar' },
       { patron: 'antiguedad de saldos de clientes',    tabla: 'fin_cuentas_cobrar' },
       { patron: 'saldos de clientes',                  tabla: 'fin_cuentas_cobrar' },
