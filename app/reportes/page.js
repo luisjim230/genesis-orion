@@ -550,6 +550,17 @@ function TabSubir() {
         }
 
         const periodo  = extraerPeriodo(filas, tipo);
+        if (tipo === 'fin_cuentas_pagar' || tipo === 'fin_cuentas_cobrar') {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('tabla', tipo);
+          const res = await fetch('/api/ezequiel-fin', { method: 'POST', body: fd });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || 'Error API finanzas');
+          setMensaje(`✅ ${json.registros} registros cargados correctamente`);
+          setSubiendo(false);
+          return;
+        }
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
         console.log(`[SOL] procesarExcel → ${records.length} records para ${tipo}`);
         if (records.length > 0) console.log(`[SOL] Sample:`, JSON.stringify(records[0]).slice(0,200));
