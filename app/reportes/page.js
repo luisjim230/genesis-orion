@@ -365,7 +365,13 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
   }
 
   // ── Procesador estándar por nombre de columna ────────────────────────────
-  const headerRow = cfg.header_row;
+  // Buscar el header row dinámicamente por titulo_col1
+  let headerRow = cfg.header_row;
+  if (cfg.titulo_col1) {
+    const found = filas.findIndex(f => Array.isArray(f) && String(f[0]).trim() === cfg.titulo_col1.trim());
+    if (found >= 0) headerRow = found;
+    else console.warn('[Ezequiel] titulo_col1 no encontrado, usando header_row:', cfg.header_row);
+  }
   const headers = filas[headerRow].map(v => String(v||'').trim());
   const dataRows = filas.slice(headerRow + 1);
 
