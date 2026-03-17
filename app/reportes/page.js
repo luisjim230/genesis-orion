@@ -516,9 +516,9 @@ function TabSubir() {
       const res = { nombre: file.name, estado: 'procesando', tipo: null, filas: 0, periodo: '', error: null };
       try {
         const buf = await file.arrayBuffer();
-        const wb  = XLSX.read(buf, { type:'array', cellText:false, raw:false });
+        const wb  = XLSX.read(buf, { type:'array', dense:true });
         const ws  = wb.Sheets[wb.SheetNames[0]];
-        const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+        const filas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
 
         const tipo = detectarTipo(filas, file.name);
         console.log(`[Ezequiel] Archivo: ${file.name} → tipo: ${tipo}`);
