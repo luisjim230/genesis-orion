@@ -69,16 +69,16 @@ const REPORTES = {
     columnas:['proveedor','codigo_interno','item','cantidad_comprada','cantidad_facturada','costo'],
     columnas_originales:['Nombre del proveedor','Código interno','Ítem',' Cantidad comprada',' Cantidad facturada','Costo'],
   },
-  neo_antiguedad_saldos: {
-    nombre:'Antigüedad de saldos de proveedores', emoji:'📅',
-    descripcion:'Saldos pendientes con proveedores por antigüedad.',
+  fin_cuentas_pagar: {
+    nombre:'Antigüedad saldos — Proveedores', emoji:'💸',
+    descripcion:'Saldos pendientes con proveedores por antigüedad. Se sincroniza con Finanzas.',
     header_row:8, titulo_valor:'Informe de antigüedad de saldos', titulo_col1:'Código',
     columnas:['codigo','proveedor','tipo','numero','fecha_compra','fecha_vencimiento','saldo_original','pagos_aplicados','notas_aplicadas','saldo_actual','moneda','sin_vencer','dias_1_8','dias_9_15','dias_16_22','dias_23_30','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'],
     columnas_originales:['Código','Proveedor','Tipo','Número','Fecha de la compra','Fecha de vencimiento','Saldo original','Pagos aplicados','Notas aplicadas','Saldo actual','Moneda','Sin vencer','1 - 8 Días','9 - 15 Días','16 - 22 Días','23 - 30 Días','1 - 30 Días','31 - 60 Días','61 - 90 Días','91 - 120 Días','Más de 120 Días'],
   },
-  neo_antiguedad_saldos_clientes: {
-    nombre:'Antigüedad de saldos de clientes', emoji:'👥',
-    descripcion:'Saldos pendientes de clientes por antigüedad.',
+  fin_cuentas_cobrar: {
+    nombre:'Antigüedad saldos — Clientes', emoji:'📥',
+    descripcion:'Saldos pendientes de clientes por antigüedad. Se sincroniza con Finanzas.',
     header_row:8, titulo_valor:'Informe de antigüedad de saldos', titulo_col1:'Vendedor',
     columnas:['vendedor','territorio','codigo','cliente','tipo','numero','fecha_factura','fecha_vencimiento','saldo_original','cobros_aplicados','notas_credito','notas_debito','saldo_actual','moneda','sin_vencer','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias','notas'],
     columnas_originales:['Vendedor','Territorio','Código','Cliente','Tipo','Número','Fecha de la factura','Fecha de vencimiento','Saldo original','Cobros aplicados','Notas de crédito aplicadas','Notas de débito aplicadas','Saldo actual','Moneda','Sin vencer','1 - 30 Días','31 - 60 Días','61 - 90 Días','91 - 120 Días','Más de 120 Días','Notas'],

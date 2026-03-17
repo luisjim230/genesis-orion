@@ -1,49 +1,505 @@
 'use client';
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import { supabase as sb } from '../../lib/supabase';
-const S={page:{background:'var(--cream)',minHeight:'100vh',padding:'28px 32px',fontFamily:'DM Sans,sons-serif',color:'var(--text-primary)'},title:{fontFamily:"'Bungee',cursive",fontSize:'1.5rem',color:'var(--burgundy)',letterSpacing:'0.03em',margin:0},caption:{fontSize:'0.82rem',color:'var(--text-muted)',marginTop:'4px',marginBottom:'24px'},divider:{border:'none',borderTop:'1px solid var(--border-soft)',margin:'20px 0'},tabs:{display:'flex',gap:'4px',marginBottom:'24px',flexWrap:'wrap'},tab:(a)=>({background:a?'var(--orange)':'#fff',color:a?'#fff':'var(--text-muted)',border:'1px solid '+(a?'var(--orange)':'var(--border)'),borderRadius:'8px',padding:'8px 16px',cursor:'pointer',fontWeight:a?700:400,fontSize:'0.88rem'}),grid4:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px',marginBottom:'20px'},grid2:{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'16px'},kpi:{background:'#fff',borderRadius:'12px',padding:'16px',border:'1px solid var(--border-soft)'},kpiL:{fontSize:'0.78rem',color:'var(--text-muted)',marginBottom:'6px'},kpiV:{fontSize:'1.4rem',fontWeight:700,color:'var(--orange)'},input:{background:'var(--cream)',border:'1px solid var(--border)',borderRadius:'8px',color:'var(--text-primary)',padding:'8px 12px',fontSize:'0.9rem',outline:'none',boxSizing:'border-box'},label:{fontSize:'0.82rem',color:'var(--text-muted)',marginBottom:'4px',display:'block'},btnG:{background:'#fff',color:'var(--text-primary)',border:'1px solid var(--border)',borderRadius:'8px',padding:'8px 16px',cursor:'pointer',fontSize:'0.88rem'},info:{background:'#EBF8FF',border:'1px solid #BEE3F8',borderRadius:'8px',padding:'14px',color:'#2C5282',fontSize:'0.88rem'},warn:{background:'#FFFBEB',border:'1px solid #FAD776',borderRadius:'8px',padding:'12px',color:'#7B341E',fontSize:'0.85rem'},ok:{background:'#F0FFF4',border:'1px solid #9AE6B4',borderRadius:'8px',padding:'12px',color:'#276749',fontSize:'0.85rem'},tbl:{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem'},th:{background:'var(--cream)',color:'var(--text-muted)',padding:'8px 10px',textAlign:'left',borderBottom:'1px solid var(--border-soft)',fontWeight:600,fontSize:'0.8rem'},td:(i)=>({padding:'7px 10px',borderBottom:'1px solid var(--border-soft)',background:i%2===0?'#ffffff':'#fdf8f8',color:'var(--text-primary)',fontSize:'0.82rem'}),up:{border:'2px dashed var(--border)',borderRadius:'12px',padding:'32px',textAlign:'center',cursor:'pointer',color:'var(--text-muted)'},exp:{background:'#fff',border:'1px solid var(--border-soft)',borderRadius:'8px',marginBottom:'6px',overflow:'hidden'},exph:{padding:'12px 16px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',userSelect:'none'}};
-const fC=(v)=>{try{return '\u20a1'+parseFloat(v).toLocaleString('es-CR',{maximumFractionDigits:0});}catch{return '-';}};
-const sem=(row,rng)=>{for(const r of rng){const v=parseFloat(row[r]||0);if(v>0){if(r.includes('120'))return '\ud83d\udd34';if(r.includes('61')||r.includes('91'))return '\ud83d\udfe0';return '\ud83d\udfe1';}}return '\ud83d\udfe2';};
-const RPV=['1 - 8 Dias','9 - 15 Dias','16 - 22 Dias','23 - 30 Dias','1 - 30 Dias','31 - 60 Dias','61 - 90 Dias','91 - 120 Dias','Mas de 120 Dias'];
-const RCV=['1 - 30 Dias','31 - 60 Dias','61 - 90 Dias','91 - 120 Dias','Mas de 120 Dias'];
-async function loadSB(t){try{const{data:fd}=await sb.from(t).select('fecha_carga').order('fecha_carga',{ascending:false}).limit(1);if(!fd?.length)return{rows:[],fecha:null};const f=fd[0].fecha_carga;let all=[],off=0;while(true){const{data}=await sb.from(t).select('*').eq('fecha_carga',f).range(off,off+999);if(!data?.length)break;all=all.concat(data);if(data.length<1000)break;off+=1000;}return{rows:all.map(r=>{const{id,fecha_carga,...rest}=r;return rest;}),fecha:f};}catch{return{rows:[],fecha:null};}}
-async function saveSB(rows,t){const f=new Date().toISOString();await sb.from(t).delete().eq('fecha_carga',f);const rec=rows.map(r=>({...r,fecha_carga:f}));for(let i=0;i<rec.length;i+=500)await sb.from(t).insert(rec.slice(i,i+500));return f;}
-function parseXLS(buf){const wb=XLSX.read(buf,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});if(raw.length<9)return[];const hdrs=raw[8].map(h=>String(h).trim());const txt=['Codigo','Proveedor','Cliente','Tipo','Moneda','Vendedor','Territorio','Notas','Numero'];const rows=[];for(let i=9;i<raw.length;i++){const r=raw[i];if(!r||(!r[0]&&!r[1]))continue;if(r.some(v=>String(v).trim().toUpperCase().startsWith('GRAN CARTERA')))continue;const o={};hdrs.forEach((h,ci)=>{const v=r[ci];if(txt.includes(h)){o[h]=String(v||'').trim();}else{const n=parseFloat(String(v).replace(/,/g,'.'));o[h]=isNaN(n)?0:n;}});rows.push(o);}return rows;}
-function KPI({label,value,color}){return <div style={S.kpi}><div style={S.kpiL}>{label}</div><div style={{...S.kpiV,color:color||'#c8a84b'}}>{value}</div></div>;}
-function Tbl({rows,cols,nums=[]}){if(!rows.length)return <div style={S.info}>Sin datos</div>;return <div style={{overflowX:'auto'}}><table style={S.tbl}><thead><tr>{cols.map(c=><th key={c} style={S.th}>{c}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{cols.map(c=><td key={c} style={S.td(i)}>{nums.includes(c)?fC(r[c]||0):r[c]||'-'}</td>)}</tr>)}</tbody></table></div>;}
-function Exp({title,children}){const[o,sO]=useState(false);return <div style={S.exp}><div style={S.exph} onClick={()=>sO(!o)}><span style={{fontSize:'0.88rem',color:'var(--text-primary)'}}>{title}</span><span style={{color:'var(--orange)',fontSize:'0.85rem'}}>{o?'▲':'▼'}</span></div>{o&&<div style={{padding:'0 16px 16px'}}>{children}</div>}</div>;}
-function UZ({label,sub,onF,ok}){const[d,sD]=useState(false);const id='u'+label.replace(/\s/g,'');return <div style={{background:'#fff',borderRadius:'12px',padding:'20px',border:'1px solid var(--border-soft)'}}><div style={{fontWeight:600,color:'var(--text-primary)',marginBottom:'4px'}}>{label}</div><div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'14px'}}>{sub}</div>{ok?<div style={S.ok}>{ok}</div>:<div style={{...S.up,borderColor:d?'#c8a84b':'#2a3142'}} onDragOver={e=>{e.preventDefault();sD(true);}} onDragLeave={()=>sD(false)} onDrop={e=>{e.preventDefault();sD(false);const f=e.dataTransfer.files[0];if(f){const rd=new FileReader();rd.onload=ev=>onF(new Uint8Array(ev.target.result));rd.readAsArrayBuffer(f);}}} onClick={()=>document.getElementById(id).click()}><div style={{fontSize:'2rem',marginBottom:'8px'}}>📂</div><div style={{fontSize:'0.85rem'}}>Arrastra el archivo o haz clic</div><input id={id} type="file" accept=".xlsx" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f){const rd=new FileReader();rd.onload=ev=>onF(new Uint8Array(ev.target.result));rd.readAsArrayBuffer(f);}}}/></div>}</div>;}
-function TabP({rows,fecha,tcC}){const[est,sE]=useState('Todos');const[prov,sP]=useState('');const[ex,sX]=useState(['Sin vencer','1 - 30 Dias','Mas de 120 Dias']);if(!rows.length)return <div style={S.info}>📭 No hay datos. Subi el reporte en Cargar Reportes.</div>;const tot=rows.reduce((a,r)=>a+(parseFloat(r['Saldo actual'])||0),0);const sv=rows.reduce((a,r)=>a+(parseFloat(r['Sin vencer'])||0),0);const v3=rows.reduce((a,r)=>a+(parseFloat(r['1 - 30 Dias'])||0),0);const vm=rows.reduce((a,r)=>a+(['31 - 60 Dias','61 - 90 Dias','91 - 120 Dias','Mas de 120 Dias'].reduce((s,k)=>s+(parseFloat(r[k])||0),0)),0);const hayUSD=rows.some(r=>r['Moneda']==='USD');const totUSD=hayUSD?rows.filter(r=>r['Moneda']==='USD').reduce((a,r)=>a+(parseFloat(r['Saldo actual'])||0),0):0;let df=rows.map(r=>({...r,'⚡':sem(r,RPV)}));if(est==='🔴 Critico')df=df.filter(r=>r['⚡']==='🔴');else if(est==='🟠 Moderado')df=df.filter(r=>r['⚡']==='🟠');else if(est==='🟡 Proximo')df=df.filter(r=>r['⚡']==='🟡');else if(est==='🟢 Al dia')df=df.filter(r=>r['⚡']==='🟢');if(prov)df=df.filter(r=>String(r['Proveedor']||'').toLowerCase().includes(prov.toLowerCase()));const cols=['⚡','Proveedor','Moneda','Tipo','Numero','Saldo actual',...ex];const res=Object.entries(rows.reduce((a,r)=>{const k=r['Proveedor']||'';a[k]=(a[k]||0)+(parseFloat(r['Saldo actual'])||0);return a;},{})).sort((a,b)=>b[1]-a[1]).map(([p,s])=>({'Proveedor':p,'Saldo actual':s}));const exp=()=>{const c=[cols.join(','),...df.map(r=>cols.map(c=>JSON.stringify(r[c]||'')).join(','))].join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(c);a.download='cuentas_pagar.csv';a.click();};return <div>{fecha&&<div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'12px'}}>📅 Reporte al: {fecha.replace('T',' ').slice(0,16)}</div>}<div style={S.grid4}><KPI label="💰 Total por pagar" value={fC(tot)}/><KPI label="🟢 Sin vencer" value={fC(sv)} color="#4ade80"/><KPI label="🟡 Vencido 1-30d" value={fC(v3)} color="#fbbf24"/><KPI label="🔴 Vencido +30d" value={fC(vm)} color="#f87171"/></div>{hayUSD&&tcC&&<div style={{...S.warn,marginBottom:'12px',fontSize:'0.82rem'}}>💵 Hay <strong>${totUSD.toLocaleString('es-CR',{minimumFractionDigits:2})}</strong> USD en proveedores → <strong style={{color:'#4ec9b0'}}>₡{(totUSD*tcC).toLocaleString('es-CR',{maximumFractionDigits:0})}</strong> al TC BAC compra ₡{tcC.toFixed(2)}</div>}<hr style={S.divider}/><div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:'12px',marginBottom:'16px'}}><div><label style={S.label}>Estado</label><select style={{...S.input,width:'100%'}} value={est} onChange={e=>sE(e.target.value)}>{['Todos','🔴 Critico','🟠 Moderado','🟡 Proximo','🟢 Al dia'].map(o=><option key={o}>{o}</option>)}</select></div><div><label style={S.label}>Buscar proveedor</label><input style={{...S.input,width:'100%'}} placeholder="Nombre..." value={prov} onChange={e=>sP(e.target.value)}/></div></div><div style={{marginBottom:'16px'}}><label style={S.label}>Columnas de antiguedad</label><div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>{['Sin vencer',...RPV].map(c=><label key={c} style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.8rem',color:'var(--text-primary)',cursor:'pointer'}}><input type="checkbox" checked={ex.includes(c)} onChange={e=>sX(p=>e.target.checked?[...p,c]:p.filter(x=>x!==c))}/>{c}</label>)}</div></div><Tbl rows={df} cols={cols} nums={['Saldo actual',...RPV,'Sin vencer']}/><Exp title="📊 Resumen por proveedor"><Tbl rows={res} cols={['Proveedor','Saldo actual']} nums={['Saldo actual']}/></Exp><button style={{...S.btnG,marginTop:'12px'}} onClick={exp}>⬇️ Exportar CSV</button></div>;}
-function TabC({rows,fecha}){const[est,sE]=useState('Todos');const[cli,sC]=useState('');if(!rows.length)return <div style={S.info}>📭 No hay datos. Subi el reporte en Cargar Reportes.</div>;const tot=rows.reduce((a,r)=>a+(parseFloat(r['Saldo actual'])||0),0);const sv=rows.reduce((a,r)=>a+(parseFloat(r['Sin vencer'])||0),0);const nC=new Set(rows.map(r=>r['Cliente'])).size;let df=rows.map(r=>({...r,'⚡':sem(r,RCV)}));if(est==='🔴 Critico')df=df.filter(r=>r['⚡']==='🔴');else if(est==='🟠 Moderado')df=df.filter(r=>r['⚡']==='🟠');else if(est==='🟡 Proximo')df=df.filter(r=>r['⚡']==='🟡');else if(est==='🟢 Al dia')df=df.filter(r=>r['⚡']==='🟢');if(cli)df=df.filter(r=>String(r['Cliente']||'').toLowerCase().includes(cli.toLowerCase()));const cols=['⚡','Cliente','Tipo','Numero','Saldo actual','Sin vencer',...RCV];const exp=()=>{const c=[cols.join(','),...df.map(r=>cols.map(c=>JSON.stringify(r[c]||'')).join(','))].join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(c);a.download='cuentas_cobrar.csv';a.click();};return <div>{fecha&&<div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'12px'}}>📅 Reporte al: {fecha.replace('T',' ').slice(0,16)}</div>}<div style={S.grid4}><KPI label="📥 Total por cobrar" value={fC(tot)}/><KPI label="🟢 Sin vencer" value={fC(sv)} color="#4ade80"/><KPI label="🔴 Vencido" value={fC(tot-sv)} color="#f87171"/><KPI label="👥 Clientes" value={nC} color="#63b3ed"/></div><hr style={S.divider}/><div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:'12px',marginBottom:'16px'}}><div><label style={S.label}>Estado</label><select style={{...S.input,width:'100%'}} value={est} onChange={e=>sE(e.target.value)}>{['Todos','🔴 Critico','🟠 Moderado','🟡 Proximo','🟢 Al dia'].map(o=><option key={o}>{o}</option>)}</select></div><div><label style={S.label}>Buscar cliente</label><input style={{...S.input,width:'100%'}} placeholder="Nombre..." value={cli} onChange={e=>sC(e.target.value)}/></div></div><Tbl rows={df} cols={cols} nums={['Saldo actual','Sin vencer',...RCV]}/><button style={{...S.btnG,marginTop:'12px'}} onClick={exp}>⬇️ Exportar CSV</button></div>;}
-function TabF({rP,rC}){const[s,sS]=useState(0);if(!rP.length&&!rC.length)return <div style={S.info}>📭 Carga al menos un reporte para ver el flujo.</div>;const f=[];['Sin vencer','1 - 30 Dias','31 - 60 Dias','61 - 90 Dias','91 - 120 Dias','Mas de 120 Dias'].forEach(r=>{const m=rC.reduce((a,row)=>a+(parseFloat(row[r])||0),0);if(m>0)f.push({Tipo:'📥 Cobro',Tramo:r,Monto:m,i:m});});['Sin vencer','1 - 8 Dias','9 - 15 Dias','16 - 22 Dias','23 - 30 Dias','1 - 30 Dias','31 - 60 Dias','61 - 90 Dias','91 - 120 Dias','Mas de 120 Dias'].forEach(r=>{const m=rP.reduce((a,row)=>a+(parseFloat(row[r])||0),0);if(m>0)f.push({Tipo:'💸 Pago',Tramo:r,Monto:m,i:-m});});const ent=f.filter(x=>x.i>0).reduce((a,x)=>a+x.i,0);const sal=f.filter(x=>x.i<0).reduce((a,x)=>a+Math.abs(x.i),0);const net=s+ent-sal;return <div><div style={{marginBottom:'16px'}}><label style={S.label}>💵 Saldo inicial en caja</label><input style={{...S.input,width:'200px'}} type="number" step="100000" value={s} onChange={e=>sS(parseFloat(e.target.value)||0)}/></div><div style={S.grid4}><KPI label="💵 Saldo inicial" value={fC(s)}/><KPI label="📥 Total cobros" value={fC(ent)} color="#4ade80"/><KPI label="💸 Total pagos" value={fC(sal)} color="#f87171"/><KPI label="🏦 Posicion neta" value={fC(net)} color={net>=0?'#4ade80':'#f87171'}/></div><hr style={S.divider}/><Tbl rows={f.map(x=>({Tipo:x.Tipo,Tramo:x.Tramo,Monto:x.Monto}))} cols={['Tipo','Tramo','Monto']} nums={['Monto']}/><div style={{marginTop:'14px'}}>{net<0?<div style={S.warn}>⚠️ Posicion neta negativa: {fC(net)}</div>:<div style={S.ok}>✅ Posicion proyectada: {fC(net)}</div>}</div></div>;}
-function TabM(){const[rows,sR]=useState([]);const[fecha,sF]=useState(null);const[load,sL]=useState(true);const[cat,sC]=useState('Todos');const[mon,sM]=useState('Todas');const[bus,sB]=useState('');const CATS={'10':['🏦','Activos','Caja, bancos, inventario'],'20':['🔗','Pasivos','Leasings, salarios, CCSS'],'70':['📊','Gastos Operativos','Todos los gastos'],'90':['💳','Gastos Financieros','Comisiones e intereses']};const SC70={'Servicios basicos':['70-30-06','70-30-07','70-30-08','70-30-09'],'Transporte':['70-30-12','70-30-14','70-30-17','70-30-39','70-80-01-02'],'Mantenimiento':['70-30-11','70-30-13','70-30-48'],'Alquileres':['70-30-18-01','70-30-18-02','70-30-18-04','70-30-18-06'],'Personal':['70-30-26','70-30-27','70-30-33','70-30-42-03'],'Servicios externos':['70-30-22-05','70-30-22-06','70-30-22-08','70-30-22-12','70-30-22-13'],'Materiales':['70-30-10','70-30-20','70-30-30','70-30-40-01','70-30-41'],'Impuestos':['70-30-32','70-30-47'],'Publicidad':['70-30-34'],'Importaciones':['70-30-50'],'Depreciaciones':['70-80-01-01','70-80-01-03','70-80-01-07','70-80-01-08']};useEffect(()=>{loadSB('neo_movimientos_contables').then(({rows:r,fecha:f})=>{sR(r);sF(f);sL(false);});},[]);if(load)return <div style={S.info}>⏳ Cargando movimientos...</div>;if(!rows.length)return <div style={S.info}>📭 Sin movimientos. Subi el reporte en Ezequiel.</div>;const rp=rows.map(r=>({...r,debe:parseFloat(r.debe_contabilidad||0),haber:parseFloat(r.haber_contabilidad||0),pref:String(r.cuenta_contable||'').slice(0,2)}));let df=rp;if(cat!=='Todos'){const p=Object.entries(CATS).find(([,v])=>`${v[0]} ${v[1]}`===cat)?.[0];if(p)df=df.filter(r=>r.pref===p);}if(mon!=='Todas')df=df.filter(r=>r.moneda_debe_cont===mon);if(bus)df=df.filter(r=>String(r.cuenta_contable||'').toLowerCase().includes(bus.toLowerCase())||String(r.centro_costo||'').toLowerCase().includes(bus.toLowerCase()));const tD=df.reduce((a,r)=>a+r.debe,0),tH=df.reduce((a,r)=>a+r.haber,0),tG=df.filter(r=>['70','90'].includes(r.pref)).reduce((a,r)=>a+r.debe,0),nA=new Set(df.map(r=>r.asiento)).size;const mons=[...new Set(rp.map(r=>r.moneda_debe_cont).filter(Boolean))];const prefs=[...new Set(df.map(r=>r.pref))].filter(p=>p in CATS).sort();const expC=()=>{const cols=['asiento','fecha','tipo','cuenta_contable','centro_costo','debe_contabilidad','haber_contabilidad','moneda_debe_cont','observaciones_asiento'];const c=[cols.join(','),...df.map(r=>cols.map(c=>JSON.stringify(r[c]||'')).join(','))].join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(c);a.download='movimientos.csv';a.click();};return <div>{fecha&&<div style={{fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'12px'}}>📅 {fecha.replace('T',' ').slice(0,16)}</div>}<div style={{display:'grid',gridTemplateColumns:'1.5fr 1.5fr 2fr',gap:'12px',marginBottom:'16px'}}><div><label style={S.label}>Categoria</label><select style={{...S.input,width:'100%'}} value={cat} onChange={e=>sC(e.target.value)}><option>Todos</option>{Object.entries(CATS).filter(([k])=>rp.some(r=>r.pref===k)).map(([,v])=><option key={v[1]}>{v[0]} {v[1]}</option>)}</select></div><div><label style={S.label}>Moneda</label><select style={{...S.input,width:'100%'}} value={mon} onChange={e=>sM(e.target.value)}><option>Todas</option>{mons.sort().map(m=><option key={m}>{m}</option>)}</select></div><div><label style={S.label}>Buscar</label><input style={{...S.input,width:'100%'}} placeholder="Cuenta, proveedor..." value={bus} onChange={e=>sB(e.target.value)}/></div></div><div style={S.grid4}><KPI label="📊 Total Debe" value={fC(tD)}/><KPI label="📊 Total Haber" value={fC(tH)} color="#63b3ed"/><KPI label="💸 Total Gastos" value={fC(tG)} color="#f87171"/><KPI label="🔢 Asientos" value={nA.toLocaleString()} color="#8899aa"/></div><hr style={S.divider}/>{prefs.map(pref=>{const[em,nom,desc]=CATS[pref];const dc=df.filter(r=>r.pref===pref);const tc=dc.reduce((a,r)=>a+r.debe,0);return <div key={pref} style={{marginBottom:'12px'}}><div style={{background:'#f0f7ff',border:'1px solid var(--border-soft)',borderRadius:'10px',padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}><span><strong style={{color:'var(--text-primary)'}}>{em} {nom}</strong><span style={{fontSize:'0.78rem',color:'var(--text-muted)',marginLeft:'8px'}}>{desc}</span></span><span style={{color:'#63b3ed',fontWeight:700}}>{fC(tc)}</span></div>{pref==='70'?(()=>{const mp={};Object.entries(SC70).forEach(([sc,cs])=>cs.forEach(c=>{mp[c]=sc;}));const dc2=dc.map(r=>({...r,sc:Object.entries(mp).find(([c])=>String(r.cuenta_contable||'').startsWith(c))?.[1]||'Otros'}));return[...new Set(dc2.map(r=>r.sc))].sort().map(sc=>{const ds=dc2.filter(r=>r.sc===sc);const ts=ds.reduce((a,r)=>a+r.debe,0);const cus=Object.entries(ds.reduce((a,r)=>{a[r.cuenta_contable]=(a[r.cuenta_contable]||0)+r.debe;return a;},{})).sort((a,b)=>b[1]-a[1]);return <Exp key={sc} title={`📁 ${sc} — ${fC(ts)}`}>{cus.map(([c,t])=>{const gc=Object.entries(ds.filter(r=>r.cuenta_contable===c).reduce((a,r)=>{const k=String(r.centro_costo||'').trim();if(k&&k!=='nan')a[k]=(a[k]||0)+r.debe;return a;},{})).sort((a,b)=>b[1]-a[1]);return <div key={c} style={{marginBottom:'8px'}}><div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-soft)'}}><span style={{fontSize:'0.88rem',color:'var(--text-primary)',paddingLeft:'8px'}}>📄 {c}</span><span style={{color:'#63b3ed',fontWeight:600,fontSize:'0.88rem'}}>{fC(t)}</span></div>{gc.length>0&&<table style={{...S.tbl,marginTop:'4px'}}><thead><tr><th style={S.th}>Proveedor / CC</th><th style={S.th}>Monto</th></tr></thead><tbody>{gc.map(([cc,m],i)=><tr key={i}><td style={S.td(i)}>{cc}</td><td style={S.td(i)}>{fC(m)}</td></tr>)}</tbody></table>}</div>;})}</Exp>;});})():Object.entries(dc.reduce((a,r)=>{a[r.cuenta_contable]=(a[r.cuenta_contable]||0)+r.debe;return a;},{})).sort((a,b)=>b[1]-a[1]).map(([c,t])=>{const gc=Object.entries(dc.filter(r=>r.cuenta_contable===c).reduce((a,r)=>{const k=String(r.centro_costo||'').trim();if(k&&k!=='nan')a[k]=(a[k]||0)+r.debe;return a;},{})).sort((a,b)=>b[1]-a[1]);return <Exp key={c} title={`📄 ${c} — ${fC(t)}`}>{gc.length>0?<table style={{...S.tbl,marginTop:'4px'}}><thead><tr><th style={S.th}>Proveedor / CC</th><th style={S.th}>Monto</th></tr></thead><tbody>{gc.map(([cc,m],i)=><tr key={i}><td style={S.td(i)}>{cc}</td><td style={S.td(i)}>{fC(m)}</td></tr>)}</tbody></table>:<div style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>Sin detalle.</div>}</Exp>;})};</div>;})}<hr style={S.divider}/><button style={S.btnG} onClick={expC}>⬇️ Exportar CSV</button></div>;}
-function TabCar({onP,onC}){const[okP,sP]=useState('');const[okC,sC]=useState('');const[ld,sL]=useState('');const hP=async(b)=>{sL('pagar');try{const r=parseXLS(b);if(!r.length){alert('Sin datos');sL('');return;}await saveSB(r,'fin_cuentas_pagar');onP(r);sP(`✅ ${r.length} registros guardados.`);}catch(e){alert('Error: '+e.message);}sL('');};const hC=async(b)=>{sL('cobrar');try{const r=parseXLS(b);if(!r.length){alert('Sin datos');sL('');return;}await saveSB(r,'fin_cuentas_cobrar');onC(r);sC(`✅ ${r.length} registros guardados.`);}catch(e){alert('Error: '+e.message);}sL('');};return <div><div style={{fontSize:'0.85rem',color:'var(--text-muted)',marginBottom:'20px'}}>Subi los reportes exportados desde NEO. Se guardan en Supabase automaticamente.</div>{ld&&<div style={{...S.info,marginBottom:'16px'}}>⏳ Procesando {ld}...</div>}<div style={S.grid2}><UZ label="💸 Cuentas por Pagar" sub="Antiguedad de saldos de proveedores" onF={hP} ok={okP}/><UZ label="📥 Cuentas por Cobrar" sub="Antiguedad de saldos de clientes" onF={hC} ok={okC}/></div></div>;}
-export default function FinanzasNumeros(){
-  const[tab,sT]=useState(0);
-  const[rP,sRP]=useState([]);
-  const[rC,sRC]=useState([]);
-  const[fP,sFP]=useState(null);
-  const[fC2,sFC]=useState(null);
-  const[ok,sOK]=useState(false);
-  const[tcBAC,setTcBAC]=useState(null);
-  useEffect(()=>{
-    Promise.all([loadSB('fin_cuentas_pagar'),loadSB('fin_cuentas_cobrar')]).then(([p,c])=>{sRP(p.rows);sFP(p.fecha);sRC(c.rows);sFC(c.fecha);sOK(true);});
-    fetch('/api/mercado?fuente=bac').then(r=>r.json()).then(j=>{if(j.ok&&j.data?.compra)setTcBAC(j.data);}).catch(()=>{});
-  },[]);
-  const tcC=tcBAC?.compra||null;
-  const TABS=['💸 Cuentas por Pagar','📥 Cuentas por Cobrar','🌊 Flujo de Caja','📒 Movimientos','📤 Cargar Reportes'];
-  return <div style={S.page}>
-    <h1 style={S.title}>💰 Modulo Financiero</h1>
-    <div style={S.caption}>Cuentas por pagar · Cuentas por cobrar · Flujo de caja · Movimientos contables{tcC&&<span style={{marginLeft:'12px',fontSize:'0.78rem',color:'#4ec9b0'}}>💱 TC BAC compra: ₡{tcC.toFixed(2)}</span>}</div>
-    <hr style={S.divider}/>
-    <div style={S.tabs}>{TABS.map((t,i)=><button key={t} style={S.tab(tab===i)} onClick={()=>sT(i)}>{t}</button>)}</div>
-    {!ok?<div style={S.info}>⏳ Cargando desde Supabase...</div>:<>
-      {tab===0&&<TabP rows={rP} fecha={fP} tcC={tcC}/>}
-      {tab===1&&<TabC rows={rC} fecha={fC2} tcC={tcC}/>}
-      {tab===2&&<TabF rP={rP} rC={rC} tcC={tcC}/>}
-      {tab===3&&<TabM/>}
-      {tab===4&&<TabCar onP={r=>sRP(r)} onC={r=>sRC(r)}/>}
-    </>}
-  </div>;
+
+// ── Estilos ────────────────────────────────────────────────────────────────
+const S = {
+  page:    { background:'var(--cream)', minHeight:'100vh', padding:'28px 32px', fontFamily:'DM Sans,sans-serif', color:'var(--text-primary)' },
+  title:   { fontSize:'1.7rem', fontWeight:700, color:'var(--text-primary)', margin:0 },
+  caption: { fontSize:'0.82rem', color:'var(--text-muted)', marginTop:'4px', marginBottom:'24px' },
+  divider: { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
+  tabs:    { display:'flex', gap:'4px', marginBottom:'24px', flexWrap:'wrap' },
+  tab:     (a) => ({ background:a?'var(--orange)':'#fff', color:a?'#fff':'var(--text-muted)', border:'1px solid '+(a?'var(--orange)':'var(--border)'), borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontWeight:a?700:400, fontSize:'0.88rem' }),
+  grid4:   { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'20px' },
+  grid2:   { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'16px' },
+  kpi:     { background:'#fff', borderRadius:'12px', padding:'16px', border:'1px solid var(--border-soft)' },
+  kpiL:    { fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'6px' },
+  kpiV:    { fontSize:'1.4rem', fontWeight:700, color:'var(--orange)' },
+  input:   { background:'var(--cream)', border:'1px solid var(--border)', borderRadius:'8px', color:'var(--text-primary)', padding:'8px 12px', fontSize:'0.9rem', outline:'none', boxSizing:'border-box' },
+  label:   { fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'4px', display:'block' },
+  btnG:    { background:'#fff', color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
+  info:    { background:'#EBF8FF', border:'1px solid #BEE3F8', borderRadius:'8px', padding:'14px', color:'#2C5282', fontSize:'0.88rem' },
+  warn:    { background:'#FFFBEB', border:'1px solid #FAD776', borderRadius:'8px', padding:'12px', color:'#7B341E', fontSize:'0.85rem' },
+  ok:      { background:'#F0FFF4', border:'1px solid #9AE6B4', borderRadius:'8px', padding:'12px', color:'#276749', fontSize:'0.85rem' },
+  tbl:     { width:'100%', borderCollapse:'collapse', fontSize:'0.83rem' },
+  th:      { background:'var(--cream)', color:'var(--text-muted)', padding:'8px 10px', textAlign:'left', borderBottom:'1px solid var(--border-soft)', fontWeight:600, fontSize:'0.8rem', whiteSpace:'nowrap' },
+  td:      (i) => ({ padding:'7px 10px', borderBottom:'1px solid var(--border-soft)', background:i%2===0?'#ffffff':'#fdf8f8', color:'var(--text-primary)', fontSize:'0.82rem' }),
+  exp:     { background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'8px', marginBottom:'6px', overflow:'hidden' },
+  exph:    { padding:'12px 16px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', userSelect:'none' },
+};
+
+// ── Utilidades ─────────────────────────────────────────────────────────────
+const fC = (v) => { try { return '₡' + parseFloat(v).toLocaleString('es-CR', { maximumFractionDigits:0 }); } catch { return '—'; }};
+const N  = (v) => parseFloat(v) || 0;
+
+const SEM_P = ['dias_91_120','mas_120_dias'];
+const SEM_A = ['dias_61_90'];
+const SEM_Y = ['dias_31_60','dias_23_30'];
+
+function semaforo(row) {
+  if (SEM_P.some(k => N(row[k]) > 0)) return '🔴';
+  if (SEM_A.some(k => N(row[k]) > 0)) return '🟠';
+  if (SEM_Y.some(k => N(row[k]) > 0)) return '🟡';
+  return '🟢';
+}
+
+function Exp({ title, children }) {
+  const [o, sO] = useState(false);
+  return (
+    <div style={S.exp}>
+      <div style={S.exph} onClick={() => sO(!o)}>
+        <span style={{ fontSize:'0.88rem', color:'var(--text-primary)' }}>{title}</span>
+        <span style={{ color:'var(--orange)', fontSize:'0.85rem' }}>{o ? '▲' : '▼'}</span>
+      </div>
+      {o && <div style={{ padding:'0 16px 16px' }}>{children}</div>}
+    </div>
+  );
+}
+
+function KPI({ label, value, color }) {
+  return (
+    <div style={S.kpi}>
+      <div style={S.kpiL}>{label}</div>
+      <div style={{ ...S.kpiV, color: color || 'var(--orange)' }}>{value}</div>
+    </div>
+  );
+}
+
+function UltimaActualizacion({ fecha }) {
+  if (!fecha) return null;
+  const f = new Date(fecha).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  return <div style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'12px' }}>📅 Datos al: <strong style={{ color:'var(--text-primary)' }}>{f}</strong></div>;
+}
+
+// ── Tab: Cuentas por Pagar ─────────────────────────────────────────────────
+function TabPagar({ tcC }) {
+  const [rows, setRows]     = useState([]);
+  const [fecha, setFecha]   = useState(null);
+  const [loading, setLoad]  = useState(true);
+  const [filtroSem, setFS]  = useState('Todos');
+  const [buscar, setBus]    = useState('');
+  const [colExtra, setColX] = useState(['sin_vencer','dias_1_30','dias_31_60','mas_120_dias']);
+
+  useEffect(() => {
+    (async () => {
+      setLoad(true);
+      // Obtener fecha de la carga más reciente
+      const { data: fd } = await sb.from('fin_cuentas_pagar').select('fecha_carga')
+        .order('fecha_carga', { ascending:false }).limit(1);
+      if (!fd?.length) { setLoad(false); return; }
+      const fc = fd[0].fecha_carga;
+      setFecha(fc);
+      // Cargar todos los registros de esa carga
+      let all = [], off = 0;
+      while (true) {
+        const { data } = await sb.from('fin_cuentas_pagar').select('*').eq('fecha_carga', fc).range(off, off+999);
+        if (!data?.length) break;
+        all = [...all, ...data];
+        if (data.length < 1000) break;
+        off += 1000;
+      }
+      setRows(all);
+      setLoad(false);
+    })();
+  }, []);
+
+  if (loading) return <div style={S.info}>⏳ Cargando cuentas por pagar...</div>;
+  if (!rows.length) return (
+    <div style={S.info}>
+      📭 Sin datos. Subí el reporte <strong>Antigüedad de saldos de proveedores</strong> en{' '}
+      <a href="/reportes" style={{ color:'var(--orange)' }}>Carga de reportes</a> y se sincronizará automáticamente.
+    </div>
+  );
+
+  const tot    = rows.reduce((s,r) => s + N(r.saldo_actual), 0);
+  const sv     = rows.reduce((s,r) => s + N(r.sin_vencer), 0);
+  const v30    = rows.reduce((s,r) => s + N(r.dias_1_30), 0);
+  const v60    = rows.reduce((s,r) => s + N(r.dias_31_60), 0);
+  const crit   = rows.reduce((s,r) => s + N(r.dias_91_120) + N(r.mas_120_dias), 0);
+  const hayUSD = rows.some(r => r.moneda === 'USD');
+  const totUSD = rows.filter(r => r.moneda === 'USD').reduce((s,r) => s + N(r.saldo_actual), 0);
+
+  let df = rows.map(r => ({ ...r, _sem: semaforo(r) }));
+  if (filtroSem === '🔴') df = df.filter(r => r._sem === '🔴');
+  if (filtroSem === '🟠') df = df.filter(r => r._sem === '🟠');
+  if (filtroSem === '🟡') df = df.filter(r => r._sem === '🟡');
+  if (filtroSem === '🟢') df = df.filter(r => r._sem === '🟢');
+  if (buscar) df = df.filter(r => String(r.proveedor||'').toLowerCase().includes(buscar.toLowerCase()) || String(r.numero||'').toLowerCase().includes(buscar.toLowerCase()));
+
+  // Resumen por proveedor
+  const resProv = Object.entries(df.reduce((a,r) => {
+    const k = r.proveedor || '—';
+    a[k] = (a[k] || 0) + N(r.saldo_actual);
+    return a;
+  }, {})).sort((a,b) => b[1]-a[1]).map(([p,s]) => ({ proveedor:p, saldo_actual:s }));
+
+  const COLS_ANT = [
+    { key:'sin_vencer',   label:'Sin vencer' },
+    { key:'dias_1_8',     label:'1-8d' },
+    { key:'dias_9_15',    label:'9-15d' },
+    { key:'dias_16_22',   label:'16-22d' },
+    { key:'dias_23_30',   label:'23-30d' },
+    { key:'dias_1_30',    label:'1-30d' },
+    { key:'dias_31_60',   label:'31-60d' },
+    { key:'dias_61_90',   label:'61-90d' },
+    { key:'dias_91_120',  label:'91-120d' },
+    { key:'mas_120_dias', label:'+120d' },
+  ];
+
+  const exportCSV = () => {
+    const cols = ['_sem','proveedor','moneda','tipo','numero','saldo_actual','fecha_vencimiento',...colExtra];
+    const csv = [cols.join(','), ...df.map(r => cols.map(c => `"${String(r[c]||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,\ufeff'+encodeURIComponent(csv);
+    a.download = `cuentas_pagar_${fecha?.slice(0,10)||'export'}.csv`; a.click();
+  };
+
+  return (
+    <div>
+      <UltimaActualizacion fecha={fecha} />
+
+      {/* KPIs */}
+      <div style={S.grid4}>
+        <KPI label="💰 Total por pagar"     value={fC(tot)}  color="var(--orange)" />
+        <KPI label="🟢 Sin vencer"          value={fC(sv)}   color="#276749" />
+        <KPI label="🟡 Vencido 1-30d"       value={fC(v30)}  color="#B7791F" />
+        <KPI label="🔴 Crítico (+90d)"      value={fC(crit)} color="#C53030" />
+      </div>
+
+      {hayUSD && tcC && (
+        <div style={{ ...S.warn, marginBottom:'12px', fontSize:'0.82rem' }}>
+          💵 Hay <strong>${totUSD.toLocaleString('es-CR',{minimumFractionDigits:2})}</strong> USD → <strong style={{ color:'#4ec9b0' }}>₡{(totUSD*tcC).toLocaleString('es-CR',{maximumFractionDigits:0})}</strong> al TC ₡{tcC.toFixed(2)}
+        </div>
+      )}
+
+      <hr style={S.divider}/>
+
+      {/* Filtros */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:'12px', marginBottom:'16px' }}>
+        <div>
+          <label style={S.label}>Semáforo</label>
+          <select style={{ ...S.input, width:'100%' }} value={filtroSem} onChange={e => setFS(e.target.value)}>
+            {['Todos','🔴','🟠','🟡','🟢'].map(o => <option key={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>Buscar proveedor o número</label>
+          <input style={{ ...S.input, width:'100%' }} placeholder="Nombre..." value={buscar} onChange={e => setBus(e.target.value)} />
+        </div>
+      </div>
+
+      {/* Columnas de antigüedad visibles */}
+      <div style={{ marginBottom:'16px' }}>
+        <label style={S.label}>Columnas de antigüedad a mostrar</label>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          {COLS_ANT.map(c => (
+            <label key={c.key} style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.8rem', color:'var(--text-primary)', cursor:'pointer' }}>
+              <input type="checkbox" checked={colExtra.includes(c.key)}
+                onChange={e => setColX(prev => e.target.checked ? [...prev,c.key] : prev.filter(x=>x!==c.key))} />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'16px' }}>
+        <table style={S.tbl}>
+          <thead>
+            <tr>
+              <th style={S.th}>🚦</th>
+              <th style={S.th}>Proveedor</th>
+              <th style={S.th}>Moneda</th>
+              <th style={S.th}>Tipo</th>
+              <th style={S.th}>Número</th>
+              <th style={{ ...S.th, textAlign:'right' }}>Saldo actual</th>
+              <th style={S.th}>Vencimiento</th>
+              {colExtra.map(k => <th key={k} style={{ ...S.th, textAlign:'right' }}>{COLS_ANT.find(c=>c.key===k)?.label||k}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {df.map((r,i) => (
+              <tr key={i}>
+                <td style={S.td(i)}>{r._sem}</td>
+                <td style={S.td(i)}>{r.proveedor||'—'}</td>
+                <td style={S.td(i)}>{r.moneda||'—'}</td>
+                <td style={S.td(i)}>{r.tipo||'—'}</td>
+                <td style={S.td(i)}>{r.numero||'—'}</td>
+                <td style={{ ...S.td(i), textAlign:'right', fontWeight:600 }}>{fC(r.saldo_actual)}</td>
+                <td style={S.td(i)}>{r.fecha_vencimiento||'—'}</td>
+                {colExtra.map(k => <td key={k} style={{ ...S.td(i), textAlign:'right' }}>{N(r[k])>0?fC(r[k]):'—'}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Resumen por proveedor */}
+      <Exp title={`📊 Resumen por proveedor (${resProv.length})`}>
+        <table style={S.tbl}>
+          <thead><tr><th style={S.th}>Proveedor</th><th style={{ ...S.th, textAlign:'right' }}>Saldo actual</th></tr></thead>
+          <tbody>
+            {resProv.map((r,i) => (
+              <tr key={i}>
+                <td style={S.td(i)}>{r.proveedor}</td>
+                <td style={{ ...S.td(i), textAlign:'right', fontWeight:600 }}>{fC(r.saldo_actual)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Exp>
+
+      <button style={{ ...S.btnG, marginTop:'12px' }} onClick={exportCSV}>⬇️ Exportar CSV</button>
+    </div>
+  );
+}
+
+// ── Tab: Cuentas por Cobrar ────────────────────────────────────────────────
+function TabCobrar({ tcC }) {
+  const [rows, setRows]    = useState([]);
+  const [fecha, setFecha]  = useState(null);
+  const [loading, setLoad] = useState(true);
+  const [filtroSem, setFS] = useState('Todos');
+  const [buscar, setBus]   = useState('');
+
+  useEffect(() => {
+    (async () => {
+      setLoad(true);
+      const { data: fd } = await sb.from('fin_cuentas_cobrar').select('fecha_carga')
+        .order('fecha_carga', { ascending:false }).limit(1);
+      if (!fd?.length) { setLoad(false); return; }
+      const fc = fd[0].fecha_carga;
+      setFecha(fc);
+      let all = [], off = 0;
+      while (true) {
+        const { data } = await sb.from('fin_cuentas_cobrar').select('*').eq('fecha_carga', fc).range(off, off+999);
+        if (!data?.length) break;
+        all = [...all, ...data];
+        if (data.length < 1000) break;
+        off += 1000;
+      }
+      setRows(all);
+      setLoad(false);
+    })();
+  }, []);
+
+  if (loading) return <div style={S.info}>⏳ Cargando cuentas por cobrar...</div>;
+  if (!rows.length) return (
+    <div style={S.info}>
+      📭 Sin datos. Subí el reporte <strong>Antigüedad de saldos de clientes</strong> en{' '}
+      <a href="/reportes" style={{ color:'var(--orange)' }}>Carga de reportes</a>.
+    </div>
+  );
+
+  const SEM_CC = (row) => {
+    if (N(row.dias_91_120)>0 || N(row.mas_120_dias)>0) return '🔴';
+    if (N(row.dias_61_90)>0) return '🟠';
+    if (N(row.dias_31_60)>0) return '🟡';
+    return '🟢';
+  };
+
+  const tot  = rows.reduce((s,r) => s + N(r.saldo_actual), 0);
+  const sv   = rows.reduce((s,r) => s + N(r.sin_vencer), 0);
+  const nC   = new Set(rows.map(r => r.cliente)).size;
+  const venc = tot - sv;
+
+  let df = rows.map(r => ({ ...r, _sem: SEM_CC(r) }));
+  if (filtroSem !== 'Todos') df = df.filter(r => r._sem === filtroSem);
+  if (buscar) df = df.filter(r => String(r.cliente||'').toLowerCase().includes(buscar.toLowerCase()));
+
+  const exportCSV = () => {
+    const cols = ['_sem','cliente','vendedor','tipo','numero','saldo_actual','fecha_vencimiento','sin_vencer','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'];
+    const csv = [cols.join(','), ...df.map(r => cols.map(c => `"${String(r[c]||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,\ufeff'+encodeURIComponent(csv);
+    a.download = `cuentas_cobrar_${fecha?.slice(0,10)||'export'}.csv`; a.click();
+  };
+
+  return (
+    <div>
+      <UltimaActualizacion fecha={fecha} />
+      <div style={S.grid4}>
+        <KPI label="📥 Total por cobrar" value={fC(tot)}  color="var(--teal, #225F74)" />
+        <KPI label="🟢 Sin vencer"       value={fC(sv)}   color="#276749" />
+        <KPI label="🔴 Vencido"          value={fC(venc)} color="#C53030" />
+        <KPI label="👥 Clientes"         value={nC}       color="#3182CE" />
+      </div>
+      <hr style={S.divider}/>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:'12px', marginBottom:'16px' }}>
+        <div>
+          <label style={S.label}>Semáforo</label>
+          <select style={{ ...S.input, width:'100%' }} value={filtroSem} onChange={e => setFS(e.target.value)}>
+            {['Todos','🔴','🟠','🟡','🟢'].map(o => <option key={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>Buscar cliente</label>
+          <input style={{ ...S.input, width:'100%' }} placeholder="Nombre..." value={buscar} onChange={e => setBus(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'16px' }}>
+        <table style={S.tbl}>
+          <thead>
+            <tr>
+              <th style={S.th}>🚦</th>
+              <th style={S.th}>Cliente</th>
+              <th style={S.th}>Vendedor</th>
+              <th style={S.th}>Tipo</th>
+              <th style={S.th}>Número</th>
+              <th style={{ ...S.th, textAlign:'right' }}>Saldo actual</th>
+              <th style={S.th}>Vencimiento</th>
+              <th style={{ ...S.th, textAlign:'right' }}>Sin vencer</th>
+              <th style={{ ...S.th, textAlign:'right' }}>1-30d</th>
+              <th style={{ ...S.th, textAlign:'right' }}>31-60d</th>
+              <th style={{ ...S.th, textAlign:'right' }}>61-90d</th>
+              <th style={{ ...S.th, textAlign:'right' }}>91-120d</th>
+              <th style={{ ...S.th, textAlign:'right' }}>+120d</th>
+            </tr>
+          </thead>
+          <tbody>
+            {df.map((r,i) => (
+              <tr key={i}>
+                <td style={S.td(i)}>{r._sem}</td>
+                <td style={S.td(i)}>{r.cliente||'—'}</td>
+                <td style={S.td(i)}>{r.vendedor||'—'}</td>
+                <td style={S.td(i)}>{r.tipo||'—'}</td>
+                <td style={S.td(i)}>{r.numero||'—'}</td>
+                <td style={{ ...S.td(i), textAlign:'right', fontWeight:600 }}>{fC(r.saldo_actual)}</td>
+                <td style={S.td(i)}>{r.fecha_vencimiento||'—'}</td>
+                {['sin_vencer','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'].map(k => (
+                  <td key={k} style={{ ...S.td(i), textAlign:'right' }}>{N(r[k])>0?fC(r[k]):'—'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button style={S.btnG} onClick={exportCSV}>⬇️ Exportar CSV</button>
+    </div>
+  );
+}
+
+// ── Tab: Flujo de Caja ─────────────────────────────────────────────────────
+function TabFlujo({ tcC }) {
+  const [rP, setRP] = useState([]);
+  const [rC, setRC] = useState([]);
+  const [saldo, setSaldo] = useState(0);
+  const [loading, setLoad] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoad(true);
+      const [pRes, cRes] = await Promise.all([
+        (async () => {
+          const { data: fd } = await sb.from('fin_cuentas_pagar').select('fecha_carga').order('fecha_carga',{ascending:false}).limit(1);
+          if (!fd?.length) return [];
+          const { data } = await sb.from('fin_cuentas_pagar').select('*').eq('fecha_carga', fd[0].fecha_carga);
+          return data || [];
+        })(),
+        (async () => {
+          const { data: fd } = await sb.from('fin_cuentas_cobrar').select('fecha_carga').order('fecha_carga',{ascending:false}).limit(1);
+          if (!fd?.length) return [];
+          const { data } = await sb.from('fin_cuentas_cobrar').select('*').eq('fecha_carga', fd[0].fecha_carga);
+          return data || [];
+        })(),
+      ]);
+      setRP(pRes);
+      setRC(cRes);
+      setLoad(false);
+    })();
+  }, []);
+
+  if (loading) return <div style={S.info}>⏳ Cargando flujo de caja...</div>;
+  if (!rP.length && !rC.length) return (
+    <div style={S.info}>📭 Subí ambos reportes de antigüedad de saldos en <a href="/reportes" style={{ color:'var(--orange)' }}>Carga de reportes</a> para ver el flujo.</div>
+  );
+
+  const TRAMOS_C = ['sin_vencer','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'];
+  const TRAMOS_P = ['sin_vencer','dias_1_8','dias_9_15','dias_16_22','dias_23_30','dias_1_30','dias_31_60','dias_61_90','dias_91_120','mas_120_dias'];
+
+  const flujo = [];
+  TRAMOS_C.forEach(k => {
+    const m = rC.reduce((s,r) => s + N(r[k]), 0);
+    if (m > 0) flujo.push({ tipo:'📥 Cobro', tramo:k.replace('dias_','').replace('_',' ').replace('sin vencer','Sin vencer').replace('mas','Más de'), monto:m, signo:m });
+  });
+  TRAMOS_P.forEach(k => {
+    const m = rP.reduce((s,r) => s + N(r[k]), 0);
+    if (m > 0) flujo.push({ tipo:'💸 Pago', tramo:k.replace('dias_','').replace('_',' ').replace('sin vencer','Sin vencer').replace('mas','Más de'), monto:m, signo:-m });
+  });
+
+  const ent = flujo.filter(x => x.signo > 0).reduce((s,x) => s + x.signo, 0);
+  const sal = flujo.filter(x => x.signo < 0).reduce((s,x) => s + Math.abs(x.signo), 0);
+  const net = saldo + ent - sal;
+
+  return (
+    <div>
+      <div style={{ marginBottom:'16px' }}>
+        <label style={S.label}>💵 Saldo inicial en caja (₡)</label>
+        <input style={{ ...S.input, width:'200px' }} type="number" step="100000" value={saldo} onChange={e => setSaldo(parseFloat(e.target.value)||0)} />
+      </div>
+      <div style={S.grid4}>
+        <KPI label="💵 Saldo inicial"  value={fC(saldo)} />
+        <KPI label="📥 Total cobros"   value={fC(ent)}   color="#276749" />
+        <KPI label="💸 Total pagos"    value={fC(sal)}   color="#C53030" />
+        <KPI label="🏦 Posición neta"  value={fC(net)}   color={net>=0?'#276749':'#C53030'} />
+      </div>
+      <hr style={S.divider}/>
+      <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'16px' }}>
+        <table style={S.tbl}>
+          <thead><tr>
+            <th style={S.th}>Tipo</th>
+            <th style={S.th}>Tramo</th>
+            <th style={{ ...S.th, textAlign:'right' }}>Monto</th>
+          </tr></thead>
+          <tbody>
+            {flujo.map((x,i) => (
+              <tr key={i}>
+                <td style={S.td(i)}>{x.tipo}</td>
+                <td style={S.td(i)}>{x.tramo}</td>
+                <td style={{ ...S.td(i), textAlign:'right', fontWeight:600, color:x.signo>0?'#276749':'#C53030' }}>{fC(x.monto)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={net<0 ? S.warn : S.ok}>
+        {net<0 ? `⚠️ Posición neta negativa: ${fC(net)}` : `✅ Posición proyectada: ${fC(net)}`}
+      </div>
+    </div>
+  );
+}
+
+// ── Página principal ────────────────────────────────────────────────────────
+export default function FinanzasPage() {
+  const [tab, setTab]      = useState(0);
+  const [tcBAC, setTcBAC]  = useState(null);
+  const [loading, setLoad] = useState(true);
+
+  useEffect(() => {
+    setLoad(false);
+    fetch('/api/mercado?fuente=bccr_ref')
+      .then(r => r.json())
+      .then(j => { if (j.ok && j.data?.venta) setTcBAC(j.data.venta); })
+      .catch(() => {});
+  }, []);
+
+  const TABS = ['💸 Cuentas por Pagar', '📥 Cuentas por Cobrar', '🌊 Flujo de Caja'];
+
+  return (
+    <div style={S.page}>
+      <h1 style={S.title}>💰 Módulo Financiero</h1>
+      <div style={S.caption}>
+        Cuentas por pagar · Cuentas por cobrar · Flujo de caja
+        {tcBAC && <span style={{ marginLeft:'12px', fontSize:'0.78rem', color:'#4ec9b0' }}>💱 TC BCCR venta: ₡{tcBAC.toFixed(2)}</span>}
+        <div style={{ marginTop:'6px', fontSize:'0.78rem', color:'var(--text-muted)' }}>
+          Los datos se actualizan automáticamente al subir reportes en <a href="/reportes" style={{ color:'var(--orange)' }}>Carga de reportes</a>.
+        </div>
+      </div>
+      <hr style={S.divider} />
+      <div style={S.tabs}>
+        {TABS.map((t,i) => <button key={t} style={S.tab(tab===i)} onClick={() => setTab(i)}>{t}</button>)}
+      </div>
+      {tab === 0 && <TabPagar  tcC={tcBAC} />}
+      {tab === 1 && <TabCobrar tcC={tcBAC} />}
+      {tab === 2 && <TabFlujo  tcC={tcBAC} />}
+    </div>
+  );
 }
