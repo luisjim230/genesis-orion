@@ -286,10 +286,38 @@ export default function DashboardPage() {
           color={posPositiva ? '#059669' : '#f43f5e'}
           loading={loading}
         />
-        <KpiCard icon="🏦" label="Bancos CRC"      value={fmt_crc(kpis.totalBancosCRC)}         sub="saldo total colones"      color="#5E2733" loading={loading} />
-        <KpiCard icon="💵" label="Bancos USD"      value={fmt_usd(kpis.totalBancosUSD)}         sub="saldo total dolares"      color="#5E2733" loading={loading} />
-        <KpiCard icon="📦" label="Import. total"   value={fmt_usd(kpis.importTotalUSD)}          sub="comprometido en transito" color="#0284c7" loading={loading} />
-        <KpiCard icon="⏳" label="Import. x pagar" value={fmt_usd(kpis.importPorPagarUSD)}       sub="pendiente de pago"        color="#f59e0b" loading={loading} />
+        <KpiCard
+          icon="🏦"
+          label="Bancos CRC"
+          value={fmt_crc(kpis.totalBancosCRC)}
+          sub="saldo total colones"
+          color="#5E2733"
+          loading={loading}
+        />
+        <KpiCard
+          icon="💵"
+          label="Bancos USD"
+          value={fmt_usd(kpis.totalBancosUSD)}
+          sub="saldo total dolares"
+          color="#5E2733"
+          loading={loading}
+        />
+        <KpiCard
+          icon="📦"
+          label="Import. total"
+          value={fmt_usd(kpis.importTotalUSD)}
+          sub="comprometido en transito"
+          color="#0284c7"
+          loading={loading}
+        />
+        <KpiCard
+          icon="⏳"
+          label="Import. x pagar"
+          value={fmt_usd(kpis.importPorPagarUSD)}
+          sub="pendiente de pago"
+          color="#f59e0b"
+          loading={loading}
+        />
       </div>
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
