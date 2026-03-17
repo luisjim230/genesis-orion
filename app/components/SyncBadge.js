@@ -23,7 +23,7 @@ export default function SyncBadge({ reporteIds = [], label = 'Última actualizac
     // Refrescar cada 5 minutos
     const interval = setInterval(fetch, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reporteIds.join(",")]);
 
   if (!info) return (
     <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:BG,

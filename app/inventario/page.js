@@ -498,7 +498,7 @@ export default function Inventario() {
         <>
           {fechaCarga && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-              <p style={{ fontSize: '0.78rem', color: '#999', margin: 0 }}>☁️ Última carga: <strong style={{ color: 'var(--burgundy)' }}>{fechaCarga?.slice(0, 16).replace('T', ' ')}</strong></p>
+              <p style={{ fontSize: '0.78rem', color: '#999', margin: 0 }}>☁️ Última carga: <strong style={{ color: 'var(--burgundy)' }}>{fechaCarga ? new Date(fechaCarga).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</strong></p>
               <span style={{ fontSize: '0.78rem', background: datos.length >= 4000 ? '#F0FFF4' : datos.length >= 1000 ? '#FFFBEB' : '#FFF5F5', color: datos.length >= 4000 ? '#276749' : datos.length >= 1000 ? '#7B341E' : '#C53030', border: '1px solid', borderColor: datos.length >= 4000 ? '#9AE6B4' : datos.length >= 1000 ? '#FAD776' : '#FEB2B2', borderRadius: 12, padding: '2px 10px', fontWeight: 600 }}>
                 {datos.length.toLocaleString()} registros en BD
               </span>
