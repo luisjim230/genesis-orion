@@ -181,6 +181,41 @@ export default function DashboardPage() {
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
 
+        const { data: bancosData } = await supabase
+          .from('fin_bancos')
+          .select('saldo, moneda')
+
+        const totalBancosCRC = (bancosData || [])
+          .filter(b => b.moneda === 'CRC')
+          .reduce((sum, b) => sum + Number(b.saldo || 0), 0)
+
+        const totalBancosUSD = (bancosData || [])
+          .filter(b => b.moneda === 'USD')
+          .reduce((sum, b) => sum + Number(b.saldo || 0), 0)
+
+        const { data: enviosData } = await supabase
+          .from('neptuno_envios')
+          .select('adelanto_monto,adelanto_pago,final_monto,final_pago,flete_monto,flete_pago,impuestos_monto,impuestos_pago,transporte_local_monto,transporte_local_pago,archivado,estado')
+          .eq('archivado', false)
+
+        const camposMonto = [
+          ['adelanto_monto','adelanto_pago'],
+          ['final_monto','final_pago'],
+          ['flete_monto','flete_pago'],
+          ['impuestos_monto','impuestos_pago'],
+          ['transporte_local_monto','transporte_local_pago'],
+        ]
+
+        let importTotalUSD = 0
+        let importPorPagarUSD = 0
+        ;(enviosData || []).forEach(e => {
+          camposMonto.forEach(([monto, pago]) => {
+            const val = Number(e[monto] || 0)
+            importTotalUSD += val
+            if (!e[pago]) importPorPagarUSD += val
+          })
+        })
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -188,6 +223,10 @@ export default function DashboardPage() {
           totalPagar,
           totalCobrar,
           posicionCaja: totalCobrar - totalPagar,
+          totalBancosCRC,
+          totalBancosUSD,
+          importTotalUSD,
+          importPorPagarUSD,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -241,6 +280,145 @@ export default function DashboardPage() {
           color={posPositiva ? '#059669' : '#f43f5e'}
           loading={loading}
         />
+        <KpiCard icon="🏦" label="Bancos ₡"        value={fmt_crc(kpis.totalBancosCRC)}                                          sub="saldo total colones"       color="#5E2733" loading={loading} />
+        <KpiCard icon="💵" label="Bancos $"        value={kpis.totalBancosUSD != null ? '
+
+      <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>🚢 Contenedores activos</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : contenedores.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay contenedores activos</div>
+              : contenedores.map((e, i) => <ContenedorRow key={i} envio={e} />)
+          }
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>✨ Tareas pendientes</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : tareas.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
+              : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
+          }
+        </div>
+        {recurrentesHoy.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            {recurrentesHoy.map((r, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f2f5', fontSize: '0.84rem', color: '#1a1d24' }}>
+                <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
+                {r.notas && <div style={{ fontSize: '0.75rem', color: '#9ba3b5', marginTop: 2 }}>{r.notas}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
+        Actualizado: {new Date().toLocaleString('es-CR')}
+      </div>
+    </div>
+  )
+}
+ + Number(kpis.totalBancosUSD).toLocaleString('es-CR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'} sub="saldo total dólares"        color="#5E2733" loading={loading} />
+        <KpiCard icon="🚢" label="Import. total"   value={kpis.importTotalUSD != null ? '
+
+      <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>🚢 Contenedores activos</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : contenedores.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay contenedores activos</div>
+              : contenedores.map((e, i) => <ContenedorRow key={i} envio={e} />)
+          }
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>✨ Tareas pendientes</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : tareas.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
+              : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
+          }
+        </div>
+        {recurrentesHoy.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            {recurrentesHoy.map((r, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f2f5', fontSize: '0.84rem', color: '#1a1d24' }}>
+                <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
+                {r.notas && <div style={{ fontSize: '0.75rem', color: '#9ba3b5', marginTop: 2 }}>{r.notas}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
+        Actualizado: {new Date().toLocaleString('es-CR')}
+      </div>
+    </div>
+  )
+}
+ + Number(kpis.importTotalUSD).toLocaleString('es-CR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—'}    sub="comprometido en tránsito"  color="#0284c7" loading={loading} />
+        <KpiCard icon="⏳" label="Import. por pagar" value={kpis.importPorPagarUSD != null ? '
+
+      <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>🚢 Contenedores activos</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : contenedores.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay contenedores activos</div>
+              : contenedores.map((e, i) => <ContenedorRow key={i} envio={e} />)
+          }
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>✨ Tareas pendientes</div>
+          {loading
+            ? <div style={{ color: '#ccc', fontSize: '0.82rem' }}>Cargando...</div>
+            : tareas.length === 0
+              ? <div style={{ color: '#9ba3b5', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
+              : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
+          }
+        </div>
+        {recurrentesHoy.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1a1d24', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            {recurrentesHoy.map((r, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f2f5', fontSize: '0.84rem', color: '#1a1d24' }}>
+                <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
+                {r.notas && <div style={{ fontSize: '0.75rem', color: '#9ba3b5', marginTop: 2 }}>{r.notas}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#b0b8cc', textAlign: 'right' }}>
+        Actualizado: {new Date().toLocaleString('es-CR')}
+      </div>
+    </div>
+  )
+}
+ + Number(kpis.importPorPagarUSD).toLocaleString('es-CR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—'} sub="pendiente de pago"         color="#f59e0b" loading={loading} />
       </div>
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
