@@ -5,6 +5,12 @@ import { useAuth } from '../lib/useAuth'
 
 const GOLD = '#c8a84b'
 
+function fmt_usd(val) {
+  const n = parseFloat(val)
+  if (isNaN(n)) return '—'
+  return 'USD ' + n.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function fmt_crc(val) {
   if (!val && val !== 0) return '—'
   const n = parseFloat(val)
@@ -280,8 +286,11 @@ export default function DashboardPage() {
           color={posPositiva ? '#059669' : '#f43f5e'}
           loading={loading}
         />
-        <KpiCard icon="🏦" label="Bancos ₡"        value={fmt_crc(kpis.totalBancosCRC)}                                          sub="saldo total colones"       color="#5E2733" loading={loading} />
-        <KpiCard icon="💵" label="Bancos $"        value={kpis.totalBancosUSD != null ? '
+        <KpiCard icon="🏦" label="Bancos CRC"      value={fmt_crc(kpis.totalBancosCRC)}         sub="saldo total colones"      color="#5E2733" loading={loading} />
+        <KpiCard icon="💵" label="Bancos USD"      value={fmt_usd(kpis.totalBancosUSD)}         sub="saldo total dolares"      color="#5E2733" loading={loading} />
+        <KpiCard icon="📦" label="Import. total"   value={fmt_usd(kpis.importTotalUSD)}          sub="comprometido en transito" color="#0284c7" loading={loading} />
+        <KpiCard icon="⏳" label="Import. x pagar" value={fmt_usd(kpis.importPorPagarUSD)}       sub="pendiente de pago"        color="#f59e0b" loading={loading} />
+      </div>
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
 
