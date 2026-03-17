@@ -549,18 +549,24 @@ function TabSubir() {
           continue;
         }
 
-        const periodo  = extraerPeriodo(filas, tipo);
+        // fin_cuentas_pagar / cobrar: usar API servidor (ExcelJS, maneja xml:space)
         if (tipo === 'fin_cuentas_pagar' || tipo === 'fin_cuentas_cobrar') {
           const fd = new FormData();
           fd.append('file', file);
           fd.append('tabla', tipo);
-          const res = await fetch('/api/ezequiel-fin', { method: 'POST', body: fd });
-          const json = await res.json();
-          if (!res.ok) throw new Error(json.error || 'Error API finanzas');
-          setMensaje(`✅ ${json.registros} registros cargados correctamente`);
-          setSubiendo(false);
-          return;
+          const apiRes2 = await fetch('/api/ezequiel-fin', { method: 'POST', body: fd });
+          const apiData2 = await apiRes2.json();
+          if (!apiRes2.ok) throw new Error(apiData2.error || 'Error API finanzas');
+          cantidad = apiData2.registros;
+          res.tipo = tipo;
+          res.filas = cantidad;
+          res.periodo = new Date().toISOString().slice(0, 10);
+          res.estado = 'ok';
+          nuevos.push(res);
+          continue;
         }
+
+        const periodo  = extraerPeriodo(filas, tipo);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
         console.log(`[SOL] procesarExcel → ${records.length} records para ${tipo}`);
         if (records.length > 0) console.log(`[SOL] Sample:`, JSON.stringify(records[0]).slice(0,200));
