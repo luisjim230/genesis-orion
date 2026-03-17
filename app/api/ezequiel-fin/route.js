@@ -130,10 +130,13 @@ export async function POST(req) {
 
       if (!hasData) return; // fila vacía
 
-      // Filtrar filas de subtotal: tienen saldo pero no tienen código válido
-      // Los subtotales de NEO tienen la col A vacía o igual al proveedor anterior
+      // Filtrar subtotales de NEO: filas sin fecha_compra Y sin fecha_vencimiento
+      // NEO inserta una fila resumen por proveedor al final de cada grupo sin fechas
+      const tieneFecha = obj['fecha_compra'] || obj['fecha_vencimiento'] || obj['fecha_factura'];
+      if (!tieneFecha) return;
+
       const codigo = obj['codigo'] || obj['vendedor'];
-      if (!codigo) return; // subtotal sin identificador
+      if (!codigo) return;
 
       records.push(obj);
     });
