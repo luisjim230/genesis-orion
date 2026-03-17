@@ -143,7 +143,7 @@ export default function Inventario() {
         ultimo_proveedor: new Set(calc.map(p => p.ultimo_proveedor || 'Sin proveedor')),
       });
     }
-  }, [calc.length]);
+  }, [calc]);
 
   async function cargarDatos() {
     setLoading(true);
