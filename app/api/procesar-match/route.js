@@ -6,12 +6,38 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Parse robusto: acepta "2026-03-09", "09/03/2026", serial Excel, ISO string
+function parseFecha(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+
+  const s = String(val).trim();
+  if (!s) return null;
+
+  // Serial Excel (número) ej: 44929
+  const num = Number(s);
+  if (!isNaN(num) && num > 40000 && num < 60000) {
+    return new Date(Math.round((num - 25569) * 86400 * 1000));
+  }
+
+  // Formato DD/MM/YYYY (el que usa NEO en algunos exports)
+  const dmyMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return new Date(`${y}-${m}-${d}T00:00:00Z`);
+  }
+
+  // ISO / YYYY-MM-DD
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function POST(request) {
   try {
     const { fecha_carga } = await request.json();
     if (!fecha_carga) return NextResponse.json({ error: 'fecha_carga requerida' }, { status: 400 });
 
-    // 1. Revertir matchs inválidos (recepción anterior a la orden)
+    // 1. Revertir matchs inválidos (recepción anterior o igual a la fecha de orden)
     const { data: itemsConFecha } = await supabase
       .from('ordenes_compra_items')
       .select('id, fecha_recepcion, orden_id, ordenes_compra(fecha_orden)')
@@ -23,7 +49,10 @@ export async function POST(request) {
         if (!item.fecha_recepcion) continue;
         const fechaOrden = item.ordenes_compra?.fecha_orden;
         if (!fechaOrden) continue;
-        if (new Date(item.fecha_recepcion) <= new Date(fechaOrden)) {
+        const fRecep = parseFecha(item.fecha_recepcion);
+        const fOrden = parseFecha(fechaOrden);
+        if (!fRecep || !fOrden) continue;
+        if (fRecep <= fOrden) {
           await supabase.from('ordenes_compra_items').update({
             cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null,
           }).eq('id', item.id);
@@ -52,7 +81,7 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Sin datos en neo_items_comprados para esta carga' });
     }
 
-    // 3. Traer ítems pendientes/parciales
+    // 3. Ítems pendientes/parciales
     const { data: itemsPend } = await supabase
       .from('ordenes_compra_items')
       .select('*, ordenes_compra(fecha_orden)')
@@ -65,38 +94,50 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, ...res });
     }
 
-    // 4. Agrupar compras por código
+    // 4. Agrupar compras por código con fecha parseada
+    //    CRÍTICO: si la fecha no se puede parsear, omitir la compra.
+    //    No podemos saber si es anterior o posterior a la orden sin fecha válida.
     const comprasPorCodigo = {};
     for (const c of todos) {
       const cod = String(c.codigo_interno || '').trim();
       if (!cod) continue;
+      const fechaCompra = parseFecha(c.fecha);
+      if (!fechaCompra) {
+        console.warn(`[procesar-match] Fecha no parseable código ${cod}: "${c.fecha}" — omitido`);
+        continue;
+      }
       if (!comprasPorCodigo[cod]) comprasPorCodigo[cod] = [];
       comprasPorCodigo[cod].push({
         cantidad: parseFloat(c.cantidad_comprada) || 0,
-        fecha: c.fecha ? new Date(c.fecha) : null,
+        fecha: fechaCompra,
       });
     }
 
-    // 5. Ejecutar match
+    // 5. Match — SOLO compras ESTRICTAMENTE POSTERIORES a la fecha de la orden
     for (const item of itemsPend) {
       const cod = String(item.codigo || '').trim();
       const compras = comprasPorCodigo[cod];
       if (!compras || compras.length === 0) { res.sin_match++; continue; }
 
-      let fechaOrden = null;
-      try {
-        const fo = item.ordenes_compra?.fecha_orden || item.fecha_orden;
-        if (fo) fechaOrden = new Date(fo);
-      } catch {}
+      const foRaw = item.ordenes_compra?.fecha_orden || item.fecha_orden;
+      const fechaOrden = parseFecha(foRaw);
 
-      const validas = fechaOrden
-        ? compras.filter(c => c.fecha && c.fecha > fechaOrden)
-        : compras;
+      if (!fechaOrden) {
+        console.warn(`[procesar-match] Orden sin fecha para item ${item.id} código ${cod} — ignorado`);
+        res.ignorados_por_fecha++;
+        continue;
+      }
 
-      if (validas.length === 0) { res.ignorados_por_fecha++; continue; }
+      // Solo compras que ocurrieron DESPUÉS de la orden (no el mismo día, no antes)
+      const validas = compras.filter(c => c.fecha > fechaOrden);
+
+      if (validas.length === 0) {
+        res.ignorados_por_fecha++;
+        continue;
+      }
 
       const cantRecibida = validas.reduce((s, c) => s + c.cantidad, 0);
-      const fechaRecep   = validas.reduce((mx, c) => (!mx || (c.fecha && c.fecha > mx) ? c.fecha : mx), null);
+      const fechaRecep   = validas.reduce((mx, c) => (!mx || c.fecha > mx ? c.fecha : mx), null);
       const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0;
       const nuevoEstado  = cantRecibida >= cantOrdenada ? 'completo' : 'parcial';
       res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++;
