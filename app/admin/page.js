@@ -34,6 +34,7 @@ const MODULOS = [
   { key:'social',       label:'Redes Sociales',  emoji:'📱' },
   { key:'cajas-aurora', label:'Cajas',    emoji:'🌅' },
   { key:'entregas',     label:'Entregas', emoji:'🚛' },
+  { key:'pagos',        label:'Coordinación de pagos', emoji:'💸' },
   { key:'admin',        label:'Admin',           emoji:'🔐' },
 ]
 
