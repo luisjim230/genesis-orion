@@ -187,6 +187,19 @@ export default function DashboardPage() {
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
 
+        // Tipo de cambio BCCR (venta, indicador 318)
+        let tcVenta = 520 // fallback
+        try {
+          const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
+          const bccrRes = await fetch(
+            'https://gee.bccr.fi.cr/Indicadores/Suscripciones/WS/wsindicadoreseconomicos.asmx/ObtenerIndicadoresEconomicos?' +
+            new URLSearchParams({Indicador:'318',FechaInicio:hoy,FechaFinal:hoy,Nombre:'genesis',SubNiveles:'N',CorreoElectronico:'genesis@rojimo.com',Token:'OJXUWSTM2J'})
+          )
+          const bccrTxt = await bccrRes.text()
+          const match = bccrTxt.match(/<NUM_VALOR>([\d.,]+)<\/NUM_VALOR>/)
+          if (match) tcVenta = parseFloat(match[1].replace(',','.'))
+        } catch(e) { /* usar fallback */ }
+
         const { data: bancosData } = await supabase
           .from('fin_bancos')
           .select('saldo, moneda')
@@ -227,7 +240,7 @@ export default function DashboardPage() {
           tareasPendientes: (tareasData || []).length,
           totalPagar,
           totalCobrar,
-          posicionCaja: totalCobrar - totalPagar,
+          posicionCaja: totalCobrar - totalPagar + totalBancosCRC + (totalBancosUSD * tcVenta) - (importPorPagarUSD * tcVenta),
           totalBancosCRC,
           totalBancosUSD,
           importTotalUSD,
