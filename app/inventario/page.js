@@ -645,7 +645,7 @@ export default function Inventario() {
                                 <tr key={idx}>
                                   <td><AlertaBadge alerta={item._alerta} /></td>
                                   <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{item.codigo}</td>
-                                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nombre}</td>
+                                  <td style={{ minWidth: 280 }}>{item.nombre}</td>
                                   <td style={{ textAlign: 'right' }}>{fmtN(item.existencias, 0)}</td>
                                   <td style={{ textAlign: 'center', color: '#3182CE' }}>{item._transito > 0 ? `🚢 ${item._transito}` : '–'}</td>
                                   <td style={{ textAlign: 'right', color: '#999' }}>{item._cantComprar}</td>
@@ -743,7 +743,7 @@ export default function Inventario() {
                           <td><input type="checkbox" checked={sel} readOnly style={{ accentColor: 'var(--orange)' }} /></td>
                           <td><AlertaBadge alerta={item._alerta} /></td>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{item.codigo}</td>
-                          <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.nombre}</td>
+                          <td style={{ minWidth: 280 }}>{item.nombre}</td>
                           <td style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78em' }}>{item.ultimo_proveedor || '—'}</td>
                           <td style={{ textAlign: 'right' }}>{fmtN(item.promedio_mensual, 0)}</td>
                           <td style={{ textAlign: 'right', color: parseFloat(item.existencias) <= 0 ? '#E53E3E' : undefined }}>{fmtN(item.existencias, 0)}</td>
@@ -781,7 +781,7 @@ export default function Inventario() {
                         <tr key={idx}>
                           <td><button onClick={() => quitarDeOrden(i.codigo)} style={{ background: 'none', border: 'none', color: '#E53E3E', cursor: 'pointer', fontSize: '1rem' }}>✕</button></td>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{i.codigo}</td>
-                          <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.nombre}</td>
+                          <td style={{ minWidth: 280 }}>{i.nombre}</td>
                           <td><input type="number" min="0" value={i.cantidad} onChange={e => actualizarCantidad(i.codigo, e.target.value)} className="module-input" style={{ width: 70, padding: '4px 8px' }} /></td>
                           <td style={{ textAlign: 'right' }}>{fmtN(i.costo)}</td>
                           <td style={{ textAlign: 'right' }}>{i.descuento}%</td>
