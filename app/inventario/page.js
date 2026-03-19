@@ -728,7 +728,7 @@ export default function Inventario() {
                                       }}
                                     />
                                   </td>
-                                  <td style={{ textAlign: 'right' }}>{fmtN(item.ultimo_costo)}</td>
+                                  <td style={{ textAlign: 'right' }}><input type='number' value={parseFloat(item.ultimo_costo)||0} onChange={e => { e.stopPropagation(); const v=parseFloat(e.target.value)||0; setCalc(prev=>prev.map(x=>x.codigo===item.codigo?{...x,ultimo_costo:v}:x)); }} onClick={e=>e.stopPropagation()} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
                                 </tr>
                               );
                             })}
@@ -806,7 +806,7 @@ export default function Inventario() {
                           <td style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78em' }}>{item.ultimo_proveedor || '—'}</td>
                           <td style={{ textAlign: 'right' }}>{fmtN(item.promedio_mensual, 0)}</td>
                           <td style={{ textAlign: 'right', color: parseFloat(item.existencias) <= 0 ? '#E53E3E' : undefined }}>{fmtN(item.existencias, 0)}</td>
-                          <td style={{ ...S.td, textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center' }}>
                                     {item._transito > 0 ? (
                                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
                                         <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
@@ -819,7 +819,7 @@ export default function Inventario() {
                                     ) : <span style={{ color:'#ccc' }}>{'–'}</span>}
                                   </td>
                           <td style={{ textAlign: 'right', fontWeight: item._cantComprar > 0 ? 700 : 400, color: item._cantComprar > 0 ? '#E53E3E' : item._alerta === '🟡 Prestar atención' ? '#D69E2E' : '#ccc' }}>{item._cantComprar > 0 ? item._cantComprar : item._alerta === '🟡 Prestar atención' ? 0 : '–'}</td>
-                          <td style={{ textAlign: 'right' }}>{fmtN(item.ultimo_costo)}</td>
+                          <td style={{ textAlign: 'right' }}><input type='number' value={parseFloat(item.ultimo_costo)||0} onChange={e => { e.stopPropagation(); const v=parseFloat(e.target.value)||0; setCalc(prev=>prev.map(x=>x.codigo===item.codigo?{...x,ultimo_costo:v}:x)); }} onClick={e=>e.stopPropagation()} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
                         </tr>
                       );
                     })}
