@@ -64,12 +64,6 @@ function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
   const [search, setSearch] = useState('');
   const ref = useRef(null);
   useEffect(() => {
-    fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista => {
-      if(Array.isArray(lista)) setProveedoresKommo(lista);
-    }).catch(()=>{});
-  }, []);
-
-  useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -144,6 +138,11 @@ export default function Inventario() {
   const [zipGenerando, setZipGenerando] = useState(false)
   const [modalWhatsApp, setModalWhatsApp] = useState(null) // { proveedor, items };
   const [proveedoresKommo, setProveedoresKommo] = useState([]);
+  useEffect(() => {
+    fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista => {
+      if(Array.isArray(lista)) setProveedoresKommo(lista);
+    }).catch(()=>{});
+  }, []);
   const [proveedorOrdenSeleccionado, setProveedorOrdenSeleccionado] = useState('');
   const [showProvSuggestions, setShowProvSuggestions] = useState(false);
 
