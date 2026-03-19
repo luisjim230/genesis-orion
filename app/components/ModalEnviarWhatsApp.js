@@ -56,7 +56,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const fecha=new Date().toISOString().slice(0,10)
       const nombreLote='OC ' + (proveedor||'Sin nombre') + ' ' + fecha
       await fetch('/api/guardar-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo_unitario||i.precio||0,descuento:i.descuento||0})),
+        items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo||i.costo_unitario||i.precio||0,descuento:i.descuento||0})),
         nombreLote:nombreLote,
         diasTribucion:0
       })})
