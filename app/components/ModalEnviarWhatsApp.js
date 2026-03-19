@@ -85,7 +85,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       if (uploadData.url) {
         const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
         const numOC = numeroSolOC ? '\nNo. OC: *' + numeroSolOC + '*' : ''
-        waText = '📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *' + (proveedor||'') + '*\nFecha: ' + hoy + numOC + '\n\n📄 Ver PDF: ' + uploadData.url + '\n\n_Enviado desde SOL · Sistema de Operaciones_'
+        waText = '📦 *Orden de Compra - Depósito Jiménez*\n\nBuenas estimado proveedor:\n*' + (proveedor||'') + '*\n\nPor favor enviar la orden de compra que encontrará en el siguiente enlace\n👇🏻\n📄 Ver PDF: ' + uploadData.url + (numOC ? '\n\n' + numOC : '') + '\n\nFecha: ' + hoy + '\n\n🚨 *Por favor confirmar el recibido* 🚨\n\n_Enviado desde SOL ☀️_\n_Sistema de Operaciones y Logística_'
       }
     } catch(e) {
       console.error('PDF upload error:', e)
