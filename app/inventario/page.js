@@ -695,7 +695,7 @@ export default function Inventario() {
                                   <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{item.codigo}</td>
                                   <td style={{ minWidth: 280 }}>{item.nombre}</td>
                                   <td style={{ textAlign: 'right' }}>{fmtN(item.existencias, 0)}</td>
-                                  <td style={{ ...S.td, textAlign: 'center' }}>
+                                  <td style={{ textAlign: 'center', padding: '4px 8px' }}>
                                     {item._transito > 0 ? (
                                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
                                         <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
