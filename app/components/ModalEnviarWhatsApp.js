@@ -51,6 +51,18 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
     if(tel!==guardado){
       try{await fetch('/api/kommo/proveedores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre_proveedor:proveedor||'Sin nombre',whatsapp:tel})})}catch(e){}
     }
+    // Guardar orden en historial de SOL (ordenes_compra + ordenes_compra_items)
+    try{
+      const fecha=new Date().toISOString().slice(0,10)
+      const nombreLote='OC ' + (proveedor||'Sin nombre') + ' ' + fecha
+      await fetch('/api/guardar-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo_unitario||i.precio||0,descuento:i.descuento||0})),
+        nombreLote:nombreLote,
+        diasTribucion:0
+      })})
+    }catch(e){console.error('guardar-orden error:',e)}
+
+    // Encolar en NEO
     try{
       const res=await fetch('/api/neo/encolar-oc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proveedor:proveedor||'Sin nombre',items:items.map(i=>({codigo:i.codigo,cantidad:i.cantidad,costo_unitario:i.costo_unitario||i.precio||0,descuento:i.descuento||0})),creadoPor:'whatsapp-modal'})})
       const data=await res.json()
