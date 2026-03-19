@@ -853,7 +853,7 @@ export default function Inventario() {
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{i.codigo}</td>
                           <td style={{ minWidth: 280 }}>{i.nombre}</td>
                           <td><input type="number" min="0" value={i.cantidad} onChange={e => actualizarCantidad(i.codigo, e.target.value)} className="module-input" style={{ width: 70, padding: '4px 8px' }} /></td>
-                          <td style={{ textAlign: 'right' }}>{fmtN(i.costo)}</td>
+                          <td style={{ textAlign: 'right' }}><input type='number' value={i.costo} onChange={e => setOrdenItems(prev => prev.map((x,xi) => xi===idx ? {...x, costo: parseFloat(e.target.value)||0} : x))} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
                           <td style={{ textAlign: 'right' }}>{i.descuento}%</td>
                           <td style={{ fontSize: '0.78em' }}>{i.proveedor || '—'}</td>
                         </tr>
@@ -869,7 +869,7 @@ export default function Inventario() {
                       disabled={ordenItems.length === 0}
                       onClick={() => setModalWhatsApp({
                         proveedor: '',
-                        items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad }))
+                        items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad, costo: parseFloat(i.costo)||0 }))
                       })}
                     >📱 Enviar por WhatsApp</button>
                     <button className="btn-outline" style={{ color: '#E53E3E', borderColor: '#E53E3E' }} onClick={() => { if (confirm('¿Limpiar la orden?')) setOrdenItems([]); }}>🗑 Limpiar</button>
