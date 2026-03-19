@@ -69,25 +69,33 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
     }catch(e){setNeoOk('error')}
-    // Generar PDF y abrir WhatsApp
+    // Generar PDF, subir a Supabase y enviar link por WhatsApp
+    let waText = preview
     try {
       const doc = await generarPDFOrden({ numeroSol: neoData?.numero_sol, proveedor, items, fecha: new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'}) })
       const pdfBlob = doc.output('blob')
-      const nombrePDF = `OC_${(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')}_${neoData?.numero_sol||''}.pdf`
-      // Siempre descargar el PDF
-      const pdfUrl = URL.createObjectURL(pdfBlob)
-      const a = document.createElement('a'); a.href = pdfUrl; a.download = nombrePDF; a.click()
-      setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000)
-      // En móvil intentar share nativo después de descargar
-      const pdfFile = new File([pdfBlob], nombrePDF, { type: 'application/pdf' })
-      if (/Mobi|Android/i.test(navigator.userAgent) && navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
-        await navigator.share({ files: [pdfFile], title: 'Orden de Compra - ' + (neoData?.numero_sol||''), text: preview })
-      } else {
-        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
+      const nombrePDF = `OC_${(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')}_${neoData?.numero_sol||Date.now()}.pdf`
+      // Subir PDF a Supabase Storage via API route
+      const formData = new FormData()
+      formData.append('file', new File([pdfBlob], nombrePDF, { type: 'application/pdf' }))
+      formData.append('nombre', nombrePDF)
+      const uploadRes = await fetch('/api/neo/subir-pdf', { method: 'POST', body: formData })
+      const uploadData = await uploadRes.json()
+      if (uploadData.url) {
+        const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
+        waText = `📦 *Orden de Compra - Depósito Jiménez*
+Proveedor: *${proveedor||''}*
+Fecha: ${hoy}${neoData?.numero_sol ? '
+No. OC: *'+neoData.numero_sol+'*' : ''}
+
+📄 Ver PDF: ${uploadData.url}
+
+_Enviado desde SOL · Sistema de Operaciones_`
       }
     } catch(e) {
-      window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
+      console.error('PDF upload error:', e)
     }
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(waText)}`, '_blank')
     if(onEnviado)onEnviado({proveedor,telefono:tel})
     setEnviando(false)
     onClose()
