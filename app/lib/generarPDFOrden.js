@@ -90,8 +90,7 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   // Campos
   y+=8; doc.setTextColor(...BLACK);doc.setFont('helvetica','bold');doc.setFontSize(8.5)
   doc.text('Observaciones:',20,y+4);doc.setDrawColor(...LIGHT);doc.rect(20,y,90,7)
-  y+=10;doc.text('Termino de pago:',20,y);doc.setFont('helvetica','normal');doc.text('Contado',56,y)
-  y+=7;doc.setFont('helvetica','bold');doc.text('Hecho por:',20,y);doc.line(38,y+0.5,90,y+0.5)
+  y+=10;doc.setFont('helvetica','bold');doc.text('Hecho por:',20,y);doc.line(38,y+0.5,90,y+0.5)
   y+=7;doc.text('Recibido por:',20,y);doc.line(41,y+0.5,90,y+0.5)
   // Footer
   const footY=277
