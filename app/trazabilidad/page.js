@@ -41,8 +41,8 @@ function badgeDias(d, limA, limR) {
 
 // ─── TAB 1: ALERTAS ──────────────────────────────────────────────────────────
 function TabAlertas({ ordenes, items, loading }) {
-  const [limA, setLimA] = useState(10)
-  const [limR, setLimR] = useState(20)
+  const [limA, setLimA] = useState(5)
+  const [limR, setLimR] = useState(10)
   const [filtroProv, setFiltroProv] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [busqueda, setBusqueda] = useState('')

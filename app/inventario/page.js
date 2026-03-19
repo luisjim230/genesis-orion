@@ -34,6 +34,15 @@ function calcularAlertas(items, transitoMap, dias) {
   });
 }
 
+
+// Semaforo dias transito
+function transitoSemaforo(dias) {
+  if (dias === null || dias === undefined) return null
+  if (dias <= 5)  return { color: '#68d391', emoji: '🟢', label: dias + 'd' }
+  if (dias <= 10) return { color: '#f6ad55', emoji: '🟡', label: dias + 'd' }
+  return { color: '#fc8181', emoji: '🔴', label: dias + 'd' }
+}
+
 function AlertaBadge({ alerta }) {
   const map = {
     '🟢 Óptimo': 'alert-badge alert-optimo',
@@ -106,6 +115,7 @@ export default function Inventario() {
   const [datos, setDatos] = useState([]);
   const [calc, setCalc] = useState([]);
   const [transitoMap, setTransitoMap] = useState({});
+  const [transitoDiasMap, setTransitoDiasMap] = useState({});
   const [dias, setDias] = useState(30);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -170,6 +180,25 @@ export default function Inventario() {
       if (c && p > 0) tMap[c] = (tMap[c] || 0) + p;
     });
     setTransitoMap(tMap);
+    try {
+      const codsEnTransito = Object.keys(tMap);
+      if (codsEnTransito.length > 0) {
+        const { data: ordenesItems } = await supabase
+          .from('ordenes_compra_items')
+          .select('codigo, ordenes_compra(fecha_orden)')
+          .in('codigo', codsEnTransito.slice(0, 100))
+          .in('estado_item', ['pendiente', 'parcial'])
+          .order('creado_en', { ascending: false });
+        const diasMap = {};
+        for (const item of (ordenesItems || [])) {
+          const cod = (item.codigo || '').trim();
+          if (diasMap[cod] !== undefined) continue;
+          const fo = item.ordenes_compra?.fecha_orden;
+          if (fo) diasMap[cod] = Math.floor((new Date() - new Date(fo)) / 86400000);
+        }
+        setTransitoDiasMap(diasMap);
+      }
+    } catch(e) { console.warn('[transitoDiasMap]', e.message); }
     try {
       const { data: pd } = await supabase.from('proveedores_pausados').select('proveedor');
       setProveedoresPausados(new Set((pd || []).map(r => r.proveedor)));
