@@ -330,10 +330,25 @@ async def registrar_oc(page):
         url_lista = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
         await page.goto(url_lista)
         await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(3000)
 
-        # Hacer clic en el link "Registrada" de la primera OC (la más reciente)
-        estado_link = page.locator("a:has-text('Registrada')").first
+        # Buscar la OC correcta: si tenemos numero_oc, buscar esa fila específica
+        # Si no, usar la primera "Registrada" (fallback)
+        estado_link = None
+        if numero_oc:
+            log.info(f"  Buscando OC #{numero_oc} en listado...")
+            fila_oc = page.locator(f"tr:has-text('{numero_oc}')")
+            try:
+                await fila_oc.first.wait_for(state="visible", timeout=8000)
+                estado_link = fila_oc.first.locator("a:has-text('Registrada')")
+                log.info(f"  Encontrada fila OC #{numero_oc}")
+            except Exception:
+                log.warning(f"  No encontré fila con #{numero_oc}, usando primera Registrada")
+                estado_link = page.locator("a:has-text('Registrada')").first
+        else:
+            log.info("  Sin numero_oc — usando primera Registrada en listado")
+            estado_link = page.locator("a:has-text('Registrada')").first
+
         await estado_link.wait_for(state="visible", timeout=20000)
         await estado_link.click(force=True)
         await page.wait_for_timeout(2000)
