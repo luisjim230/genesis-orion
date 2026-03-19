@@ -206,7 +206,16 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
 
     # Usar la primera palabra significativa (>3 letras) del nombre
     palabras = nombre_proveedor.upper().split()
-    keyword = next((p for p in palabras if len(p) > 3), palabras[0])
+    # Tabla de excepciones: nombre exacto del proveedor -> keyword a usar en NEO
+    KEYWORD_EXCEPTIONS = {
+        "CHAOZHOU ZHONGTONG": "ZHONGTONG",
+    }
+    nombre_upper = nombre_proveedor.upper().strip()
+    if nombre_upper in KEYWORD_EXCEPTIONS:
+        keyword = KEYWORD_EXCEPTIONS[nombre_upper]
+        log.info(f"  Usando keyword de excepcion: {keyword}")
+    else:
+        keyword = next((p for p in reversed(palabras) if len(p) > 3), palabras[-1])
     log.info(f"  Keyword: {keyword}")
 
     # Tipear lento — NEO dispara AJAX en cada keyup
