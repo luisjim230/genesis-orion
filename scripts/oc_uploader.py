@@ -277,7 +277,7 @@ async def cargar_excel_oc(page, excel_path):
 
     # Esperar que NEO procese los ítems del Excel (UpdatePanel reload)
     log.info("  Esperando que NEO procese los ítems...")
-    for i in range(90):
+    for i in range(180):
         await page.wait_for_timeout(1000)
         hf = await page.locator("#caCargarPlantilla_hfItemsUploaded").input_value()
         img_src = await page.locator("#caCargarPlantilla_IMG").get_attribute("src") or ""
@@ -286,8 +286,8 @@ async def cargar_excel_oc(page, excel_path):
             break
         if i % 15 == 14:
             log.info(f"  ... esperando ({i+1}s)")
-        if i == 89:
-            log.warning("  Timeout 60s")
+        if i == 179:
+            log.warning("  Timeout 180s")
 
     await page.wait_for_timeout(1000)
     return True
@@ -332,7 +332,7 @@ async def registrar_oc(page):
 
         # Hacer clic en el link "Registrada" de la primera OC (la más reciente)
         estado_link = page.locator("a:has-text('Registrada')").first
-        await estado_link.wait_for(state="visible", timeout=8000)
+        await estado_link.wait_for(state="visible", timeout=20000)
         await estado_link.click(force=True)
         await page.wait_for_timeout(2000)
 
