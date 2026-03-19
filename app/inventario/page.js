@@ -191,7 +191,7 @@ export default function Inventario() {
           .order('creado_en', { ascending: false });
         const diasMap = {};
         for (const item of (ordenesItems || [])) {
-          const cod = (item.codigo || '').trim();
+          const cod = (item.codigo || '').trim().toUpperCase();
           if (diasMap[cod] !== undefined) continue;
           const fo = item.ordenes_compra?.fecha_orden;
           if (fo) diasMap[cod] = Math.floor((new Date() - new Date(fo)) / 86400000);
@@ -699,9 +699,9 @@ export default function Inventario() {
                                     {item._transito > 0 ? (
                                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
                                         <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
-                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]) ? (
-                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).color }}>
-                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).label}
+                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]) ? (
+                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).color }}>
+                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).label}
                                           </span>
                                         ) : null}
                                       </div>
@@ -810,9 +810,9 @@ export default function Inventario() {
                                     {item._transito > 0 ? (
                                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
                                         <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
-                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]) ? (
-                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).color }}>
-                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).label}
+                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]) ? (
+                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).color }}>
+                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim().toUpperCase()]).label}
                                           </span>
                                         ) : null}
                                       </div>
