@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { generarPDFOrden } from '../lib/generarPDFOrden'
-import { generarPDFOrden } from '../lib/generarPDFOrden'
 
 const GOLD='#ED6E2E',SURF='#ffffff',BORDER='#EAE0E0',TEXT='#1a1a1a',MUTED='#8a7070'
 const S={
