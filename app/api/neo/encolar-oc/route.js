@@ -40,6 +40,23 @@ export async function POST(request) {
     if (!proveedor || !items?.length) {
       return Response.json({ error: 'Faltan proveedor o items' }, { status: 400 })
     }
+    // Enriquecer items con precios de neo_minimos_maximos si vienen en 0
+    const codigos = items.filter(i => !i.costo_unitario).map(i => String(i.codigo))
+    if (codigos.length > 0) {
+      const { data: precios } = await supabase
+        .from('neo_minimos_maximos')
+        .select('codigo, ultimo_costo')
+        .in('codigo', codigos)
+      if (precios) {
+        const mapaPrecios = {}
+        for (const p of precios) mapaPrecios[String(p.codigo)] = parseFloat(p.ultimo_costo) || 0
+        items = items.map(i => ({
+          ...i,
+          costo_unitario: i.costo_unitario || mapaPrecios[String(i.codigo)] || 0
+        }))
+      }
+    }
+
     const fecha = new Date().toISOString().slice(0, 10)
     const proveedorSafe = proveedor.toUpperCase().replace(/[^A-Z0-9]/g,'_').replace(/_+/g,'_').slice(0,40)
     const ts = Date.now(); const nombreArchivo = 'OC_' + proveedorSafe + '_' + fecha + '_' + ts + '.xlsx'
