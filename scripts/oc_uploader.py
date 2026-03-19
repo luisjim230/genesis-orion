@@ -209,6 +209,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     # Tabla de excepciones: nombre exacto del proveedor -> keyword a usar en NEO
     KEYWORD_EXCEPTIONS = {
         "CHAOZHOU ZHONGTONG": "ZHONGTONG",
+        "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
     }
     nombre_upper = nombre_proveedor.upper().strip()
     if nombre_upper in KEYWORD_EXCEPTIONS:
@@ -336,29 +337,13 @@ async def registrar_oc(page):
         await estado_link.click(force=True)
         await page.wait_for_timeout(2000)
 
-        # Seleccionar "Aplicada" en el dropdown de estado
-        select_estado = page.locator("select").first
-        await select_estado.wait_for(state="visible", timeout=5000)
-        await select_estado.select_option(label="Aplicada")
-        await page.wait_for_timeout(500)
-
-        # Poner observación
+        # Seleccionar "Aplicada" y confirmar con JS
         try:
-            # Navegar al listado y abrir modal de estado de la OC más reciente
-            tok = get_token(page.url)
-            url_lista = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
-            await page.goto(url_lista)
-            await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(2000)
-            # Clic en el link "Registrada" de la primera OC
-            estado_link = page.locator("a:has-text('Registrada')").first
-            await estado_link.wait_for(state="visible", timeout=8000)
-            await estado_link.click(force=True)
-            await page.wait_for_timeout(2000)
-            # Seleccionar Aplicada
-            await page.select_option("select", label="Aplicada")
-            await page.wait_for_timeout(500)
-            # Usar JS para llenar observación y hacer clic (están hidden)
+            select_estado = page.locator("select").first
+            await select_estado.wait_for(state="visible", timeout=5000)
+            await select_estado.select_option(label="Aplicada")
+            await page.wait_for_timeout(800)
+            # Confirmar con JS — hHistorial_btnCambiar puede estar disabled
             await page.evaluate("""() => {
                 const obs = document.getElementById('hHistorial_txtObservacion');
                 if (obs) obs.value = 'Orden automatica';
