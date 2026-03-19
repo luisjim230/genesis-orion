@@ -575,23 +575,7 @@ export default function Inventario() {
                 >
                   {zipGenerando ? '⏳ Generando...' : `📦 Exportar ZIP (${proveedoresSeleccionados.size} OC)`}
                 </button>
-              <button
-                className='btn-primary'
-                style={{ background: '#25D366', fontSize: '0.88rem', padding: '8px 18px' }}
-                disabled={proveedoresSeleccionados.size !== 1}
-                title={proveedoresSeleccionados.size !== 1 ? 'Seleccioná exactamente 1 proveedor' : ''}
-                onClick={() => {
-                  const prov = [...proveedoresSeleccionados][0]
-                  const items = (porProveedor[prov] || []).map(i => ({
-                    codigo: i.codigo,
-                    nombre: i.nombre,
-                    cantidad: getCantidad(prov, i.codigo, i._cantComprar)
-                  })).filter(i => i.cantidad > 0)
-                  setModalWhatsApp({ proveedor: prov, items })
-                }}
-              >
-                📱 Enviar por WhatsApp
-              </button>
+
               </div>
 
               {proveedoresList.length === 0 ? (
@@ -623,6 +607,18 @@ export default function Inventario() {
                         <button className="btn-outline" style={{ fontSize: '0.78rem', padding: '5px 10px' }} onClick={() => setExpandProv(p => ({ ...p, [prov]: !p[prov] }))}>📋 {exp ? 'Cerrar' : 'Ver'}</button>
                         <button className="btn-primary" style={{ fontSize: '0.78rem', padding: '5px 10px' }} onClick={() => agregarAOrden(items, prov)}>📥 Agregar a orden</button>
                         <button className="btn-outline" style={{ fontSize: '0.78rem', padding: '5px 10px', color: '#E53E3E', borderColor: '#E53E3E' }} onClick={() => pausarProveedor(prov)}>⏸️ Pausar</button>
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: '0.78rem', padding: '5px 10px', background: '#25D366', border: 'none' }}
+                          onClick={() => {
+                            const ocItems = items.map(i => ({
+                              codigo: i.codigo,
+                              nombre: i.nombre,
+                              cantidad: getCantidad(prov, i.codigo, i._cantComprar)
+                            })).filter(i => i.cantidad > 0)
+                            setModalWhatsApp({ proveedor: prov, items: ocItems })
+                          }}
+                        >📱 WhatsApp</button>
                       </div>
                     </div>
 
