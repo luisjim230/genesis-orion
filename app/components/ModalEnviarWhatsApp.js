@@ -83,11 +83,9 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const uploadRes = await fetch('/api/neo/subir-pdf', { method: 'POST', body: formData })
       const uploadData = await uploadRes.json()
       if (uploadData.url) {
-        const numOC = numeroSolOC ? '\nNo. OC: *' + neoData.numero_sol + '*' : ''
-        waText = '📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *' + (proveedor||'') + '*\nFecha: ' + hoy + numOC + '\n\n📄 Ver PDF: ' + uploadData.url + '\n\n_Enviado desde SOL · Sistema de Operaciones_'
         const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
-
-
+        const numOC = numeroSolOC ? '\nNo. OC: *' + numeroSolOC + '*' : ''
+        waText = '📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *' + (proveedor||'') + '*\nFecha: ' + hoy + numOC + '\n\n📄 Ver PDF: ' + uploadData.url + '\n\n_Enviado desde SOL · Sistema de Operaciones_'
       }
     } catch(e) {
       console.error('PDF upload error:', e)
