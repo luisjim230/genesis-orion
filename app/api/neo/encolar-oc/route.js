@@ -36,7 +36,7 @@ async function buildXlsxBuffer(items) {
 
 export async function POST(request) {
   try {
-    const { proveedor, items, creadoPor } = await request.json()
+    let { proveedor, items, creadoPor } = await request.json()
     if (!proveedor || !items?.length) {
       return Response.json({ error: 'Faltan proveedor o items' }, { status: 400 })
     }
