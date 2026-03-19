@@ -42,7 +42,7 @@ export async function POST(request) {
     }
     const fecha = new Date().toISOString().slice(0, 10)
     const proveedorSafe = proveedor.toUpperCase().replace(/[^A-Z0-9]/g,'_').replace(/_+/g,'_').slice(0,40)
-    const nombreArchivo = 'OC_' + proveedorSafe + '_' + fecha + '.xlsx'
+    const ts = Date.now(); const nombreArchivo = 'OC_' + proveedorSafe + '_' + fecha + '_' + ts + '.xlsx'
     const xlsxBuffer = await buildXlsxBuffer(items)
     const { error: uploadError } = await supabase.storage
       .from('oc-excels')
