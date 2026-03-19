@@ -462,6 +462,28 @@ async def procesar_oc(page, registro):
             pass
 
 async def main():
+    import fcntl
+    lock_path = BASE / "oc-uploader.lock"
+    lock_file = open(lock_path, 'w')
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_file.write(str(os.getpid()))
+        lock_file.flush()
+    except IOError:
+        try:
+            with open(lock_path, 'r') as lf:
+                pid = int(lf.read().strip())
+            os.kill(pid, 0)
+            log.info(f"Ya hay una instancia corriendo (PID {pid}) — saliendo.")
+            return
+        except (ProcessLookupError, ValueError, FileNotFoundError, OSError):
+            log.info("Lock de proceso muerto — limpiando y continuando.")
+            lock_path.unlink(missing_ok=True)
+            lock_file = open(lock_path, 'w')
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_file.write(str(os.getpid()))
+            lock_file.flush()
+
     pendientes = obtener_pendientes()
     if not pendientes:
         log.info("Sin OCs pendientes en la cola.")
