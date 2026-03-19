@@ -210,6 +210,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     KEYWORD_EXCEPTIONS = {
         "CHAOZHOU ZHONGTONG": "ZHONGTONG",
         "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
+        "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
     }
     nombre_upper = nombre_proveedor.upper().strip()
     if nombre_upper in KEYWORD_EXCEPTIONS:
