@@ -808,6 +808,15 @@ export default function Inventario() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                     <input className="module-input" style={{ flex: 1, minWidth: 200 }} placeholder="📝 Nombre de la orden" value={nombreOrden} onChange={e => setNombreOrden(e.target.value)} />
                     <button className="btn-primary" onClick={cerrarOrden}>🔱 Cerrar Orden – Descargar Excel</button>
+                    <button
+                      className="btn-primary"
+                      style={{ background: '#25D366', border: 'none' }}
+                      disabled={ordenItems.length === 0}
+                      onClick={() => setModalWhatsApp({
+                        proveedor: '',
+                        items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad }))
+                      })}
+                    >📱 Enviar por WhatsApp</button>
                     <button className="btn-outline" style={{ color: '#E53E3E', borderColor: '#E53E3E' }} onClick={() => { if (confirm('¿Limpiar la orden?')) setOrdenItems([]); }}>🗑 Limpiar</button>
                   </div>
                 </div>
