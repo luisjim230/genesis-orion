@@ -353,19 +353,21 @@ async def registrar_oc(page):
         await estado_link.click(force=True)
         await page.wait_for_timeout(2000)
 
-        # Seleccionar "Aplicada" y confirmar con JS
+        # Seleccionar "Aplicada" y confirmar haciendo clic en botón "Cambiar"
         try:
             select_estado = page.locator("select").first
             await select_estado.wait_for(state="visible", timeout=5000)
             await select_estado.select_option(label="Aplicada")
-            await page.wait_for_timeout(800)
-            # Confirmar con JS — hHistorial_btnCambiar puede estar disabled
-            await page.evaluate("""() => {
-                const obs = document.getElementById('hHistorial_txtObservacion');
-                if (obs) obs.value = 'Orden automatica';
-                const btn = document.getElementById('hHistorial_btnCambiar');
-                if (btn) { btn.disabled = false; btn.click(); }
-            }""")
+            await page.wait_for_timeout(500)
+            # Llenar observación
+            obs = page.locator("#hHistorial_txtObservacion")
+            if await obs.count() > 0:
+                await obs.fill("Orden automatica SOL")
+            await page.wait_for_timeout(300)
+            # Clic en botón "Cambiar" visible
+            btn_cambiar = page.locator("input[value='Cambiar'], button:has-text('Cambiar')")
+            await btn_cambiar.first.wait_for(state="visible", timeout=5000)
+            await btn_cambiar.first.click(force=True)
             await page.wait_for_load_state("networkidle")
             await page.wait_for_timeout(2000)
             log.info("  ✅ Estado Aplicada OK")
