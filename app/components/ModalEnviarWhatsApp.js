@@ -32,6 +32,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
   const [enviando,setEnviando]=useState(false)
   const [msg,setMsg]=useState(null)
   const [neoOk,setNeoOk]=useState(null)
+  const [numeroSolOC,setNumeroSolOC]=useState(null)
   const preview=fmt(proveedor,items)
 
   useEffect(()=>{
@@ -67,13 +68,14 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const res=await fetch('/api/neo/encolar-oc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proveedor:proveedor||'Sin nombre',items:items.map(i=>({codigo:i.codigo,cantidad:Number(i.cantidad)||0,costo_unitario:Number(i.costo||i.ultimo_costo||i.costo_unitario||0),descuento:Number(i.descuento)||0})),creadoPor:'whatsapp-modal'})})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
+      if(data.numero_sol) setNumeroSolOC(data.numero_sol)
     }catch(e){setNeoOk('error')}
     // Generar PDF, subir a Supabase y enviar link por WhatsApp
     let waText = preview
     try {
-      const doc = await generarPDFOrden({ numeroSol: neoData?.numero_sol, proveedor, items, fecha: new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'}) })
+      const doc = await generarPDFOrden({ numeroSol: numeroSolOC, proveedor, items, fecha: new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'}) })
       const pdfBlob = doc.output('blob')
-      const nombrePDF = `OC_${(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')}_${neoData?.numero_sol||Date.now()}.pdf`
+      const nombrePDF = `OC_${(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')}_${numeroSolOC||Date.now()}.pdf`
       // Subir PDF a Supabase Storage via API route
       const formData = new FormData()
       formData.append('file', new File([pdfBlob], nombrePDF, { type: 'application/pdf' }))
@@ -81,7 +83,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const uploadRes = await fetch('/api/neo/subir-pdf', { method: 'POST', body: formData })
       const uploadData = await uploadRes.json()
       if (uploadData.url) {
-        const numOC = neoData?.numero_sol ? '\nNo. OC: *' + neoData.numero_sol + '*' : ''
+        const numOC = numeroSolOC ? '\nNo. OC: *' + neoData.numero_sol + '*' : ''
         waText = '📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *' + (proveedor||'') + '*\nFecha: ' + hoy + numOC + '\n\n📄 Ver PDF: ' + uploadData.url + '\n\n_Enviado desde SOL · Sistema de Operaciones_'
         const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
 
