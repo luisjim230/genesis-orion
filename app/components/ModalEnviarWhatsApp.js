@@ -69,22 +69,23 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
     }catch(e){setNeoOk('error')}
-    // Generar PDF y compartir por WhatsApp
+    // Generar PDF y abrir WhatsApp
     try {
       const doc = await generarPDFOrden({ numeroSol: neoData?.numero_sol, proveedor, items, fecha: new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'}) })
       const pdfBlob = doc.output('blob')
-      const pdfFile = new File([pdfBlob], `OC_${(proveedor||'orden').replace(/\s+/g,'_')}.pdf`, { type: 'application/pdf' })
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({ files: [pdfFile], title: 'Orden de Compra', text: preview })
+      const nombrePDF = `OC_${(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')}_${neoData?.numero_sol||''}.pdf`
+      // Siempre descargar el PDF
+      const pdfUrl = URL.createObjectURL(pdfBlob)
+      const a = document.createElement('a'); a.href = pdfUrl; a.download = nombrePDF; a.click()
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000)
+      // En móvil intentar share nativo después de descargar
+      const pdfFile = new File([pdfBlob], nombrePDF, { type: 'application/pdf' })
+      if (/Mobi|Android/i.test(navigator.userAgent) && navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+        await navigator.share({ files: [pdfFile], title: 'Orden de Compra - ' + (neoData?.numero_sol||''), text: preview })
       } else {
-        // Fallback: descargar PDF + abrir WhatsApp
-        const url = URL.createObjectURL(pdfBlob)
-        const a = document.createElement('a'); a.href = url; a.download = pdfFile.name; a.click()
-        URL.revokeObjectURL(url)
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
       }
     } catch(e) {
-      // Si falla el PDF, abrir WhatsApp con texto igual que antes
       window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
     }
     if(onEnviado)onEnviado({proveedor,telefono:tel})
