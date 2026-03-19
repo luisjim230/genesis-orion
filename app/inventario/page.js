@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import SyncBadge from '../components/SyncBadge';
-import KronosTab from './KronosTab';
+import KronosTab from './KronosTab'
+import ModalEnviarWhatsApp from '../components/ModalEnviarWhatsApp';
 
 // ── Lógica de alertas ────────────────────────────────────────────────────────
 function calcularAlertas(items, transitoMap, dias) {
@@ -124,7 +125,8 @@ export default function Inventario() {
   const [sortProveedores, setSortProveedores] = useState({});
 
   // ── NUEVO: estado de generación de ZIP ────────────────────────────────────
-  const [zipGenerando, setZipGenerando] = useState(false);
+  const [zipGenerando, setZipGenerando] = useState(false)
+  const [modalWhatsApp, setModalWhatsApp] = useState(null) // { proveedor, items };
 
   // ── Estado filtros tipo Excel ─────────────────────────────────────────────
   const [colSort, setColSort] = useState({ col: '_alerta', dir: 'asc' });
