@@ -655,7 +655,8 @@ export default function Inventario() {
                             const ocItems = items.map(i => ({
                               codigo: i.codigo,
                               nombre: i.nombre,
-                              cantidad: getCantidad(prov, i.codigo, i._cantComprar)
+                              cantidad: getCantidad(prov, i.codigo, i._cantComprar),
+                              costo: parseFloat(i.ultimo_costo || i.costo_unitario || i.precio || 0)
                             })).filter(i => i.cantidad > 0)
                             setModalWhatsApp({ proveedor: prov, items: ocItems })
                           }}
