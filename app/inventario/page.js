@@ -695,7 +695,18 @@ export default function Inventario() {
                                   <td style={{ fontFamily: 'monospace', fontSize: '0.78em', color: 'var(--orange)' }}>{item.codigo}</td>
                                   <td style={{ minWidth: 280 }}>{item.nombre}</td>
                                   <td style={{ textAlign: 'right' }}>{fmtN(item.existencias, 0)}</td>
-                                  <td style={{ textAlign: 'center', color: '#3182CE' }}>{item._transito > 0 ? `🚢 ${item._transito}` : '–'}</td>
+                                  <td style={{ ...S.td, textAlign: 'center' }}>
+                                    {item._transito > 0 ? (
+                                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                                        <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
+                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]) ? (
+                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).color }}>
+                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).label}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    ) : <span style={{ color:'#ccc' }}>{'–'}</span>}
+                                  </td>
                                   <td style={{ textAlign: 'right', color: '#999' }}>{item._cantComprar}</td>
                                   {/* ── NUEVO: input editable para la cantidad ── */}
                                   <td>
@@ -795,7 +806,18 @@ export default function Inventario() {
                           <td style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.78em' }}>{item.ultimo_proveedor || '—'}</td>
                           <td style={{ textAlign: 'right' }}>{fmtN(item.promedio_mensual, 0)}</td>
                           <td style={{ textAlign: 'right', color: parseFloat(item.existencias) <= 0 ? '#E53E3E' : undefined }}>{fmtN(item.existencias, 0)}</td>
-                          <td style={{ textAlign: 'center', color: '#3182CE' }}>{item._transito > 0 ? `🚢 ${item._transito}` : '–'}</td>
+                          <td style={{ ...S.td, textAlign: 'center' }}>
+                                    {item._transito > 0 ? (
+                                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                                        <span style={{ color:'#3182CE', fontWeight:600 }}>{'🚢 ' + item._transito}</span>
+                                        {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]) ? (
+                                          <span style={{ fontSize:'0.72em', fontWeight:700, color: transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).color }}>
+                                            {transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).emoji + ' ' + transitoSemaforo(transitoDiasMap[(item.codigo||'').trim()]).label}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    ) : <span style={{ color:'#ccc' }}>{'–'}</span>}
+                                  </td>
                           <td style={{ textAlign: 'right', fontWeight: item._cantComprar > 0 ? 700 : 400, color: item._cantComprar > 0 ? '#E53E3E' : item._alerta === '🟡 Prestar atención' ? '#D69E2E' : '#ccc' }}>{item._cantComprar > 0 ? item._cantComprar : item._alerta === '🟡 Prestar atención' ? 0 : '–'}</td>
                           <td style={{ textAlign: 'right' }}>{fmtN(item.ultimo_costo)}</td>
                         </tr>
