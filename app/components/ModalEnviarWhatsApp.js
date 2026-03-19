@@ -23,7 +23,6 @@ const S={
 function fmt(proveedor,items){
   const hoy=new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
   const lineas=items.map(i=>`• ${i.nombre||i.codigo} × ${i.cantidad} uds`).join('\n')
-  return `📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *${proveedor||'(seleccionar)'}*\nFecha: ${hoy}\n\n*Productos:*\n${lineas}\n\n_Total: ${items.length} producto(s)_\n_Enviado desde SOL · Sistema de Operaciones_`
 }
 
 export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado}){
@@ -82,15 +81,11 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const uploadRes = await fetch('/api/neo/subir-pdf', { method: 'POST', body: formData })
       const uploadData = await uploadRes.json()
       if (uploadData.url) {
+        const numOC = neoData?.numero_sol ? '\nNo. OC: *' + neoData.numero_sol + '*' : ''
+        waText = '📦 *Orden de Compra - Depósito Jiménez*\nProveedor: *' + (proveedor||'') + '*\nFecha: ' + hoy + numOC + '\n\n📄 Ver PDF: ' + uploadData.url + '\n\n_Enviado desde SOL · Sistema de Operaciones_'
         const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
-        waText = `📦 *Orden de Compra - Depósito Jiménez*
-Proveedor: *${proveedor||''}*
-Fecha: ${hoy}${neoData?.numero_sol ? '
-No. OC: *'+neoData.numero_sol+'*' : ''}
 
-📄 Ver PDF: ${uploadData.url}
 
-_Enviado desde SOL · Sistema de Operaciones_`
       }
     } catch(e) {
       console.error('PDF upload error:', e)
