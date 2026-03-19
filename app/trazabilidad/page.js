@@ -57,12 +57,15 @@ function TabAlertas({ ordenes, items, loading }) {
       const { error } = await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).eq('id', item.id)
       if (!error) {
         setItems(prev => prev.map(i => i.id === item.id ? { ...i, estado_item: 'cancelado' } : i))
-        setConfirmandoCancelar(null)
       } else {
         console.error('Error cancelando:', error)
       }
-    } catch(e) { console.error(e) }
-    setCancelando(false)
+    } catch(e) {
+      console.error(e)
+    } finally {
+      setConfirmandoCancelar(null)
+      setCancelando(false)
+    }
   }
 
   const pendientes = useMemo(() => {
