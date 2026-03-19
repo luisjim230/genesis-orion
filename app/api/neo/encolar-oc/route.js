@@ -70,6 +70,11 @@ export async function POST(request) {
     if (uploadError) {
       return Response.json({ error: 'Error subiendo archivo: ' + uploadError.message }, { status: 500 })
     }
+    // Generar consecutivo SOL
+    const anio = new Date().getFullYear()
+    const { data: consData } = await supabase.rpc('siguiente_numero_sol', { p_anio: anio })
+    const numeroSol = `OC-${anio}-${String(consData).padStart(4, '0')}`
+
     const { error: insertError } = await supabase
       .from('cola_neo_uploads')
       .insert({
@@ -77,12 +82,13 @@ export async function POST(request) {
         storage_path: 'oc-excels/' + nombreArchivo,
         proveedor_nombre: proveedor,
         estado: 'pendiente',
-        creado_por: creadoPor || 'sol'
+        creado_por: creadoPor || 'sol',
+        numero_sol: numeroSol
       })
     if (insertError) {
       return Response.json({ error: 'Error insertando en cola: ' + insertError.message }, { status: 500 })
     }
-    return Response.json({ ok: true, nombre_archivo: nombreArchivo })
+    return Response.json({ ok: true, nombre_archivo: nombreArchivo, numero_sol: numeroSol })
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 })
   }

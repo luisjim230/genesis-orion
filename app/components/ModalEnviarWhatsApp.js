@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { generarPDFOrden } from '../lib/generarPDFOrden'
+import { generarPDFOrden } from '../lib/generarPDFOrden'
 
 const GOLD='#ED6E2E',SURF='#ffffff',BORDER='#EAE0E0',TEXT='#1a1a1a',MUTED='#8a7070'
 const S={
@@ -68,8 +70,24 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
     }catch(e){setNeoOk('error')}
-    const url=`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`
-    window.open(url,'_blank')
+    // Generar PDF y compartir por WhatsApp
+    try {
+      const doc = await generarPDFOrden({ numeroSol: neoData?.numero_sol, proveedor, items, fecha: new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'}) })
+      const pdfBlob = doc.output('blob')
+      const pdfFile = new File([pdfBlob], `OC_${(proveedor||'orden').replace(/\s+/g,'_')}.pdf`, { type: 'application/pdf' })
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({ files: [pdfFile], title: 'Orden de Compra', text: preview })
+      } else {
+        // Fallback: descargar PDF + abrir WhatsApp
+        const url = URL.createObjectURL(pdfBlob)
+        const a = document.createElement('a'); a.href = url; a.download = pdfFile.name; a.click()
+        URL.revokeObjectURL(url)
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
+      }
+    } catch(e) {
+      // Si falla el PDF, abrir WhatsApp con texto igual que antes
+      window.open(`https://wa.me/${tel}?text=${encodeURIComponent(preview)}`, '_blank')
+    }
     if(onEnviado)onEnviado({proveedor,telefono:tel})
     setEnviando(false)
     onClose()
