@@ -203,7 +203,34 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
 
   function mostrarMsg(t, tipo = 'ok') { setMsg({ t, tipo }); setTimeout(() => setMsg(null), 4000) }
 
-  async function eliminarOrden(id) {
+  async function descargarOC(orden, itsOrden) {
+    try {
+      // Construir items en formato NEO (mismo que exportar-excel)
+      const items = itsOrden.map(it => ({
+        codigo: it.codigo || '',
+        cantidad: it.cantidad_ordenada || 0,
+        ultimo_costo: it.costo_unitario || 0,
+        descuento: it.descuento || 0,
+      }))
+      const res = await fetch('/api/exportar-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, proveedor: orden.nombre_lote || 'Orden' }),
+      })
+      if (!res.ok) { mostrarMsg('Error al generar Excel', 'err'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = (orden.nombre_lote || 'OC') + '.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch(e) {
+      mostrarMsg('Error: ' + e.message, 'err')
+    }
+  }
+
+    async function eliminarOrden(id) {
     if (!confirm('¿Eliminar esta orden y todos sus ítems? Esta acción no se puede deshacer.')) return
     await supabase.from('ordenes_compra_items').delete().eq('orden_id', id)
     await supabase.from('ordenes_compra').delete().eq('id', id)
@@ -225,7 +252,13 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
     const nPend = itsOrden.filter(it => it.estado_item === 'pendiente' || it.estado_item === 'parcial').length
     return (
       <div>
-        <button style={{ ...S.btnSm(), marginBottom: 16 }} onClick={() => setDetalle(null)}>← Volver al historial</button>
+        <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center' }}>
+        <button style={S.btnSm()} onClick={() => setDetalle(null)}>← Volver al historial</button>
+        <button
+          style={{ ...S.btn(), fontSize:'0.82em', padding:'7px 16px', background:'#225F74' }}
+          onClick={() => descargarOC(detalle, itsOrden)}
+        >⬇️ Descargar OC Excel (NEO)</button>
+      </div>
         {msg && (
           <div style={{ background: msg.tipo === 'ok' ? '#68d39122' : '#fc818122', border: `1px solid ${msg.tipo === 'ok' ? '#68d391' : '#fc8181'}55`, borderRadius: 8, padding: '9px 14px', marginBottom: 12, color: msg.tipo === 'ok' ? '#68d391' : '#fc8181', fontSize: '0.84em' }}>
             {msg.tipo === 'ok' ? '✅' : '❌'} {msg.t}

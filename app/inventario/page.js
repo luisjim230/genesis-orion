@@ -363,6 +363,10 @@ export default function Inventario() {
         }
       }
 
+      // DEBUG: mostrar cuántos lotes se van a generar
+      console.log('[ZIP] Lotes a generar:', Object.keys(payloadLotes).length, Object.keys(payloadLotes))
+      console.log('[ZIP] Proveedores seleccionados:', [...proveedoresSeleccionados])
+
       const res = await fetch('/api/exportar-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
