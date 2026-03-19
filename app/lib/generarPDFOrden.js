@@ -49,7 +49,7 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   y+=10; doc.text('DIRECCION:',20,y); doc.line(20,y+1.5,W-20,y+1.5)
   // Tabla productos
   y+=12
-  const cols=[{l:'CANTIDAD',w:22,a:'center'},{l:'CODIGO',w:35,a:'center'},{l:'DESCRIPCION',w:73,a:'left'},{l:'PRECIO',w:27,a:'right'},{l:'TOTAL',w:13,a:'right'}]
+  const cols=[{l:'CANTIDAD',w:20,a:'center'},{l:'CODIGO',w:30,a:'center'},{l:'DESCRIPCION',w:55,a:'left'},{l:'PRECIO',w:37,a:'right'},{l:'TOTAL',w:28,a:'right'}]
   const rowH=6; const tableX=20
   doc.setFillColor(...NAVY); doc.rect(tableX,y,W-40,rowH,'F')
   doc.setTextColor(...WHITE);doc.setFontSize(7.5);doc.setFont('helvetica','bold')
