@@ -64,6 +64,12 @@ function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
   const [search, setSearch] = useState('');
   const ref = useRef(null);
   useEffect(() => {
+    fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista => {
+      if(Array.isArray(lista)) setProveedoresKommo(lista);
+    }).catch(()=>{});
+  }, []);
+
+  useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -137,6 +143,9 @@ export default function Inventario() {
   // ── NUEVO: estado de generación de ZIP ────────────────────────────────────
   const [zipGenerando, setZipGenerando] = useState(false)
   const [modalWhatsApp, setModalWhatsApp] = useState(null) // { proveedor, items };
+  const [proveedoresKommo, setProveedoresKommo] = useState([]);
+  const [proveedorOrdenSeleccionado, setProveedorOrdenSeleccionado] = useState('');
+  const [showProvSuggestions, setShowProvSuggestions] = useState(false);
 
   // ── Estado filtros tipo Excel ─────────────────────────────────────────────
   const [colSort, setColSort] = useState({ col: '_alerta', dir: 'asc' });
@@ -861,14 +870,25 @@ export default function Inventario() {
                     </table>
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input className="module-input" style={{ flex: 1, minWidth: 200 }} placeholder="📝 Nombre de la orden" value={nombreOrden} onChange={e => setNombreOrden(e.target.value)} />
+                    <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+                      <input className="module-input" style={{ width: '100%', boxSizing: 'border-box' }} placeholder="📝 Proveedor de la orden (escribí para buscar)" value={nombreOrden} onChange={e => { setNombreOrden(e.target.value); setProveedorOrdenSeleccionado(''); setShowProvSuggestions(true); }} onFocus={() => setShowProvSuggestions(true)} onBlur={() => setTimeout(() => setShowProvSuggestions(false), 180)} autoComplete="off" />
+                      {showProvSuggestions && nombreOrden.length >= 2 && proveedoresKommo.filter(p => p.nombre_proveedor.toLowerCase().includes(nombreOrden.toLowerCase())).length > 0 && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #EAE0E0', borderRadius: 8, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 200, overflowY: 'auto' }}>
+                          {proveedoresKommo.filter(p => p.nombre_proveedor.toLowerCase().includes(nombreOrden.toLowerCase())).map((p, i) => (
+                            <div key={i} onMouseDown={() => { setNombreOrden(p.nombre_proveedor); setProveedorOrdenSeleccionado(p.nombre_proveedor); setShowProvSuggestions(false); }} style={{ padding: '8px 14px', cursor: 'pointer', fontSize: '0.87rem', borderBottom: '1px solid #F5EAEA' }} onMouseEnter={e => e.currentTarget.style.background='#FDF4F4'} onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                              {p.nombre_proveedor}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <button className="btn-primary" onClick={cerrarOrden}>🔱 Cerrar Orden – Descargar Excel</button>
                     <button
                       className="btn-primary"
                       style={{ background: '#25D366', border: 'none' }}
                       disabled={ordenItems.length === 0}
                       onClick={() => setModalWhatsApp({
-                        proveedor: '',
+                        proveedor: proveedorOrdenSeleccionado || nombreOrden,
                         items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad, costo: parseFloat(i.costo)||0 }))
                       })}
                     >📱 Enviar por WhatsApp</button>
