@@ -96,6 +96,16 @@ function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
           <button onClick={() => setOpen(false)} style={{ marginTop: 8, width: '100%', padding: '7px 0', background: 'var(--orange,#f97316)', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Aplicar</button>
         </div>
       )}
+    {modalWhatsApp && (
+      <ModalEnviarWhatsApp
+        proveedor={modalWhatsApp.proveedor}
+        items={modalWhatsApp.items}
+        onClose={() => setModalWhatsApp(null)}
+        onEnviado={({ proveedor, telefono }) => {
+          setModalWhatsApp(null)
+        }}
+      />
+    )}
     </div>
   );
 }
