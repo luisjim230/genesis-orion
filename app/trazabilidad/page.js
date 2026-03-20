@@ -647,11 +647,16 @@ export default function TrazabilidadPage() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: ords }, { data: its }] = await Promise.all([
+    const [{ data: ords }, { data: its }, { data: cola }] = await Promise.all([
       supabase.from('ordenes_compra').select('*').order('fecha_orden', { ascending: false }),
       supabase.from('ordenes_compra_items').select('*').limit(5000),
+      supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null),
     ])
-    setOrdenes(ords || [])
+    // Enriquecer ordenes con pdf_url de cola
+    const colaMap = {}
+    ;(cola||[]).forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
+    const ordsEnriquecidas = (ords||[]).map(o=>({ ...o, pdf_url: colaMap[o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'')] || null }))
+    setOrdenes(ordsEnriquecidas)
     setItems(its || [])
     setLoading(false)
   }
