@@ -57,9 +57,11 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   for(const c of cols){const tx=c.a==='right'?cx+c.w-2:c.a==='center'?cx+c.w/2:cx+2;doc.text(c.l,tx,y+4.2,{align:c.a==='left'?'left':c.a});cx+=c.w}
   y+=rowH
   doc.setFont('helvetica','normal');doc.setFontSize(8)
+  const PAGE_H = 267
   for(let i=0;i<items.length;i++){
     const item=items[i]; const qty=Number(item.cantidad)||0
     const precio=Number(item.costo||item.costo_unitario||item.precio||0); const total=qty*precio
+    if(y + rowH*2 > PAGE_H){ doc.addPage(); y=20; doc.setFillColor(...NAVY); doc.rect(tableX,y,W-40,rowH,"F"); doc.setTextColor(...WHITE);doc.setFontSize(7.5);doc.setFont("helvetica","bold"); cx=tableX; for(const col of cols){const tx=col.a==="right"?cx+col.w-2:col.a==="center"?cx+col.w/2:cx+2;doc.text(col.l,tx,y+4.2,{align:col.a==="left"?"left":col.a});cx+=col.w} y+=rowH; doc.setFont("helvetica","normal");doc.setFontSize(7.5); }
     if(i%2===0){doc.setFillColor(248,248,248);doc.rect(tableX,y,W-40,rowH*2,'F')}
     doc.setTextColor(...BLACK); cx=tableX
     const vals=[{v:qty.toFixed(2),a:'center'},{v:String(item.codigo),a:'center'},{v:item.nombre||String(item.codigo),a:'left'},{v:fmtN(precio),a:'right'},{v:fmtN(total),a:'right'}]
