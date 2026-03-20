@@ -535,7 +535,7 @@ async def main():
         exitosas, fallidas = [], []
         for registro in pendientes:
             oc_id_temp = registro.get("id")
-            supa_patch(f"cola_neo_uploads?id=eq.{oc_id_temp}", {"procesando": True})
+            supa_patch(f"cola_neo_uploads?id=eq.{oc_id_temp}", {"procesando": True, "intentos": (registro.get("intentos") or 0) + 1})
             ok = await procesar_oc(page, registro)
             if ok:
                 exitosas.append(registro.get("nombre_archivo", registro["id"]))
