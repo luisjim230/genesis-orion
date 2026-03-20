@@ -20,11 +20,6 @@ const S={
   neoStatus:{marginTop:12,padding:'8px 12px',borderRadius:8,fontSize:'0.8rem',display:'flex',alignItems:'center',gap:6}
 }
 
-function fmt(proveedor,items){
-  const hoy=new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
-  const lineas=items.map(i=>`• ${i.nombre||i.codigo} × ${i.cantidad} uds`).join('\n')
-}
-
 export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado}){
   const [telefono,setTelefono]=useState('')
   const [guardado,setGuardado]=useState(null)
@@ -33,7 +28,6 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
   const [msg,setMsg]=useState(null)
   const [neoOk,setNeoOk]=useState(null)
   const [numeroSolOC,setNumeroSolOC]=useState(null)
-  const preview=fmt(proveedor,items)
 
   useEffect(()=>{
     fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista=>{
@@ -45,64 +39,54 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
 
   async function enviar(){
     const tel=telefono.trim().replace(/\D/g,'')
-    if(!tel||tel.length<8){setMsg('Ingresá un número válido. Ej: 50688887777');return}
-    setEnviando(true)
-    setMsg(null)
-    setNeoOk(null)
+    if(!tel||tel.length<8){setMsg('Ingresa un numero valido. Ej: 50688887777');return}
+    setEnviando(true); setMsg(null); setNeoOk(null)
     if(tel!==guardado){
       try{await fetch('/api/kommo/proveedores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre_proveedor:proveedor||'Sin nombre',whatsapp:tel})})}catch(e){}
     }
-    // Guardar orden en historial de SOL (ordenes_compra + ordenes_compra_items)
     try{
       const fecha=new Date().toISOString().slice(0,10)
-      const nombreLote='OC ' + (proveedor||'Sin nombre') + ' ' + fecha
-      await fetch('/api/guardar-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo||i.costo_unitario||i.precio||0,descuento:i.descuento||0})),
-        nombreLote:nombreLote,
-        diasTribucion:0
-      })})
+      const nombreLote='OC '+(proveedor||'Sin nombre')+' '+fecha
+      await fetch('/api/guardar-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo||i.costo_unitario||i.precio||0,descuento:i.descuento||0})),nombreLote,diasTribucion:0})})
     }catch(e){console.error('guardar-orden error:',e)}
 
-    // Encolar en NEO
     let neoNumeroSol = null
     let neoLotes = []
     try{
       const res=await fetch('/api/neo/encolar-oc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proveedor:proveedor||'Sin nombre',items:items.map(i=>({codigo:i.codigo,cantidad:Number(i.cantidad)||0,costo_unitario:Number(i.costo||i.ultimo_costo||i.costo_unitario||0),descuento:Number(i.descuento)||0})),creadoPor:'whatsapp-modal'})})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
-      if(data.numero_sol){ setNumeroSolOC(data.numero_sol); neoNumeroSol=data.numero_sol; }
+      if(data.numero_sol){setNumeroSolOC(data.numero_sol);neoNumeroSol=data.numero_sol}
       if(data.lotes) neoLotes=data.lotes
     }catch(e){setNeoOk('error')}
-    // Generar PDF por lote, subir y armar mensaje WhatsApp
-    let waText = preview
-    try {
-      const hoy = new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
-      const lotes = neoLotes.length > 0 ? neoLotes : [{ numero_sol: neoNumeroSol, items }]
-      const pdfLinks = []
-      for (let idx=0; idx<lotes.length; idx++) {
-        const lote = lotes[idx]
-        const numSol = lote.numero_sol || neoNumeroSol
-        const doc = await generarPDFOrden({ numeroSol: numSol, proveedor, items: lote.items || items, fecha: hoy })
-        const pdfBlob = doc.output('blob')
-        const nombrePDF = 'OC_' + (proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_') + '_' + (numSol||Date.now()) + '.pdf'
-        const formData = new FormData()
-        formData.append('file', new File([pdfBlob], nombrePDF, { type: 'application/pdf' }))
-        formData.append('nombre', nombrePDF)
-        const uploadRes = await fetch('/api/neo/subir-pdf', { method: 'POST', body: formData })
-        const uploadData = await uploadRes.json()
-        if (uploadData.url) pdfLinks.push({ url: uploadData.url, numSol })
+
+    const hoy=new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
+    let waText = 'Orden de Compra - Deposito Jimenez | '+proveedor+' | '+hoy
+    try{
+      const lotes=neoLotes.length>0?neoLotes:[{numero_sol:neoNumeroSol,items}]
+      const pdfLinks=[]
+      for(let idx=0;idx<lotes.length;idx++){
+        const lote=lotes[idx]
+        const numSol=lote.numero_sol||neoNumeroSol
+        const doc=await generarPDFOrden({numeroSol:numSol,proveedor,items:lote.items||items,fecha:hoy})
+        const blob=doc.output('blob')
+        const nombre='OC_'+(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(numSol||Date.now())+'.pdf'
+        const fd=new FormData()
+        fd.append('file',new File([blob],nombre,{type:'application/pdf'}))
+        fd.append('nombre',nombre)
+        const up=await fetch('/api/neo/subir-pdf',{method:'POST',body:fd})
+        const upd=await up.json()
+        if(upd.url) pdfLinks.push({url:upd.url,numSol})
       }
-      if (pdfLinks.length > 0) {
-        const totalLotes = pdfLinks.length
-        const sep = String.fromCharCode(10)
-        const linksText = pdfLinks.map((l,idx2) => totalLotes > 1 ? ('Parte ' + (idx2+1) + '/' + totalLotes + ' (' + (l.numSol||'') + '): ' + l.url) : l.url).join(sep)
-        const nl = String.fromCharCode(10)
-        waText = 'Orden de Compra - Deposito Jimenez' + nl + nl + 'Estimado proveedor:' + nl + '*' + (proveedor||'') + '*' + nl + nl + 'Por favor revisar la orden:' + nl + linksText + nl + nl + 'Fecha: ' + hoy2 + nl + nl + 'Por favor confirmar recibido' + nl + nl + 'Enviado desde SOL - Sistema de Operaciones y Logistica'
+      if(pdfLinks.length>0){
+        const nl='\n'
+        const total=pdfLinks.length
+        const links=pdfLinks.map((l,i)=>total>1?('Parte '+(i+1)+'/'+total+(l.numSol?' ('+l.numSol+')':'')+': '+l.url):l.url).join(nl)
+        waText='Orden de Compra - Deposito Jimenez'+nl+nl+'Estimado proveedor:'+nl+'*'+(proveedor||'')+'*'+nl+nl+'Por favor revisar la orden de compra:'+nl+links+nl+nl+'Fecha: '+hoy+nl+nl+'Por favor confirmar recibido'+nl+nl+'Enviado desde SOL - Sistema de Operaciones y Logistica'
       }
-    } catch(e) {
-      console.error('PDF upload error:', e)
-    }
-    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(waText)}`, '_blank')
+    }catch(e){console.error('PDF error:',e)}
+
+    window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(waText),'_blank')
     if(onEnviado)onEnviado({proveedor,telefono:tel})
     setEnviando(false)
     onClose()
@@ -111,24 +95,22 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
   return(
     <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={S.modal}>
-        <div style={S.title}>📱 Enviar Orden de Compra por WhatsApp</div>
-        <div style={S.sub}>{proveedor?<>Proveedor: <strong style={{color:GOLD}}>{proveedor}</strong> &nbsp;·&nbsp; </>:''}{items.length} producto(s)</div>
+        <div style={S.title}>Enviar Orden de Compra por WhatsApp</div>
+        <div style={S.sub}>{proveedor?<>Proveedor: <strong style={{color:GOLD}}>{proveedor}</strong> &nbsp;&middot;&nbsp; </>:''}{items.length} producto(s)</div>
         <label style={S.label}>Productos incluidos</label>
-        <div style={S.itemList}>{items.map((i,idx)=><div key={idx} style={{padding:'2px 0',borderBottom:idx<items.length-1?`1px solid ${BORDER}`:'none'}}>{i.nombre||i.codigo} <span style={{color:GOLD,fontWeight:600}}>× {i.cantidad}</span></div>)}</div>
+        <div style={S.itemList}>{items.map((i,idx)=><div key={idx} style={{padding:'2px 0',borderBottom:idx<items.length-1?`1px solid ${BORDER}`:'none'}}>{i.nombre||i.codigo} <span style={{color:GOLD,fontWeight:600}}>&times; {i.cantidad}</span></div>)}</div>
         <div style={{marginTop:16}}>
-          <label style={S.label}>Número WhatsApp del proveedor {guardado&&<span style={{background:'#25D36622',color:'#25D366',border:'1px solid #25D36644',borderRadius:20,padding:'2px 8px',fontSize:'0.7rem',fontWeight:600,marginLeft:8}}>💾 Guardado</span>}</label>
-          <input style={S.input} type="tel" placeholder="50688887777 (código país + número)" value={cargando?'Cargando...':telefono} onChange={e=>setTelefono(e.target.value)} disabled={cargando||enviando} autoFocus/>
-          <div style={S.hint}>{cargando?'':!guardado?'Se guardará automáticamente al abrir WhatsApp.':telefono!==guardado?'⚠️ Número diferente al guardado — se actualizará.':'✅ Número cargado desde tu base de datos.'}</div>
+          <label style={S.label}>Numero WhatsApp del proveedor {guardado&&<span style={{background:'#25D36622',color:'#25D366',border:'1px solid #25D36644',borderRadius:20,padding:'2px 8px',fontSize:'0.7rem',fontWeight:600,marginLeft:8}}>Guardado</span>}</label>
+          <input style={S.input} type="tel" placeholder="50688887777 (codigo pais + numero)" value={cargando?'Cargando...':telefono} onChange={e=>setTelefono(e.target.value)} disabled={cargando||enviando} autoFocus/>
+          <div style={S.hint}>{cargando?'':!guardado?'Se guardara automaticamente al abrir WhatsApp.':telefono!==guardado?'Numero diferente al guardado - se actualizara.':'Numero cargado desde tu base de datos.'}</div>
         </div>
         <div style={{...S.neoStatus,background:neoOk==='ok'?'#f0fff4':neoOk==='error'?'#fff5f5':'#FDF4F4',border:neoOk==='ok'?'1px solid #9AE6B4':neoOk==='error'?'1px solid #FEB2B2':'1px solid #EAE0E0',color:neoOk==='ok'?'#276749':neoOk==='error'?'#C53030':MUTED}}>
-          {enviando?<>⏳ Encolando en NEO...</>:neoOk==='ok'?<>✅ OC encolada — se subirá a NEO automáticamente</>:neoOk==='error'?<>⚠️ No se pudo encolar en NEO (WhatsApp enviado igual)</>:<>🤖 Al enviar, la OC se subirá automáticamente a NEO</>}
+          {enviando?<>Encolando en NEO...</>:neoOk==='ok'?<>OC encolada - se subira a NEO automaticamente</>:neoOk==='error'?<>No se pudo encolar en NEO</>:<>Al enviar, la OC se subira automaticamente a NEO</>}
         </div>
-        <label style={{...S.label,marginTop:16}}>Vista previa del mensaje</label>
-        <div style={S.preview}>{preview}</div>
         {msg&&<div style={{marginTop:12,padding:'8px 12px',borderRadius:8,fontSize:'0.83rem',background:'#fff5f5',color:'#C53030',border:'1px solid #FEB2B2'}}>{msg}</div>}
         <div style={S.btnRow}>
           <button style={S.btnSecondary} onClick={onClose} disabled={enviando}>Cancelar</button>
-          <button style={enviando?S.btnPrimaryDisabled:S.btnPrimary} onClick={enviar} disabled={enviando||cargando}>{enviando?'⏳ Enviando...':'📱 Abrir WhatsApp'}</button>
+          <button style={enviando?S.btnPrimaryDisabled:S.btnPrimary} onClick={enviar} disabled={enviando||cargando}>{enviando?'Enviando...':'Abrir WhatsApp'}</button>
         </div>
       </div>
     </div>
