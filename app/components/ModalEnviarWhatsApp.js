@@ -94,10 +94,10 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       }
       if (pdfLinks.length > 0) {
         const totalLotes = pdfLinks.length
-        const sep = '\n'
+        const sep = String.fromCharCode(10)
         const linksText = pdfLinks.map((l,idx2) => totalLotes > 1 ? ('Parte ' + (idx2+1) + '/' + totalLotes + ' (' + (l.numSol||'') + '): ' + l.url) : l.url).join(sep)
 ')
-        const nl = '\n'
+        const nl = String.fromCharCode(10)
         waText = 'Orden de Compra - Deposito Jimenez' + nl + nl + 'Estimado proveedor:' + nl + '*' + (proveedor||'') + '*' + nl + nl + 'Por favor revisar la orden:' + nl + linksText + nl + nl + 'Fecha: ' + hoy2 + nl + nl + 'Por favor confirmar recibido' + nl + nl + 'Enviado desde SOL - Sistema de Operaciones y Logistica'
       }
     } catch(e) {
