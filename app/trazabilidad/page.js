@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import ModalEnviarWhatsApp from '../../components/ModalEnviarWhatsApp'
 import SyncBadge from '../components/SyncBadge';
 
 const GOLD   = 'var(--orange)'
