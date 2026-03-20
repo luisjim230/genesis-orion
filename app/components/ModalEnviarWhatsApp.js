@@ -52,7 +52,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
 
     let neoNumeroSol = null
     let neoLotes = []
-    try{
+    if(!soloReenvio) try{
       const res=await fetch('/api/neo/encolar-oc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proveedor:proveedor||'Sin nombre',items:items.map(i=>({codigo:i.codigo,cantidad:Number(i.cantidad)||0,costo_unitario:Number(i.costo||i.ultimo_costo||i.costo_unitario||0),descuento:Number(i.descuento)||0})),creadoPor:'whatsapp-modal'})})
       const data=await res.json()
       setNeoOk(data.ok?'ok':'error')
