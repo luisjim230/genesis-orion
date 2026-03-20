@@ -69,7 +69,12 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       for(let idx=0;idx<lotes.length;idx++){
         const lote=lotes[idx]
         const numSol=lote.numero_sol||neoNumeroSol
-        const doc=await generarPDFOrden({numeroSol:numSol,proveedor,items:lote.items||items,fecha:hoy})
+        // Enriquecer items del lote con nombres del array original
+        const itemsConNombre=(lote.items||items).map(li=>{
+          const orig=items.find(x=>String(x.codigo)===String(li.codigo))
+          return {...li, nombre: li.nombre || (orig&&orig.nombre) || String(li.codigo)}
+        })
+        const doc=await generarPDFOrden({numeroSol:numSol,proveedor,items:itemsConNombre,fecha:hoy})
         const blob=doc.output('blob')
         const nombre='OC_'+(proveedor||'orden').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(numSol||Date.now())+'.pdf'
         const fd=new FormData()
