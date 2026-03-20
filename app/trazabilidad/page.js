@@ -262,7 +262,6 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
     const nPend = itsOrden.filter(it => it.estado_item === 'pendiente' || it.estado_item === 'parcial').length
     return (
       <div>
-        {modalWA && <ModalEnviarWhatsApp proveedor={modalWA.proveedor} items={modalWA.items} onClose={() => setModalWA(null)} onEnviado={() => setModalWA(null)} />}
         <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center' }}>
         <button style={S.btnSm()} onClick={() => setDetalle(null)}>← Volver al historial</button>
         <button
