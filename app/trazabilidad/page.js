@@ -207,6 +207,7 @@ function TabAlertas({ ordenes, items, loading }) {
 function TabHistorial({ ordenes, items, loading, recargar }) {
   const [detalle, setDetalle] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [modalWA, setModalWA] = useState(null)
   const [busq, setBusq] = useState('')
 
   function mostrarMsg(t, tipo = 'ok') { setMsg({ t, tipo }); setTimeout(() => setMsg(null), 4000) }
@@ -260,6 +261,7 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
     const nPend = itsOrden.filter(it => it.estado_item === 'pendiente' || it.estado_item === 'parcial').length
     return (
       <div>
+        {modalWA && <ModalEnviarWhatsApp proveedor={modalWA.proveedor} items={modalWA.items} onClose={() => setModalWA(null)} onEnviado={() => setModalWA(null)} />}
         <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center' }}>
         <button style={S.btnSm()} onClick={() => setDetalle(null)}>← Volver al historial</button>
         <button
@@ -355,7 +357,12 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                     <td style={{ ...S.td, textAlign: 'right' }}>{o.total_productos || its.length}</td>
                     <td style={{ ...S.td, textAlign: 'right' }}>{o.dias_tribucion || '—'}</td>
                     <td style={S.td}><span style={S.badge(nPend > 0 ? '#f6ad55' : '#68d391')}>{nPend > 0 ? `${nPend} pend.` : '✅ Completa'}</span></td>
-                    <td style={S.td}><button style={S.btnSm()} onClick={e => { e.stopPropagation(); setDetalle(o) }}>🔍 Ver detalle</button></td>
+                    <td style={S.td}>
+                      <div style={{display:'flex',gap:6}}>
+                        <button style={S.btnSm()} onClick={e => { e.stopPropagation(); setDetalle(o) }}>🔍 Ver detalle</button>
+                        <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={e => { e.stopPropagation(); setModalWA({proveedor: (its[0]?.proveedor || o.nombre_lote || ''), items: its.map(it=>({codigo:it.codigo, nombre:it.nombre, cantidad:it.cantidad_ordenada, costo:it.costo_unitario||0}))}) }}>📱</button>
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
