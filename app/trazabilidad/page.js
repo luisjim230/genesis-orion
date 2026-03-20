@@ -361,7 +361,12 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                     <td style={S.td}>
                       <div style={{display:'flex',gap:6}}>
                         <button style={S.btnSm()} onClick={e => { e.stopPropagation(); setDetalle(o) }}>🔍 Ver detalle</button>
-                        <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={e => { e.stopPropagation(); setModalWA({proveedor: (its[0]?.proveedor || o.nombre_lote || ''), items: its.map(it=>({codigo:it.codigo, nombre:it.nombre, cantidad:it.cantidad_ordenada, costo:it.costo_unitario||0}))}) }}>📱</button>
+                        <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={e => {
+                          e.stopPropagation()
+                          const itsActuales = items.filter(it => it.orden_id === o.id)
+                          const provNombre = itsActuales[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
+                          setModalWA({proveedor: provNombre, items: itsActuales.map(it=>({codigo:it.codigo, nombre:it.nombre, cantidad:it.cantidad_ordenada, costo:it.costo_unitario||0}))})
+                        }}>📱</button>
                       </div>
                     </td>
                   </tr>
