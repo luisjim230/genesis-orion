@@ -366,7 +366,7 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                           const { data: itsWA } = await supabase.from('ordenes_compra_items').select('*').eq('orden_id', o.id)
                           const its2 = itsWA || []
                           const provNombre = its2[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
-                          setModalWA({proveedor: provNombre, items: its2.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
+                          setModalWA({proveedor: provNombre, soloReenvio: true, items: its2.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
                         }}>📱</button>
                       </div>
                     </td>

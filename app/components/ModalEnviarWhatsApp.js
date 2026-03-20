@@ -20,7 +20,7 @@ const S={
   neoStatus:{marginTop:12,padding:'8px 12px',borderRadius:8,fontSize:'0.8rem',display:'flex',alignItems:'center',gap:6}
 }
 
-export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado}){
+export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,soloReenvio=false}){
   const [telefono,setTelefono]=useState('')
   const [guardado,setGuardado]=useState(null)
   const [cargando,setCargando]=useState(true)
