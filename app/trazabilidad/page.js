@@ -365,7 +365,7 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                           e.stopPropagation()
                           const itsActuales = items.filter(it => it.orden_id === o.id)
                           const provNombre = itsActuales[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
-                          setModalWA({proveedor: provNombre, items: itsActuales.map(it=>({codigo:it.codigo, nombre:it.nombre, cantidad:it.cantidad_ordenada, costo:it.costo_unitario||0}))})
+                          setModalWA({proveedor: provNombre, items: itsActuales.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
                         }}>📱</button>
                       </div>
                     </td>
