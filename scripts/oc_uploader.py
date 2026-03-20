@@ -69,7 +69,7 @@ def supa_patch(path, data):
 
 def obtener_pendientes():
     """Trae OCs pendientes de la cola."""
-    registros = supa_get("cola_neo_uploads?estado=eq.pendiente&order=created_at.asc")
+    registros = supa_get("cola_neo_uploads?estado=eq.pendiente&procesando=eq.false&order=created_at.asc")
     return registros if isinstance(registros, list) else []
 
 def marcar_procesado(id_registro, exitoso, detalle=""):
@@ -534,6 +534,8 @@ async def main():
 
         exitosas, fallidas = [], []
         for registro in pendientes:
+            oc_id_temp = registro.get("id")
+            supa_patch(f"cola_neo_uploads?id=eq.{oc_id_temp}", {"procesando": True})
             ok = await procesar_oc(page, registro)
             if ok:
                 exitosas.append(registro.get("nombre_archivo", registro["id"]))
