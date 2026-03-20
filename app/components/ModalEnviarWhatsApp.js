@@ -82,7 +82,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
         fd.append('nombre',nombre)
         const up=await fetch('/api/neo/subir-pdf',{method:'POST',body:fd})
         const upd=await up.json()
-        if(upd.url) pdfLinks.push({url:upd.url,numSol})
+        if(upd.url){ pdfLinks.push({url:upd.url,numSol}); if(numSol) try{await fetch('/api/neo/save-pdf-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero_sol:numSol,pdf_url:upd.url})})}catch(e){} }
       }
       if(pdfLinks.length>0){
         const nl='\n'
