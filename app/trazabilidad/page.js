@@ -634,7 +634,7 @@ export default function TrazabilidadPage() {
     setLoading(true)
     const [{ data: ords }, { data: its }] = await Promise.all([
       supabase.from('ordenes_compra').select('*').order('fecha_orden', { ascending: false }),
-      supabase.from('ordenes_compra_items').select('*'),
+      supabase.from('ordenes_compra_items').select('*').limit(5000),
     ])
     setOrdenes(ords || [])
     setItems(its || [])
