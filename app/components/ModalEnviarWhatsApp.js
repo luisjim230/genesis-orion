@@ -61,7 +61,8 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
     }catch(e){setNeoOk('error')}
 
     const hoy=new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
-    let waText = 'Orden de Compra - Deposito Jimenez | '+proveedor+' | '+hoy
+    const provNombre = proveedor || 'Proveedor'
+    let waText = 'Orden de Compra - Deposito Jimenez | '+provNombre+' | '+hoy
     try{
       const lotes=neoLotes.length>0?neoLotes:[{numero_sol:neoNumeroSol,items}]
       const pdfLinks=[]
@@ -82,7 +83,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
         const nl='\n'
         const total=pdfLinks.length
         const links=pdfLinks.map((l,i)=>total>1?('Parte '+(i+1)+'/'+total+(l.numSol?' ('+l.numSol+')':'')+': '+l.url):l.url).join(nl)
-        waText='Orden de Compra - Deposito Jimenez'+nl+nl+'Estimado proveedor:'+nl+'*'+(proveedor||'')+'*'+nl+nl+'Por favor revisar la orden de compra:'+nl+links+nl+nl+'Fecha: '+hoy+nl+nl+'Por favor confirmar recibido'+nl+nl+'Enviado desde SOL - Sistema de Operaciones y Logistica'
+        waText='Orden de Compra - Deposito Jimenez'+nl+nl+'Estimado proveedor:'+nl+'*'+provNombre+'*'+nl+nl+'Por favor revisar la orden de compra:'+nl+links+nl+nl+'Fecha: '+hoy+nl+nl+'Por favor confirmar recibido'+nl+nl+'Enviado desde SOL - Sistema de Operaciones y Logistica'
       }
     }catch(e){console.error('PDF error:',e)}
 
