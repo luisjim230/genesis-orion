@@ -306,9 +306,16 @@ function TabCalculadora({ datosCargados, onDatosCargadosUsados }) {
         precio_venta_USD:       parseFloat(r.precio_venta_USD.toFixed(4)),
         precio_venta_CRC:       parseFloat(r.precio_venta_CRC.toFixed(2)),
       })),
-    });
+    };
+    let error;
+    if (editandoId) {
+      ({ error } = await supabase.from('halley_historial').update(payload).eq('id', editandoId));
+    } else {
+      ({ error } = await supabase.from('halley_historial').insert(payload));
+    }
     setGuardando(false);
     if (error) setMsg({ tipo:'error', txt:`❌ Error: ${error.message}` });
+    else if (editandoId) { setMsg({ tipo:'success', txt:'✅ Importación actualizada.' }); setEditandoId(null); }
     else setMsg({ tipo:'success', txt:'✅ Importación inscrita en el historial para la eternidad.' });
   };
 
