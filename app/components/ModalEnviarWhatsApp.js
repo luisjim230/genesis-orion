@@ -97,21 +97,8 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
         const sep = '\n'
         const linksText = pdfLinks.map((l,idx2) => totalLotes > 1 ? ('Parte ' + (idx2+1) + '/' + totalLotes + ' (' + (l.numSol||'') + '): ' + l.url) : l.url).join(sep)
 ')
-        waText = '📦 *Orden de Compra - Depósito Jiménez*
-
-Buenas estimado proveedor:
-*' + (proveedor||'') + '*
-
-Por favor enviar la orden de compra que encontrará en el siguiente enlace
-👇🏻
-' + linksText + '
-
-Fecha: ' + hoy + '
-
-🚨 *Por favor confirmar el recibido* 🚨
-
-_Enviado desde SOL ☀️_
-_Sistema de Operaciones y Logística_'
+        const nl = '\n'
+        waText = 'Orden de Compra - Deposito Jimenez' + nl + nl + 'Estimado proveedor:' + nl + '*' + (proveedor||'') + '*' + nl + nl + 'Por favor revisar la orden:' + nl + linksText + nl + nl + 'Fecha: ' + hoy2 + nl + nl + 'Por favor confirmar recibido' + nl + nl + 'Enviado desde SOL - Sistema de Operaciones y Logistica'
       }
     } catch(e) {
       console.error('PDF upload error:', e)
