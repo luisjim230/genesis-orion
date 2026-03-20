@@ -69,7 +69,7 @@ def supa_patch(path, data):
 
 def obtener_pendientes():
     """Trae OCs pendientes de la cola."""
-    registros = supa_get("cola_neo_uploads?estado=eq.pendiente&procesando=eq.false&order=created_at.asc")
+    registros = supa_get("cola_neo_uploads?estado=in.(pendiente,error)&procesando=eq.false&intentos=lt.3&order=created_at.asc")
     return registros if isinstance(registros, list) else []
 
 def marcar_procesado(id_registro, exitoso, detalle=""):
