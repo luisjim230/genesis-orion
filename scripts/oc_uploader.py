@@ -294,8 +294,21 @@ async def cargar_excel_oc(page, excel_path):
     await page.wait_for_timeout(1000)
     return True
 
-async def registrar_oc(page):
+async def registrar_oc(page, numero_sol=None):
     """Hace clic en Registrar, confirma el modal de NEO, y verifica resultado."""
+    # Llenar Observaciones con el consecutivo SOL antes de registrar
+    if numero_sol:
+        obs_text = f"Consecutivo {numero_sol} orden generada por SOL"
+        for sel in ["#txtObservaciones", "#txtObservacion", "textarea[id*='bservac']", "input[id*='bservac']"]:
+            try:
+                obs = page.locator(sel)
+                if await obs.count() > 0:
+                    await obs.first.fill(obs_text)
+                    log.info(f"  Observaciones: {obs_text}")
+                    break
+            except Exception:
+                pass
+
     registrar = page.locator("input[value='Registrar'], button:has-text('Registrar')")
     await registrar.first.wait_for(state="visible", timeout=8000)
     await registrar.first.click(force=True)
@@ -439,7 +452,7 @@ async def procesar_oc(page, registro):
 
     # 5. Registrar OC
     try:
-        ok, detalle = await registrar_oc(page)
+        ok, detalle = await registrar_oc(page, numero_sol=registro.get('numero_sol'))
         marcar_procesado(oc_id, ok, detalle)
         if ok:
             log.info(f"✅ OC #{oc_id} procesada correctamente")
