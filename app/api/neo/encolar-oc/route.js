@@ -70,25 +70,55 @@ export async function POST(request) {
     if (uploadError) {
       return Response.json({ error: 'Error subiendo archivo: ' + uploadError.message }, { status: 500 })
     }
-    // Generar consecutivo SOL
-    const anio = new Date().getFullYear()
-    const { data: consData } = await supabase.rpc('siguiente_numero_sol', { p_anio: anio })
-    const numeroSol = `OC-${anio}-${String(consData).padStart(4, '0')}`
+    // Dividir items en lotes de max 20
+    const LOTE = 20
+    const lotes = []
+    for (let i = 0; i < items.length; i += LOTE) {
+      lotes.push(items.slice(i, i + LOTE))
+    }
 
-    const { error: insertError } = await supabase
-      .from('cola_neo_uploads')
-      .insert({
-        nombre_archivo: nombreArchivo,
-        storage_path: 'oc-excels/' + nombreArchivo,
+    const anio = new Date().getFullYear()
+    const resultados = []
+
+    for (let idx = 0; idx < lotes.length; idx++) {
+      const lote = lotes[idx]
+      const sufijo = lotes.length > 1 ? `_parte${idx+1}de${lotes.length}` : ''
+      const nombreLote = 'OC_' + proveedorSafe + '_' + fecha + '_' + ts + sufijo + '.xlsx'
+      const xlsxLote = await buildXlsxBuffer(lote)
+
+      const { error: uploadErr } = await supabase.storage
+        .from('oc-excels')
+        .upload(nombreLote, xlsxLote, {
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          upsert: true
+        })
+      if (uploadErr) continue
+
+      const { data: consData } = await supabase.rpc('siguiente_numero_sol', { p_anio: anio })
+      const numeroSol = `OC-${anio}-${String(consData).padStart(4, '0')}`
+
+      await supabase.from('cola_neo_uploads').insert({
+        nombre_archivo: nombreLote,
+        storage_path: 'oc-excels/' + nombreLote,
         proveedor_nombre: proveedor,
         estado: 'pendiente',
         creado_por: creadoPor || 'sol',
         numero_sol: numeroSol
       })
-    if (insertError) {
-      return Response.json({ error: 'Error insertando en cola: ' + insertError.message }, { status: 500 })
+
+      resultados.push({ numero_sol: numeroSol, items: lote, nombre_archivo: nombreLote })
     }
-    return Response.json({ ok: true, nombre_archivo: nombreArchivo, numero_sol: numeroSol })
+
+    if (resultados.length === 0) {
+      return Response.json({ error: 'Error generando lotes' }, { status: 500 })
+    }
+
+    return Response.json({
+      ok: true,
+      lotes: resultados,
+      numero_sol: resultados[0].numero_sol,
+      nombre_archivo: resultados[0].nombre_archivo
+    })
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 })
   }
