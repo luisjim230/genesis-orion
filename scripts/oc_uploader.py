@@ -356,11 +356,28 @@ async def registrar_oc(page, numero_sol=None):
                 estado_link = fila_oc.first.locator("a:has-text('Registrada')")
                 log.info(f"  Encontrada fila OC #{numero_oc}")
             except Exception:
-                log.warning(f"  No encontré fila con #{numero_oc}, usando primera Registrada")
-                estado_link = page.locator("a:has-text('Registrada')").first
+                log.warning(f"  No encontré fila con #{numero_oc}, buscando por proveedor...")
+                # Buscar por proveedor como fallback
+                try:
+                    kw = proveedor.split()[0] if proveedor else ""
+                    fila_prov = page.locator(f"tr:has-text('{kw}'):has(a:has-text('Registrada'))")
+                    await fila_prov.first.wait_for(state="visible", timeout=5000)
+                    estado_link = fila_prov.first.locator("a:has-text('Registrada')")
+                    log.info(f"  Encontrada por proveedor: {kw}")
+                except Exception:
+                    log.warning(f"  No encontré por proveedor, usando primera Registrada")
+                    estado_link = page.locator("a:has-text('Registrada')").first
         else:
-            log.info("  Sin numero_oc — usando primera Registrada en listado")
-            estado_link = page.locator("a:has-text('Registrada')").first
+            log.info("  Sin numero_oc — buscando por proveedor...")
+            try:
+                kw = proveedor.split()[0] if proveedor else ""
+                fila_prov = page.locator(f"tr:has-text('{kw}'):has(a:has-text('Registrada'))")
+                await fila_prov.first.wait_for(state="visible", timeout=5000)
+                estado_link = fila_prov.first.locator("a:has-text('Registrada')")
+                log.info(f"  Encontrada por proveedor: {kw}")
+            except Exception:
+                log.warning(f"  Fallback: usando primera Registrada en listado")
+                estado_link = page.locator("a:has-text('Registrada')").first
 
         await estado_link.wait_for(state="visible", timeout=20000)
         await estado_link.click(force=True)
