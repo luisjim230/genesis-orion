@@ -361,6 +361,7 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                     <td style={S.td}>
                       <div style={{display:'flex',gap:6}}>
                         <button style={S.btnSm()} onClick={e => { e.stopPropagation(); setDetalle(o) }}>🔍 Ver detalle</button>
+                        {o.pdf_url && <a href={o.pdf_url} target="_blank" rel="noreferrer" style={{...S.btnSm(), background:'#225F74', color:'#fff', textDecoration:'none', padding:'5px 10px', borderRadius:6, fontSize:'0.78rem'}}>📄 PDF</a>}
                         <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={async e => {
                           e.stopPropagation()
                           const { data: itsWA } = await supabase.from('ordenes_compra_items').select('*').eq('orden_id', o.id)
