@@ -16,6 +16,7 @@ const S = {
   btnPrimary:{ background:'var(--orange)', color:'#fff', border:'none', borderRadius:'8px', padding:'10px 24px', fontWeight:700, cursor:'pointer', fontSize:'0.95rem' },
   btnGhost:  { background:'var(--cream)', color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
   btnDanger: { background:'#3a1a1a', color:'#f87171', border:'1px solid #5a2020', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.88rem' },
+  btnEdit:   { background:'#1a2a3a', color:'#60a5fa', border:'1px solid #2a4a6a', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', fontSize:'0.82rem', fontWeight:600 },
   label:     { fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'4px', display:'block' },
   divider:   { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
   info:      { background:'#EBF8FF', border:'1px solid #BEE3F8', borderRadius:'8px', padding:'12px 16px', color:'#2C5282', fontSize:'0.88rem', marginBottom:'12px' },
@@ -192,10 +193,36 @@ function FilaProducto({ fila, idx, esManual, onChange, onEliminar }) {
 }
 
 // ── Tab Calculadora ───────────────────────────────────────────────────────
-function TabCalculadora() {
+function TabCalculadora({ datosCargados, onDatosCargadosUsados }) {
   const [nombreImp, setNombreImp]   = useState('');
   const [tipoCambio, setTipoCambio] = useState(520);
   const [tcFuente, setTcFuente] = useState('');
+  const [editandoId, setEditandoId] = useState(null);
+
+  useEffect(() => {
+    if (!datosCargados) return;
+    const d = datosCargados;
+    setNombreImp(d.nombre || '');
+    setTipoCambio(d.tipo_cambio || 520);
+    setTcFuente('');
+    setMetodoClave2(d.metodo || '⚖️ Por peso (kg)');
+    setTipoCont(d.contenedor || "40' High Cube");
+    const c = d.costos || {};
+    setFlete(c.flete||0); setSeguro(c.seguro||0); setPeajes(c.peajes||0);
+    setDaiPct(c.dai_pct||0); setIvaPct(c.iva_pct||13); setOtros(c.otros||0);
+    if (d.productos && d.productos.length > 0) {
+      setFilas(d.productos.map(p => ({
+        descripcion: p.descripcion||'', codigo: p.codigo||'',
+        cantidad: p.cantidad||1, peso_kg: p.peso_kg||0,
+        volumen_m3: p.volumen_m3||0, FOB_unitario: p.FOB_unitario||0,
+        margen_pct: p.margen_pct||30, prorrateo_manual_pct: p.prorrateo_manual_pct||0,
+      })));
+    }
+    setResultado(null);
+    setMsg({ tipo:'info', txt:'✏️ Editando "'+d.nombre+'" — modificá lo que necesités y volvé a calcular.' });
+    setEditandoId(d.id);
+    onDatosCargadosUsados();
+  }, [datosCargados]);
 
   // Autocargar TC BAC al montar
   useEffect(() => {
@@ -257,7 +284,7 @@ function TabCalculadora() {
     const now = new Date();
     const fecha = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-    const { error } = await supabase.from('halley_historial').insert({
+    const payload = {
       nombre: nombreImp.trim(),
       fecha,
       metodo: metodoClave2,
@@ -304,6 +331,14 @@ function TabCalculadora() {
 
   return (
     <div>
+      {editandoId && (
+        <div style={{ background:'#1a2a3a', border:'1px solid #2a4a6a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ color:'#60a5fa', fontSize:'0.9rem', fontWeight:600 }}>
+            ✏️ Modo edición — <strong>{nombreImp}</strong>. Al guardar se actualizará el registro existente.
+          </div>
+          <button style={{ ...S.btnGhost, fontSize:'0.82rem', padding:'6px 12px' }} onClick={()=>{ setEditandoId(null); setMsg(null); }}>✕ Cancelar</button>
+        </div>
+      )}
       {/* Parámetros generales */}
       <div style={S.card}>
         <h4 style={{ color:'var(--orange)', marginTop:0 }}>⚙️ Las Condiciones de la Travesía</h4>
@@ -492,7 +527,7 @@ function TabCalculadora() {
           <div style={S.grid2}>
             <button style={S.btnGhost} onClick={exportarCSV}>📥 Exportar CSV</button>
             <button style={S.btnPrimary} onClick={guardarHistorial} disabled={guardando}>
-              {guardando ? 'Guardando...' : '💾 Guardar en historial'}
+              {guardando ? 'Guardando...' : editandoId ? '💾 Actualizar en historial' : '💾 Guardar en historial'}
             </button>
           </div>
         </div>
@@ -502,7 +537,7 @@ function TabCalculadora() {
 }
 
 // ── Tab Historial ─────────────────────────────────────────────────────────
-function TabHistorial() {
+function TabHistorial({ onEditar }) {
   const [hist, setHist]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [sel, setSel]         = useState('');
@@ -543,6 +578,7 @@ function TabHistorial() {
                     <td style={S.td}>${parseFloat(h.fob_total||0).toFixed(2)}</td>
                     <td style={S.td}>${parseFloat(h.costo_total_usd||0).toFixed(2)}</td>
                     <td style={S.td}>₡{parseInt(h.costo_total_crc||0).toLocaleString('es-CR')}</td>
+                    <td style={S.td}><button style={S.btnEdit} onClick={()=>onEditar(h)}>✏️ Editar</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -597,6 +633,8 @@ function TabHistorial() {
 // ── Vista principal ───────────────────────────────────────────────────────
 export default function HalleyCIF() {
   const [tab, setTab] = useState(0);
+  const [datosCargados, setDatosCargados] = useState(null);
+  const handleEditar = (reg) => { setDatosCargados(reg); setTab(0); };
   const now = new Date();
   const fecha = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
@@ -614,8 +652,8 @@ export default function HalleyCIF() {
         ))}
       </div>
 
-      {tab===0 && <TabCalculadora/>}
-      {tab===1 && <TabHistorial/>}
+      {tab===0 && <TabCalculadora datosCargados={datosCargados} onDatosCargadosUsados={()=>setDatosCargados(null)}/>}
+      {tab===1 && <TabHistorial onEditar={handleEditar}/>}
     </div>
   );
 }
