@@ -94,7 +94,8 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado})
       }
       if (pdfLinks.length > 0) {
         const totalLotes = pdfLinks.length
-        const linksText = pdfLinks.map((l,i) => totalLotes > 1 ? ('Parte ' + (i+1) + '/' + totalLotes + ' (' + (l.numSol||'') + '): ' + l.url) : l.url).join('\n')
+        const sep = '\n'
+        const linksText = pdfLinks.map((l,idx2) => totalLotes > 1 ? ('Parte ' + (idx2+1) + '/' + totalLotes + ' (' + (l.numSol||'') + '): ' + l.url) : l.url).join(sep)
 ')
         waText = '📦 *Orden de Compra - Depósito Jiménez*
 
