@@ -44,16 +44,13 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
     if(tel!==guardado){
       try{await fetch('/api/kommo/proveedores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre_proveedor:proveedor||'Sin nombre',whatsapp:tel})})}catch(e){}
     }
-    if(!soloReenvio){
     try{
       const fecha=new Date().toISOString().slice(0,10)
       const nombreLote='OC '+(proveedor||'Sin nombre')+' '+fecha
       await fetch('/api/guardar-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:items.map(i=>({codigo:i.codigo,nombre:i.nombre||i.codigo,proveedor:proveedor||'Sin nombre',cantidad:i.cantidad,costo_unitario:i.costo||i.costo_unitario||i.precio||0,descuento:i.descuento||0})),nombreLote,diasTribucion:0})})
     }catch(e){console.error('guardar-orden error:',e)}
-    } // fin soloReenvio
 
     let neoNumeroSol = null
-    if(!soloReenvio){
     let neoLotes = []
     try{
       const res=await fetch('/api/neo/encolar-oc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proveedor:proveedor||'Sin nombre',items:items.map(i=>({codigo:i.codigo,cantidad:Number(i.cantidad)||0,costo_unitario:Number(i.costo||i.ultimo_costo||i.costo_unitario||0),descuento:Number(i.descuento)||0})),creadoPor:'whatsapp-modal'})})
@@ -62,7 +59,6 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
       if(data.numero_sol){setNumeroSolOC(data.numero_sol);neoNumeroSol=data.numero_sol}
       if(data.lotes) neoLotes=data.lotes
     }catch(e){setNeoOk('error')}
-    } // fin soloReenvio NEO
 
     const hoy=new Date().toLocaleDateString('es-CR',{day:'2-digit',month:'2-digit',year:'numeric'})
     const provNombre = proveedor || 'Proveedor'
