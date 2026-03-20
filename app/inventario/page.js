@@ -144,6 +144,31 @@ export default function Inventario() {
     }).catch(()=>{});
   }, []);
   const [proveedorOrdenSeleccionado, setProveedorOrdenSeleccionado] = useState('');
+  const [proveedorInputText, setProveedorInputText] = useState('');
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+
+  const PROVEEDORES_HISTORICOS = [
+    "ACEROS ABONOS AGRO SA","ARAUMO DIGITAL","AUDIO ACCESORIOS SA",
+    "CENTURY METALS AND SUPPLIES","CONSORCIO FERRETERO DE SAN JOSE",
+    "CORPORACION DE SUMINISTROS Y MATERIALES DE CONSTRUCCION SA COSMAC",
+    "DIFULUZ DE COSTA RICA S.A","DISOL","DISTRIBUIDORA ARGUEDAS Y SALAS",
+    "DISTRIBUIDORA HERMANOS FUENTES","DM DOS MIL VEINTICUADTRO",
+    "EBISA GLOBAL BRAND SA","GERDAU METALDOM SA","GERMAN ALEJANDRO CHAVES ACUNA",
+    "GRUPO SAWA SAWA SRL","GRUPO SOLIDO","GRUPO VYCSA MAYOREO",
+    "HOGGAN INTERNATIONAL SA","HOLCIM COSTA RICA","IMPERSA SA",
+    "IMPORTACIONES EL AMIGO FERRETERO","IMPORTACIONES INDUSTRIALES MASACA",
+    "IMPORTACIONES VEGA SA","INSTALACIONES Y SERVICIOS MACOPA",
+    "LANCO Y HARRIS SA","MAYOREO DEL ISTMO","MEGALINEAS SA",
+    "METALES FLIX SA","MFA MAYOREO FERRETERIA Y ACABADOS",
+    "MUEBLE INDUSTRIA DEL PLASTICO MIPSA","POLYACRIL DE CENTROAMERICA SA",
+    "RANDALL FRANCISCO CHACON QUIROS","SUR QUIMICA SA",
+    "TERNIUM INTERNACIONAL COSTA RICA","THERMO SOLUTIONS GROUP SA",
+    "TORNICENTRO INVERSIONES INDUSTRIALES GANA GANA","UNIDOS MAYOREO","ZOROLLO SA"
+  ];
+
+  const sugerenciasProveedor = proveedorInputText.length > 0
+    ? PROVEEDORES_HISTORICOS.filter(p => p.toLowerCase().includes(proveedorInputText.toLowerCase()))
+    : PROVEEDORES_HISTORICOS;
   const [showProvSuggestions, setShowProvSuggestions] = useState(false);
 
   // ── Estado filtros tipo Excel ─────────────────────────────────────────────
@@ -328,7 +353,8 @@ export default function Inventario() {
       descuento: 0,
       proveedor: i.ultimo_proveedor || '',
       alerta: i._alerta
-    }));
+    })).filter(i => i.cantidad > 0);
+    if (nuevos.length === 0) { mostrarMsg('Ningún producto tiene cantidad mayor a 0. Revisá las cantidades antes de agregar.', 'err'); return; }
     setOrdenItems(prev => {
       const cs = new Set(prev.map(x => x.codigo));
       return [...prev, ...nuevos.filter(x => !cs.has(x.codigo))];
@@ -481,7 +507,7 @@ export default function Inventario() {
         const { data: cab } = await supabase.from('ordenes_compra').insert([{ fecha_orden: ahora, nombre_lote: lote.nombre, dias_tribucion: dias, total_productos: lote.items.length, creado_en: ahora }]).select();
         if (cab?.length) {
           const oid = cab[0].id;
-          await supabase.from('ordenes_compra_items').insert(lote.items.map(i => ({ orden_id: oid, codigo: i.codigo, nombre: i.nombre, proveedor: i.proveedor, cantidad_ordenada: i.cantidad, costo_unitario: i.costo, descuento: i.descuento, dias_tribucion: dias, cantidad_recibida: 0, estado_item: 'pendiente', creado_en: ahora })));
+          const itemsValidos = lote.items.filter(i => (parseFloat(i.cantidad) || 0) > 0); if (itemsValidos.length > 0) await supabase.from('ordenes_compra_items').insert(itemsValidos.map(i => ({ orden_id: oid, codigo: i.codigo, nombre: i.nombre, proveedor: i.proveedor, cantidad_ordenada: i.cantidad, costo_unitario: i.costo, descuento: i.descuento, dias_tribucion: dias, cantidad_recibida: 0, estado_item: 'pendiente', creado_en: ahora })));
         }
       }
     } catch (e) { console.error('Error guardando lotes:', e); }
