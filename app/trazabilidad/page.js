@@ -361,11 +361,12 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                     <td style={S.td}>
                       <div style={{display:'flex',gap:6}}>
                         <button style={S.btnSm()} onClick={e => { e.stopPropagation(); setDetalle(o) }}>🔍 Ver detalle</button>
-                        <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={e => {
+                        <button style={{...S.btnSm(), background:'#25D366', color:'#fff', border:'none'}} onClick={async e => {
                           e.stopPropagation()
-                          const itsActuales = items.filter(it => it.orden_id === o.id)
-                          const provNombre = itsActuales[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
-                          setModalWA({proveedor: provNombre, items: itsActuales.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
+                          const { data: itsWA } = await supabase.from('ordenes_compra_items').select('*').eq('orden_id', o.id)
+                          const its2 = itsWA || []
+                          const provNombre = its2[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
+                          setModalWA({proveedor: provNombre, items: its2.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
                         }}>📱</button>
                       </div>
                     </td>
