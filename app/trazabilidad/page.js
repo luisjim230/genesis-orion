@@ -329,6 +329,7 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
 
   return (
     <div>
+      {modalWA && <ModalEnviarWhatsApp proveedor={modalWA.proveedor} items={modalWA.items} onClose={() => setModalWA(null)} onEnviado={() => setModalWA(null)} />}
       <p style={{ fontSize: '0.84em', color: MUTED, marginBottom: 14 }}>
         Todas las órdenes generadas en Saturno. Hacé click en una fila para ver el detalle de sus productos.
       </p>
