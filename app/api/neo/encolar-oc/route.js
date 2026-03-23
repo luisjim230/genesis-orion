@@ -10,7 +10,12 @@ function generarExcelNEO(items) {
   const ss = ['Código','Cantidad comprada','Costo unitario de la compra','Descuento']
   const rows = items.map((item, idx) => {
     const r = idx + 2
-    return '<row r="' + r + '"><c r="A' + r + '" t="n"><v>' + String(item.codigo).replace(/[<>&]/g,'') + '</v></c><c r="B' + r + '" t="n"><v>' + (Number(item.cantidad)||0) + '</v></c><c r="C' + r + '" t="n"><v>' + (Number(item.costo_unitario)||0) + '</v></c><c r="D' + r + '" t="n"><v>' + (Number(item.descuento)||0) + '</v></c></row>'
+    const cod = String(item.codigo).replace(/[<>&]/g,'')
+    const esNumero = /^\d+$/.test(cod)
+    const celdaCodigo = esNumero
+      ? '<c r="A' + r + '" t="n"><v>' + cod + '</v></c>'
+      : '<c r="A' + r + '" t="inlineStr"><is><t>' + cod + '</t></is></c>'
+    return '<row r="' + r + '">' + celdaCodigo + '<c r="B' + r + '" t="n"><v>' + (Number(item.cantidad)||0) + '</v></c><c r="C' + r + '" t="n"><v>' + (Number(item.costo_unitario)||0) + '</v></c><c r="D' + r + '" t="n"><v>' + (Number(item.descuento)||0) + '</v></c></row>'
   }).join('\n')
   const sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c></row>' + rows + '</sheetData></worksheet>'
   const sharedStringsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="4" uniqueCount="4">' + ss.map(s => '<si><t xml:space="preserve">' + s + '</t></si>').join('') + '</sst>'
