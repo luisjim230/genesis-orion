@@ -79,7 +79,8 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(...BLACK)
   doc.text('Valor en letras:',20,y)
   const totX=120,totW=70
-  const totRows=[{l:'Subtotal:',v:fmtN(subtotal)},{l:'Descuentos:',v:fmtN(0)},{l:'IVA:',v:fmtN(0)}]
+  const iva=subtotal*0.13
+  const totRows=[{l:'Subtotal:',v:fmtN(subtotal)},{l:'Descuentos:',v:fmtN(0)},{l:'IVA (13%):',v:fmtN(iva)}]
   let ty=y
   for(const row of totRows){
     doc.setFont('helvetica','normal');doc.setFontSize(8.5)
@@ -88,7 +89,7 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   }
   doc.setFillColor(...NAVY);doc.rect(totX,ty,totW,8,'F')
   doc.setTextColor(...WHITE);doc.setFont('helvetica','bold');doc.setFontSize(9)
-  doc.text('TOTAL:',totX+2,ty+5.5);doc.text(fmtN(subtotal),totX+totW-2,ty+5.5,{align:'right'})
+  doc.text('TOTAL:',totX+2,ty+5.5);doc.text(fmtN(subtotal+iva),totX+totW-2,ty+5.5,{align:'right'})
   // Campos
   y+=8; doc.setTextColor(...BLACK);doc.setFont('helvetica','bold');doc.setFontSize(8.5)
   doc.text('Observaciones:',20,y+4);doc.setDrawColor(...LIGHT);doc.rect(20,y,90,7)
