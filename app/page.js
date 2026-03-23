@@ -5,26 +5,26 @@ import { useAuth } from '../lib/useAuth'
 
 const GOLD = '#c8a84b'
 
-// Liquid Glass shared styles — Dark Mode
+// Liquid Glass shared styles — Light Mode
 const GLASS = {
   card: {
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(255,255,255,0.55)',
     backdropFilter: 'blur(24px) saturate(1.8)',
     WebkitBackdropFilter: 'blur(24px) saturate(1.8)',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.6)',
     borderRadius: 20,
-    boxShadow: '0 4px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
   },
   cardInner: {
-    background: 'rgba(255,255,255,0.04)',
+    background: 'rgba(255,255,255,0.4)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.5)',
     borderRadius: 14,
-    boxShadow: '0 2px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05)',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.7)',
   },
   pageBg: {
-    background: 'linear-gradient(135deg, #0a0a0f 0%, #0d1117 30%, #0a0f14 60%, #111118 100%)',
+    background: 'linear-gradient(135deg, #e8ecf4 0%, #d5dde8 30%, #e0e7f0 60%, #edf1f7 100%)',
     minHeight: '100vh',
     padding: '28px 32px',
     fontFamily: 'Rubik, sans-serif',
@@ -63,11 +63,11 @@ function KpiCard({ icon, label, value, sub, color, loading }) {
         boxShadow: `0 2px 8px ${color}15`,
       }}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{label}</div>
-        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-          {loading ? <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span> : value}
+        <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.4)', marginBottom: 4 }}>{label}</div>
+        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'rgba(0,0,0,0.85)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+          {loading ? <span style={{ color: 'rgba(0,0,0,0.15)' }}>—</span> : value}
         </div>
-        {sub && <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.35)', marginTop: 3 }}>{sub}</div>}
       </div>
     </div>
   )
@@ -76,9 +76,9 @@ function KpiCard({ icon, label, value, sub, color, loading }) {
 function SectionTitle({ children }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 16px' }}>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-      <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>{children}</span>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+      <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
+      <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.3)' }}>{children}</span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
     </div>
   )
 }
@@ -87,7 +87,7 @@ function AlertRow({ icon, text, color }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: `${color}15`, border: `1px solid ${color}30`, marginBottom: 8, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
       <span style={{ fontSize: '1rem' }}>{icon}</span>
-      <span style={{ fontSize: '0.83rem', color: 'rgba(255,255,255,0.8)', flex: 1 }}>{text}</span>
+      <span style={{ fontSize: '0.83rem', color: 'rgba(0,0,0,0.7)', flex: 1 }}>{text}</span>
     </div>
   )
 }
@@ -107,10 +107,10 @@ function ContenedorRow({ envio }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', ...GLASS.cardInner, marginBottom: 8 }}>
       <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 6px ${color}60` }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{envio.nombre || envio.id}</div>
-        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>{envio.estado}</div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(0,0,0,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{envio.nombre || envio.id}</div>
+        <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.35)' }}>{envio.estado}</div>
       </div>
-      <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>ETA {eta}</div>
+      <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.35)', flexShrink: 0 }}>ETA {eta}</div>
     </div>
   )
 }
@@ -121,7 +121,7 @@ function TareaRow({ tarea }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', ...GLASS.cardInner, marginBottom: 7 }}>
       <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 6px ${color}60` }} />
-      <div style={{ flex: 1, fontSize: '0.84rem', color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tarea.titulo}</div>
+      <div style={{ flex: 1, fontSize: '0.84rem', color: 'rgba(0,0,0,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tarea.titulo}</div>
       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: color, flexShrink: 0 }}>{tarea.prioridad?.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')}</div>
     </div>
   )
@@ -140,10 +140,10 @@ function WelcomePage({ perfil }) {
         <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD, marginBottom: 8 }}>
           Sistema de Operaciones y Logística
         </div>
-        <h1 style={{ fontSize: '2rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.03em', margin: '0 0 8px' }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, color: 'rgba(0,0,0,0.85)', letterSpacing: '-0.03em', margin: '0 0 8px' }}>
           {saludo}, {perfil?.nombre?.split(' ')[0] || 'bienvenido'}
         </h1>
-        <p style={{ fontSize: '0.92rem', color: 'rgba(255,255,255,0.45)', marginBottom: 28, maxWidth: 420 }}>
+        <p style={{ fontSize: '0.92rem', color: 'rgba(0,0,0,0.45)', marginBottom: 28, maxWidth: 420 }}>
           Usá el menú de la izquierda para acceder a los módulos disponibles para tu cuenta.
         </p>
         <span style={{
@@ -312,10 +312,10 @@ export default function DashboardPage() {
         <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD, marginBottom: 4, display: 'block' }}>
           Dashboard ejecutivo
         </span>
-        <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 4 }}>
+        <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: 'rgba(0,0,0,0.85)', letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 4 }}>
           ☀️ SOL
         </h1>
-        <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.4)' }}>Visión consolidada del negocio en tiempo real.</p>
+        <p style={{ fontSize: '0.875rem', color: 'rgba(0,0,0,0.4)' }}>Visión consolidada del negocio en tiempo real.</p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
@@ -370,31 +370,31 @@ export default function DashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
 
         <div style={{ ...GLASS.card, padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', marginBottom: 14 }}>🚢 Contenedores activos</div>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>🚢 Contenedores activos</div>
           {loading
-            ? <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.82rem' }}>Cargando...</div>
+            ? <div style={{ color: 'rgba(0,0,0,0.15)', fontSize: '0.82rem' }}>Cargando...</div>
             : contenedores.length === 0
-              ? <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.82rem' }}>No hay contenedores activos</div>
+              ? <div style={{ color: 'rgba(0,0,0,0.3)', fontSize: '0.82rem' }}>No hay contenedores activos</div>
               : contenedores.map((e, i) => <ContenedorRow key={i} envio={e} />)
           }
         </div>
 
         <div style={{ ...GLASS.card, padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', marginBottom: 14 }}>✨ Tareas pendientes</div>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>✨ Tareas pendientes</div>
           {loading
-            ? <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '0.82rem' }}>Cargando...</div>
+            ? <div style={{ color: 'rgba(0,0,0,0.15)', fontSize: '0.82rem' }}>Cargando...</div>
             : tareas.length === 0
-              ? <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
+              ? <div style={{ color: 'rgba(0,0,0,0.3)', fontSize: '0.82rem' }}>No hay tareas pendientes</div>
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
           }
         </div>
         {recurrentesHoy.length > 0 && (
           <div style={{ ...GLASS.card, padding: '18px 20px' }}>
-            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
             {recurrentesHoy.map((r, i) => (
-              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '0.84rem', color: 'rgba(255,255,255,0.85)' }}>
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', fontSize: '0.84rem', color: 'rgba(0,0,0,0.75)' }}>
                 <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
-                {r.notas && <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{r.notas}</div>}
+                {r.notas && <div style={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.3)', marginTop: 2 }}>{r.notas}</div>}
               </div>
             ))}
           </div>
