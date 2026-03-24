@@ -154,9 +154,11 @@ function detectarTipo(filas, nombreArchivo) {
   // filas = array de arrays (raw sheet)
   let tituloEncontrado = null;
 
+  // Ordenar configs por titulo_valor más largo primero (match más específico gana)
+  const sortedConfigs = Object.entries(REPORTES).sort((a,b) => (b[1].titulo_valor||'').length - (a[1].titulo_valor||'').length);
   for (let i = 0; i < Math.min(10, filas.length); i++) {
     const fila = filas[i].map(v => String(v||'').trim());
-    for (const [tabla, cfg] of Object.entries(REPORTES)) {
+    for (const [tabla, cfg] of sortedConfigs) {
       if (fila.some(v => v && v.toLowerCase().includes(cfg.titulo_valor.toLowerCase()))) {
         if (cfg.titulo_col1) {
           tituloEncontrado = { tabla, cfg, filaIdx: i };
@@ -479,6 +481,8 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
     while (intentos < 3 && !ok) {
       const { error } = tabla === 'neo_items_facturados'
         ? await supabase.from(tabla).upsert(batch, { onConflict: 'factura,codigo_interno' })
+        : tabla === 'neo_lista_items'
+        ? await supabase.from(tabla).upsert(batch, { onConflict: 'codigo_interno' })
         : await supabase.from(tabla).insert(batch);
       if (!error) {
         total += batch.length;
