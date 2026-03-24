@@ -769,102 +769,266 @@ function CalendarioSemana({ items, onDetalle }) {
 }
 
 // ─── TAB: ESTADÍSTICAS ────────────────────────────────────────────────────────
-function TabEstadisticas() {
-  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-  const EMPTY = { mes:'', anio: new Date().getFullYear(), plataforma:'tiktok', seguidores:0, alcance:0, interacciones:0, videos_publicados:0, notas:'' }
-  const [registros, setRegistros] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [form, setForm]           = useState(null)
-  const [saving, setSaving]       = useState(false)
-  const [msg, setMsg]             = useState(null)
+function TabDashboard() {
+  const [metricas, setMetricas] = useState([])
+  const [historial, setHistorial] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [formOpen, setFormOpen] = useState(false)
+  const [formData, setFormData] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [platFiltro, setPlatFiltro] = useState('todas')
 
   function showMsg(t, ok=true) { setMsg({t,ok}); setTimeout(()=>setMsg(null),3000) }
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.from('social_estadisticas').select('*').order('anio',{ascending:false}).order('mes',{ascending:false})
-    setRegistros(data||[])
+    const { data } = await supabase.from('social_metricas').select('*').order('fecha',{ascending:false}).limit(200)
+    setMetricas(data||[])
+    // Also load monthly stats (legacy)
+    const { data:d2 } = await supabase.from('social_estadisticas').select('*').order('anio',{ascending:false}).order('mes',{ascending:false})
+    setHistorial(d2||[])
     setLoading(false)
   }
   useEffect(()=>{ cargar() },[])
 
-  async function guardar() {
-    if (!form.mes||!form.plataforma) return showMsg('Mes y plataforma requeridos.', false)
+  // Últimas métricas por plataforma
+  const ultimasPorPlat = useMemo(()=>{
+    const map = {}
+    for (const p of ['tiktok','instagram','facebook','youtube']) {
+      const recs = metricas.filter(m=>m.plataforma===p)
+      map[p] = recs[0] || null
+    }
+    return map
+  },[metricas])
+
+  // Métricas previas (para comparar delta)
+  const previasPorPlat = useMemo(()=>{
+    const map = {}
+    for (const p of ['tiktok','instagram','facebook','youtube']) {
+      const recs = metricas.filter(m=>m.plataforma===p)
+      map[p] = recs[1] || null
+    }
+    return map
+  },[metricas])
+
+  // Totales
+  const totalSeg = Object.values(ultimasPorPlat).reduce((s,m)=>s+(m?.seguidores||0),0)
+  const totalViews = Object.values(ultimasPorPlat).reduce((s,m)=>s+(m?.views||0),0)
+  const totalLikes = Object.values(ultimasPorPlat).reduce((s,m)=>s+(m?.likes||0),0)
+  const totalComents = Object.values(ultimasPorPlat).reduce((s,m)=>s+(m?.comentarios||0),0)
+
+  function delta(curr, prev) {
+    if (!curr || !prev || prev === 0) return null
+    return ((curr - prev) / prev * 100).toFixed(1)
+  }
+  function deltaTag(val) {
+    if (val === null) return null
+    const n = parseFloat(val)
+    const color = n >= 0 ? '#22c55e' : '#ef4444'
+    const arrow = n >= 0 ? '▲' : '▼'
+    return <span style={{fontSize:'0.72em', fontWeight:600, color, marginLeft:6}}>{arrow} {Math.abs(n)}%</span>
+  }
+
+  function fmtNum(n) {
+    if (!n && n!==0) return '—'
+    if (n >= 1000000) return (n/1000000).toFixed(1)+'M'
+    if (n >= 1000) return (n/1000).toFixed(1)+'K'
+    return n.toLocaleString()
+  }
+
+  // Form
+  const EMPTY_FORM = { fecha: new Date().toISOString().slice(0,10), plataforma:'tiktok', seguidores:0, views:0, likes:0, comentarios:0, compartidos:0, nuevos_seguidores:0, engagement_rate:0, mejor_post:'', notas:'' }
+  function abrirForm(data) { setFormData(data||{...EMPTY_FORM}); setFormOpen(true) }
+  async function guardarForm() {
+    if (!formData.fecha||!formData.plataforma) return showMsg('Fecha y plataforma requeridos.',false)
     setSaving(true)
-    if (form.id) await supabase.from('social_estadisticas').update(form).eq('id', form.id)
-    else await supabase.from('social_estadisticas').insert({...form, creado_en: new Date().toISOString()})
-    setSaving(false); setForm(null); showMsg('Guardado.'); cargar()
+    const payload = {...formData}
+    delete payload.id; delete payload.creado_en
+    if (formData.id) {
+      await supabase.from('social_metricas').update(payload).eq('id', formData.id)
+    } else {
+      await supabase.from('social_metricas').upsert(payload, {onConflict:'fecha,plataforma'})
+    }
+    setSaving(false); setFormOpen(false); showMsg('Métricas guardadas.'); cargar()
+  }
+  async function eliminarMetrica(id) {
+    if (!confirm('¿Eliminar registro?')) return
+    await supabase.from('social_metricas').delete().eq('id',id); cargar()
   }
 
-  async function eliminar(id) {
-    if (!confirm('¿Eliminar?')) return
-    await supabase.from('social_estadisticas').delete().eq('id', id); cargar()
+  // Historial filtrado
+  const histFiltrado = platFiltro==='todas' ? metricas : metricas.filter(m=>m.plataforma===platFiltro)
+
+  // Mini bar chart (últimos 7 registros por plataforma)
+  function MiniChart({ plat, campo }) {
+    const datos = metricas.filter(m=>m.plataforma===plat).slice(0,7).reverse()
+    if (datos.length < 2) return <span style={{fontSize:'0.7em',color:MUTED}}>Sin datos</span>
+    const vals = datos.map(d=>d[campo]||0)
+    const max = Math.max(...vals, 1)
+    return (
+      <div style={{display:'flex', gap:2, alignItems:'flex-end', height:32}}>
+        {vals.map((v,i)=>(
+          <div key={i} style={{
+            width:8, borderRadius:2, background: i===vals.length-1 ? PLAT[plat].color : PLAT[plat].color+'66',
+            height: `${Math.max(4, (v/max)*100)}%`, transition:'height 0.3s'
+          }}/>
+        ))}
+      </div>
+    )
   }
 
-  if (form) return (
+  if (formOpen) return (
     <div>
-      <button style={{...S.btnSm(), marginBottom:16}} onClick={()=>setForm(null)}>← Volver</button>
-      <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>📊 {form.id?'Editar métricas':'Registrar métricas del mes'}</h2>
+      <button style={{...S.btnSm(), marginBottom:16}} onClick={()=>setFormOpen(false)}>← Volver</button>
+      <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>
+        📊 {formData.id ? 'Editar métricas' : 'Registrar métricas del día'}
+      </h2>
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:12}}>
         <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MES *</label>
-          <Sel value={form.mes} onChange={v=>setForm({...form,mes:v})}
-            options={[['','Seleccioná'],...MESES.map((m,i)=>[String(i+1).padStart(2,'0'),m])]}/>
-        </div>
-        <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>AÑO</label>
-          <input type="number" style={S.input} value={form.anio} onChange={e=>setForm({...form,anio:parseInt(e.target.value)})}/>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>FECHA *</label>
+          <input type="date" style={S.input} value={formData.fecha} onChange={e=>setFormData({...formData,fecha:e.target.value})}/>
         </div>
         <div>
           <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PLATAFORMA *</label>
-          <Sel value={form.plataforma} onChange={v=>setForm({...form,plataforma:v})}
+          <Sel value={formData.plataforma} onChange={v=>setFormData({...formData,plataforma:v})}
             options={Object.entries(PLAT).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
         </div>
-        {[['seguidores','SEGUIDORES'],['alcance','ALCANCE'],['interacciones','INTERACCIONES'],['videos_publicados','VIDEOS']].map(([k,l])=>(
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>SEGUIDORES TOTALES</label>
+          <input type="number" style={S.input} value={formData.seguidores} onChange={e=>setFormData({...formData,seguidores:parseInt(e.target.value)||0})}/>
+        </div>
+        {[['views','VIEWS / ALCANCE'],['likes','LIKES'],['comentarios','COMENTARIOS'],['compartidos','COMPARTIDOS'],['nuevos_seguidores','NUEVOS SEGUIDORES']].map(([k,l])=>(
           <div key={k}>
             <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>{l}</label>
-            <input type="number" style={S.input} value={form[k]} onChange={e=>setForm({...form,[k]:parseInt(e.target.value)||0})}/>
+            <input type="number" style={S.input} value={formData[k]} onChange={e=>setFormData({...formData,[k]:parseInt(e.target.value)||0})}/>
           </div>
         ))}
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ENGAGEMENT RATE %</label>
+          <input type="number" step="0.01" style={S.input} value={formData.engagement_rate} onChange={e=>setFormData({...formData,engagement_rate:parseFloat(e.target.value)||0})}/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MEJOR POST DEL DÍA</label>
+          <input style={S.input} value={formData.mejor_post} onChange={e=>setFormData({...formData,mejor_post:e.target.value})} placeholder="Link o descripción"/>
+        </div>
         <div style={{gridColumn:'1/-1'}}>
           <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NOTAS</label>
-          <textarea style={{...S.textarea, minHeight:56}} value={form.notas} onChange={e=>setForm({...form,notas:e.target.value})}/>
+          <textarea style={{...S.textarea, minHeight:56}} value={formData.notas} onChange={e=>setFormData({...formData,notas:e.target.value})}/>
         </div>
       </div>
       <Msg msg={msg}/>
       <div style={{display:'flex', gap:10}}>
-        <button style={S.btn()} onClick={guardar} disabled={saving}>{saving?'Guardando...':'💾 Guardar'}</button>
-        <button style={S.btnSm()} onClick={()=>setForm(null)}>Cancelar</button>
+        <button style={S.btn()} onClick={guardarForm} disabled={saving}>{saving?'Guardando...':'💾 Guardar métricas'}</button>
+        <button style={S.btnSm()} onClick={()=>setFormOpen(false)}>Cancelar</button>
       </div>
     </div>
   )
 
   return (
     <div>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-        <div style={{fontSize:'0.84em', color:MUTED}}>Métricas manuales por mes y plataforma</div>
-        <button style={S.btn()} onClick={()=>setForm({...EMPTY})}>+ Registrar métricas</button>
+      {/* Header con total */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:24}}>
+        {[
+          ['👥','Seguidores totales', totalSeg, GOLD],
+          ['👁️','Views totales', totalViews, '#63b3ed'],
+          ['❤️','Likes totales', totalLikes, '#f43f5e'],
+          ['💬','Comentarios totales', totalComents, '#a78bfa'],
+        ].map(([icon,label,val,color])=>(
+          <div key={label} style={{...S.card, textAlign:'center', borderTop:`3px solid ${color}`, padding:'18px 14px'}}>
+            <div style={{fontSize:'1.5rem', marginBottom:4}}>{icon}</div>
+            <div style={{fontSize:'1.4rem', fontWeight:700, color}}>{fmtNum(val)}</div>
+            <div style={{fontSize:'0.7em', color:MUTED, marginTop:4, textTransform:'uppercase', letterSpacing:'0.06em'}}>{label}</div>
+          </div>
+        ))}
       </div>
+
+      {/* Cards por plataforma */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:14, marginBottom:24}}>
+        {Object.entries(PLAT).map(([key, p])=>{
+          const m = ultimasPorPlat[key]
+          const prev = previasPorPlat[key]
+          return (
+            <div key={key} style={{...S.card, padding:'20px', borderLeft:`4px solid ${p.color}`}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14}}>
+                <div style={{display:'flex', alignItems:'center', gap:8}}>
+                  <span style={{fontSize:'1.3rem'}}>{p.icon}</span>
+                  <span style={{fontWeight:700, color:TEXT, fontSize:'1rem'}}>{p.label}</span>
+                </div>
+                {m && <span style={{fontSize:'0.68em', color:MUTED}}>{m.fecha}</span>}
+              </div>
+              {!m ? (
+                <div style={{color:MUTED, fontSize:'0.84em', padding:'12px 0'}}>Sin datos aún. Registrá las métricas del día.</div>
+              ) : (
+                <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10}}>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Seguidores</div>
+                    <div style={{fontSize:'1.15rem', fontWeight:700, color:p.color}}>
+                      {fmtNum(m.seguidores)}{deltaTag(delta(m.seguidores, prev?.seguidores))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Views</div>
+                    <div style={{fontSize:'1.15rem', fontWeight:700, color:TEXT}}>
+                      {fmtNum(m.views)}{deltaTag(delta(m.views, prev?.views))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Engagement</div>
+                    <div style={{fontSize:'1.15rem', fontWeight:700, color:TEXT}}>{m.engagement_rate||0}%</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Likes</div>
+                    <div style={{fontWeight:600, color:TEXT}}>{fmtNum(m.likes)}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Comentarios</div>
+                    <div style={{fontWeight:600, color:TEXT}}>{fmtNum(m.comentarios)}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Tendencia</div>
+                    <MiniChart plat={key} campo="views"/>
+                  </div>
+                </div>
+              )}
+              {m?.mejor_post && (
+                <div style={{marginTop:10, padding:'8px 10px', background:SURF2, borderRadius:8, fontSize:'0.78em', color:MUTED}}>
+                  🏆 {m.mejor_post}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Botón registrar + filtro */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:10}}>
+        <FiltroPlat value={platFiltro} onChange={setPlatFiltro}/>
+        <button style={S.btn()} onClick={()=>abrirForm(null)}>+ Registrar métricas</button>
+      </div>
+
+      {/* Historial de registros */}
       {loading ? <div style={{textAlign:'center', padding:40, color:MUTED}}>Cargando...</div>
-      : registros.length===0 ? <div style={{...S.card, textAlign:'center', padding:40, color:MUTED}}>Aún no hay métricas.</div>
+      : histFiltrado.length===0 ? <div style={{...S.card, textAlign:'center', padding:40, color:MUTED}}>No hay registros de métricas aún.</div>
       : (
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%', borderCollapse:'collapse'}}>
-            <thead><tr>{['Mes','Plataforma','Seguidores','Alcance','Interacciones','Videos','Notas',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{['Fecha','Plataforma','Seguidores','Views','Likes','Comentarios','Compartidos','Eng.%',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {registros.map(r=>(
+              {histFiltrado.slice(0,50).map(r=>(
                 <tr key={r.id}>
-                  <td style={{...S.td, fontWeight:600}}>{MESES[(parseInt(r.mes)||1)-1]} {r.anio}</td>
+                  <td style={{...S.td, fontWeight:600}}>{r.fecha}</td>
                   <td style={S.td}><PlatBadge plat={r.plataforma}/></td>
-                  <td style={{...S.td, textAlign:'right', color:'#63b3ed', fontWeight:600}}>{(r.seguidores||0).toLocaleString()}</td>
-                  <td style={{...S.td, textAlign:'right'}}>{(r.alcance||0).toLocaleString()}</td>
-                  <td style={{...S.td, textAlign:'right'}}>{(r.interacciones||0).toLocaleString()}</td>
-                  <td style={{...S.td, textAlign:'right'}}>{r.videos_publicados||0}</td>
-                  <td style={{...S.td, color:MUTED, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{r.notas||'—'}</td>
+                  <td style={{...S.td, textAlign:'right', fontWeight:600, color:PLAT[r.plataforma]?.color||TEXT}}>{(r.seguidores||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.views||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.likes||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.comentarios||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right'}}>{(r.compartidos||0).toLocaleString()}</td>
+                  <td style={{...S.td, textAlign:'right', fontWeight:600}}>{r.engagement_rate||0}%</td>
                   <td style={S.td}>
                     <div style={{display:'flex', gap:6}}>
-                      <button style={S.btnSm()} onClick={()=>setForm({...r})}>✏️</button>
-                      <button style={{...S.btnSm(), color:'#fc8181', borderColor:'#fc818144'}} onClick={()=>eliminar(r.id)}>✕</button>
+                      <button style={S.btnSm()} onClick={()=>abrirForm({...r})}>✏️</button>
+                      <button style={{...S.btnSm(), color:'#fc8181', borderColor:'#fc818144'}} onClick={()=>eliminarMetrica(r.id)}>✕</button>
                     </div>
                   </td>
                 </tr>
@@ -873,22 +1037,26 @@ function TabEstadisticas() {
           </table>
         </div>
       )}
+      <Msg msg={msg}/>
     </div>
   )
 }
 
+// Legacy tab wrapper
+function TabEstadisticas() { return <TabDashboard/> }
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
+  { id:'dashboard',    icon:'📊', label:'Dashboard',           estadoFiltro:null },
   { id:'listo',        icon:'✅', label:'Listo para publicar', estadoFiltro:'listo' },
   { id:'por_grabar',   icon:'🎬', label:'Por grabar',          estadoFiltro:'por_grabar' },
   { id:'en_revision',  icon:'👀', label:'En revisión',         estadoFiltro:'en_revision' },
   { id:'ideas',        icon:'💡', label:'Ideas',               estadoFiltro:'idea' },
   { id:'calendario',   icon:'📅', label:'Calendario',          estadoFiltro:null },
-  { id:'estadisticas', icon:'📊', label:'Estadísticas',        estadoFiltro:null },
 ]
 
 export default function SocialPage() {
-  const [tab, setTab]           = useState('listo')
+  const [tab, setTab]           = useState('dashboard')
   const [items, setItems]       = useState([])
   const [loading, setLoading]   = useState(true)
   const [vista, setVista]       = useState(null) // null | 'form' | 'detalle'
@@ -957,7 +1125,9 @@ export default function SocialPage() {
         />
       )}
 
-      {!vista && tab !== 'calendario' && tab !== 'estadisticas' && (
+      {!vista && tab === 'dashboard' && <TabDashboard/>}
+
+      {!vista && tab !== 'calendario' && tab !== 'dashboard' && (
         <TabLista
           items={items}
           loading={loading}
@@ -989,7 +1159,6 @@ export default function SocialPage() {
         </div>
       )}
 
-      {!vista && tab === 'estadisticas' && <TabEstadisticas/>}
     </div>
   )
 }
