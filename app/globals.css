@@ -29,7 +29,7 @@
 html, body {
   height: 100%;
   font-family: var(--font-body);
-  background: #FDF4F4;
+  background: linear-gradient(135deg, #e8ecf4 0%, #d5dde8 30%, #e0e7f0 60%, #edf1f7 100%);
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
