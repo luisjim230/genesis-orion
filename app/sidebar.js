@@ -37,7 +37,7 @@ export default function Sidebar(){
   return(
     <>
       <style>{nunitoStyle}</style>
-      <aside style={{width:collapsed?64:240,background:'rgba(55,20,30,0.78)',backdropFilter:'blur(40px) saturate(1.6)',WebkitBackdropFilter:'blur(40px) saturate(1.6)',borderRight:'1px solid rgba(255,255,255,0.08)',position:'fixed',top:0,left:0,height:'100vh',overflowY:'auto',overflowX:'hidden',display:'flex',flexDirection:'column',zIndex:100,transition:'width 0.2s ease',boxShadow:'4px 0 30px rgba(0,0,0,0.15)'}}>
+      <aside style={{width:collapsed?64:240,background:'#5E2733',borderRight:'1px solid rgba(255,255,255,0.08)',position:'fixed',top:0,left:0,height:'100vh',overflowY:'auto',overflowX:'hidden',display:'flex',flexDirection:'column',zIndex:100,transition:'width 0.2s ease',boxShadow:'4px 0 30px rgba(0,0,0,0.15)'}}>
         <div style={{padding:collapsed?'16px 12px':'18px 20px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
           <svg width={collapsed?32:40} height={collapsed?28:34} viewBox="0 0 56 48" style={{flexShrink:0}}>
             <rect x="0"  y="0"  width="16" height="9" rx="2" fill="rgba(255,255,255,0.85)"/>
