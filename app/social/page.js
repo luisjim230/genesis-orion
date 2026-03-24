@@ -158,8 +158,8 @@ function FormContenido({ item, onClose, onSaved }) {
 
   async function guardar() {
     if (!form.titulo.trim()) return showMsg('El título es requerido.', false)
-    if ((form.estado === 'programado' || form.estado === 'publicado') && !form.fecha_programada)
-      return showMsg('⚠️ La fecha es obligatoria para estado "Programado" o "Publicado".', false)
+    if (form.estado === 'publicado' && !form.fecha_programada)
+      return showMsg('⚠️ La fecha es obligatoria para estado "Publicado".', false)
     setSaving(true)
     const payload = { ...form }
     if (!payload.fecha_programada) payload.fecha_programada = null
@@ -207,6 +207,8 @@ function FormContenido({ item, onClose, onSaved }) {
             {!esProgramado && !form.fecha_programada && <span style={{marginLeft:6, color:'#f6ad55', fontWeight:400}}>(sin fecha no aparece en calendario)</span>}
           </label>
           <input type="date" style={{...S.input, borderColor: (esProgramado && !form.fecha_programada) ? '#fc818188' : undefined}} value={form.fecha_programada} onChange={e=>setForm({...form,fecha_programada:e.target.value})}/>
+          {!form.fecha_programada && <div style={{marginTop:6, fontSize:'0.72em', color:'#f59e0b', fontWeight:600}}>⏰ Sin fecha — el contenido seguirá visible con badge "Sin fecha"</div>}
+          {form.fecha_programada && <button style={{marginTop:4, background:'none', border:'none', color:MUTED, fontSize:'0.72em', cursor:'pointer', padding:0, textDecoration:'underline'}} onClick={()=>setForm({...form,fecha_programada:''})}>Quitar fecha</button>}
         </div>
         {(form.fecha_programada || esProgramado) && (
           <div>
@@ -483,7 +485,10 @@ function TabLista({ items, loading, onNuevo, onDetalle, estadoFiltro }) {
                       <PlatBadge plat={item.plataforma}/>
                       <EstadoBadge estado={item.estado}/>
                       {item.prioridad && item.prioridad!=='media' && <span style={S.badge(PRIOR_COLOR[item.prioridad])}>{item.prioridad}</span>}
-                      {item.fecha_programada && <span style={{fontSize:'0.75em', color:fColor}}>📅 {item.fecha_programada}</span>}
+                      {item.fecha_programada
+                        ? <span style={{fontSize:'0.75em', color:fColor}}>📅 {item.fecha_programada}</span>
+                        : <span style={{...S.badge('#f59e0b'), fontSize:'0.7em'}}>⏰ Sin fecha</span>
+                      }
                       {(item.comentarios||[]).length>0 && <span style={{fontSize:'0.75em', color:MUTED}}>💬 {item.comentarios.length}</span>}
                     </div>
                   </div>
