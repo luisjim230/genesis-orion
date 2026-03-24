@@ -83,6 +83,9 @@ export default function TareasEquipoPage(){
     </div>
   );
 
+  const lbl = {fontSize:12,color:'rgba(0,0,0,0.5)',fontFamily:'Rubik,sans-serif',display:'block',marginBottom:4};
+  const inp = {width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid rgba(0,0,0,0.12)',fontSize:14,fontFamily:'Rubik,sans-serif',background:'rgba(255,255,255,0.7)',outline:'none',boxSizing:'border-box'};
+
   const renderForm = () => (
     <div style={{...card,marginBottom:24}}>
       <div style={{fontSize:16,fontWeight:600,color:'rgba(0,0,0,0.85)',fontFamily:'Rubik,sans-serif',marginBottom:14}}>{editId?'Editar Tarea':'Nueva Tarea'}</div>
@@ -165,9 +168,6 @@ export default function TareasEquipoPage(){
       </div>
     );
   };
-
-  const lbl = {fontSize:12,color:'rgba(0,0,0,0.5)',fontFamily:'Rubik,sans-serif',display:'block',marginBottom:4};
-  const inp = {width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid rgba(0,0,0,0.12)',fontSize:14,fontFamily:'Rubik,sans-serif',background:'rgba(255,255,255,0.7)',outline:'none',boxSizing:'border-box'};
 
   if(loading) return <div style={{textAlign:'center',padding:60,fontFamily:'Rubik,sans-serif',color:'rgba(0,0,0,0.4)'}}>Cargando tareas...</div>;
 
