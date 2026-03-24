@@ -97,8 +97,8 @@ const REPORTES = {
     header_row:1, titulo_valor:'Lista de ítems facturados',
     fecha_col:'fecha',
     // Solo columnas necesarias para el módulo Equipo de Ventas (reduce payload ~50%)
-    columnas:['factura','fecha','vendedor','cliente','codigo_interno','item','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','costo_unitario','subtotal','descuento','pct_descuento','impuesto','impuestos','utilidad_costo','total','tipo_cambio','territorio'],
-    columnas_originales:['Factura','Fecha','Vendedor','Cliente','Código interno','Ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Costo unitario sin impuesto','Subtotal','Descuento','% Descuento','Impuesto','Impuestos','Utilidad/costo','Total','Tipo de cambio de venta','Territorio'],
+    columnas:['factura','fecha','vendedor','cliente','codigo_interno','item','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','costo_unitario','subtotal','descuento','pct_descuento','impuesto','impuestos','utilidad_costo','total','tipo_cambio','territorio','marca'],
+    columnas_originales:['Factura','Fecha','Vendedor','Cliente','Código interno','Ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Costo unitario sin impuesto','Subtotal','Descuento','% Descuento','Impuesto','Impuestos','Utilidad/costo','Total','Tipo de cambio de venta','Territorio','Marca'],
     modulos_destino:['vendedores'],
   },
   neo_informe_ventas_vendedor: {
@@ -477,7 +477,9 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
     let intentos = 0;
     let ok = false;
     while (intentos < 3 && !ok) {
-      const { error } = await supabase.from(tabla).insert(batch);
+      const { error } = tabla === 'neo_items_facturados'
+        ? await supabase.from(tabla).upsert(batch, { onConflict: 'factura,codigo_interno' })
+        : await supabase.from(tabla).insert(batch);
       if (!error) {
         total += batch.length;
         console.log(`[SOL] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(records.length/BATCH)}: OK (${batch.length} filas, total=${total})`);

@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import BiDashboard from './BiDashboard';
+import BiInteligencia from './BiInteligencia';
 
 // ── Semáforo de urgencia ────────────────────────────────────────────────────
 function urgencia(diasRestantes, leadTime) {
@@ -936,8 +938,8 @@ export default function KronosTab({ calc, transitoMap }) {
       )}
 
       {tabActivo === 'productos' && <TablaPlana />}
-      {tabActivo === 'dashboard' && <DashboardEjecutivo />}
-      {tabActivo === 'inteligencia' && <TabInteligencia />}
+      {tabActivo === 'dashboard' && <BiDashboard />}
+      {tabActivo === 'inteligencia' && <BiInteligencia />}
 
       <div style={{ marginTop: 14, fontSize: '0.7rem', color: '#aaa', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <span>● Verde = consumo real (historial facturas)</span>
