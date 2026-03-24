@@ -4,18 +4,26 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV = [
-  { href: '/',             icon: '⊞',  name: 'Dashboard' },
-  { href: '/inventario',   icon: '📦', name: 'Compras' },
-  { href: '/trazabilidad', icon: '🔴', name: 'Trazabilidad' },
-  { href: '/reportes',     icon: '📊', name: 'Reportes' },
-  { href: '/comercial',    icon: '💼', name: 'Comercial' },
-  { href: '/contenedores', icon: '🚢', name: 'Cargas' },
-  { href: '/cif',          icon: '🧮', name: 'Importación' },
-  { href: '/mercado',      icon: '⚡', name: 'Mercado' },
-  { href: '/finanzas',     icon: '💰', name: 'Finanzas' },
-  { href: '/rotacion',     icon: '🔄', name: 'Rotación' },
-  { href: '/ponderacion',  icon: '⚖️', name: 'Ponderados' },
-  { href: '/tareas',       icon: '✅', name: 'Tareas' },
+  { href: '/',                  icon: '⊞',  name: 'Dashboard' },
+  { href: '/inventario',        icon: '📦', name: 'Compras' },
+  { href: '/trazabilidad',      icon: '🔴', name: 'Trazabilidad' },
+  { href: '/kronos',            icon: '📈', name: 'Proyección' },
+  { href: '/reportes',          icon: '📊', name: 'Reportes' },
+  { href: '/comercial',         icon: '💼', name: 'Comercial' },
+  { href: '/cif',               icon: '🧮', name: 'Importación' },
+  { href: '/contenedores',      icon: '🚢', name: 'Cargas' },
+  { href: '/mercado',           icon: '⚡', name: 'Mercado' },
+  { href: '/cajas-aurora',      icon: '🌅', name: 'Cajas' },
+  { href: '/entregas',          icon: '🚛', name: 'Entregas' },
+  { href: '/finanzas',          icon: '💰', name: 'Finanzas' },
+  { href: '/finanzas/bancos',   icon: '🏦', name: 'Bancos' },
+  { href: '/pagos',             icon: '💸', name: 'Pagos' },
+  { href: '/tareas',            icon: '✅', name: 'Tareas' },
+  { href: '/social',            icon: '📱', name: 'Redes Sociales' },
+  { href: '/kommo-proveedores', icon: '📲', name: 'WhatsApp Proveedores' },
+  { href: '/ponderacion',       icon: '⚖️', name: 'Ponderados' },
+  { href: '/materiales',        icon: '🧱', name: 'Materiales' },
+  { href: '/vendedores',        icon: '🏷️', name: 'Vendedores' },
 ];
 
 export default function MobileNav() {

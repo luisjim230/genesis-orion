@@ -545,10 +545,10 @@ export default function Inventario() {
 
   const alertasUnicas = ['Todos', '🔴 Bajo stock', '🔴 Bajo stock 🚢', '🟠 En tránsito', '🟡 Prestar atención', '🟢 Óptimo', '🔵 Sobrestock'];
 
-  if (loading) return <div className="module-page"><div className="module-title">🪐 Saturno – Inventario</div><div style={{ marginTop: 40, textAlign: 'center', color: '#999' }}>Cargando inventario...</div></div>;
+  if (loading) return <div className="module-page glass-module"><div className="module-title">🪐 Saturno – Inventario</div><div style={{ marginTop: 40, textAlign: 'center', color: '#999' }}>Cargando inventario...</div></div>;
 
   return (
-    <div className="module-page">
+    <div className="module-page glass-module">
       <div className="module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="module-title">🪐 Saturno – Inventario</h1>
