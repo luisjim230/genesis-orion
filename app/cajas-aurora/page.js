@@ -2,6 +2,7 @@
 import { useAuth } from '../../lib/useAuth'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
+import PlanificacionDiaria from './PlanificacionDiaria'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -34,6 +35,7 @@ export default function CajasAurora() {
   const [filtroAnio, setFiltroAnio] = useState(new Date().getFullYear())
   const [vista, setVista] = useState('lista') // 'lista' | 'form'
   const [confirm, setConfirm] = useState(null)
+  const [seccion, setSeccion] = useState('caja') // 'caja' | 'planificacion'
 
   const fetchRegistros = useCallback(async () => {
     setLoading(true)
@@ -123,6 +125,22 @@ export default function CajasAurora() {
 
   return (
     <div style={s.page}>
+      {/* TABS PRINCIPALES */}
+      <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+        {[{id:'caja',label:'Cierre de Caja'},{id:'planificacion',label:'Planificación Diaria'}].map(t => (
+          <button key={t.id} onClick={() => setSeccion(t.id)} style={{
+            padding:'10px 20px', borderRadius:12, border:'none', cursor:'pointer', fontSize:'0.9rem', fontWeight: seccion===t.id ? 700 : 500,
+            background: seccion===t.id ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.3)',
+            color: seccion===t.id ? '#c8a84b' : 'rgba(0,0,0,0.4)',
+            boxShadow: seccion===t.id ? '0 2px 12px rgba(0,0,0,0.06)' : 'none',
+            backdropFilter:'blur(8px)', transition:'all 0.2s',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {seccion === 'planificacion' && <PlanificacionDiaria usuario={perfil?.nombre || perfil?.username} esAdmin={perfil?.rol === 'admin'} />}
+
+      {seccion === 'caja' && <>
       {/* HEADER */}
       <div style={s.header}>
         <div style={s.headerLeft}>
@@ -294,65 +312,66 @@ export default function CajasAurora() {
           </div>
         </div>
       )}
+      </>}
     </div>
   )
 }
 
 const s = {
-  page: { background:'#FDF4F4', minHeight:'100vh', color:'#1a1a1a', fontFamily:'sans-serif', padding:'0 0 40px' },
-  header: { background:'#5E2733', borderBottom:'1px solid rgba(200,168,75,0.18)', padding:'16px 28px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 },
+  page: { background:'linear-gradient(135deg, #e8ecf4 0%, #d5dde8 30%, #e0e7f0 60%, #edf1f7 100%)', minHeight:'100vh', color:'#1a1a1a', fontFamily:'sans-serif', padding:'0 0 40px' },
+  header: { background:'rgba(255,255,255,0.55)', backdropFilter:'blur(24px) saturate(1.8)', WebkitBackdropFilter:'blur(24px) saturate(1.8)', borderBottom:'1px solid rgba(0,0,0,0.06)', padding:'16px 28px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, borderRadius:'0 0 20px 20px', boxShadow:'0 4px 30px rgba(0,0,0,0.06)' },
   headerLeft: { display:'flex', alignItems:'center', gap:12 },
-  logoCircle: { width:36, height:36, background:'#c8a84b', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' },
+  logoCircle: { width:36, height:36, background:'linear-gradient(135deg, #c8a84b, #a08930)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' },
   brandName: { fontSize:18, fontWeight:700, color:'#c8a84b', letterSpacing:1 },
-  brandSub: { fontSize:11, color:'#8b8a85', letterSpacing:0.5, marginTop:1 },
+  brandSub: { fontSize:11, color:'rgba(0,0,0,0.4)', letterSpacing:0.5, marginTop:1 },
   headerRight: { display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' },
-  selMes: { background:'#252830', border:'1px solid rgba(200,168,75,0.2)', color:'#f0ede6', padding:'7px 10px', borderRadius:8, fontSize:13, outline:'none' },
-  selAnio: { background:'#252830', border:'1px solid rgba(200,168,75,0.2)', color:'#f0ede6', padding:'7px 10px', borderRadius:8, fontSize:13, outline:'none', width:80 },
-  btnPrimary: { background:'#c8a84b', color:'#0f1115', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:0.5 },
-  btnSecondary: { background:'transparent', color:'#8b8a85', border:'1px solid rgba(200,168,75,0.2)', borderRadius:8, padding:'8px 16px', fontSize:13, cursor:'pointer' },
-  btnEdit: { background:'transparent', color:'#c8a84b', border:'1px solid rgba(200,168,75,0.3)', borderRadius:7, padding:'5px 14px', fontSize:12, cursor:'pointer' },
-  btnDel: { background:'transparent', color:'#e05252', border:'1px solid rgba(224,82,82,0.25)', borderRadius:7, padding:'5px 14px', fontSize:12, cursor:'pointer' },
-  btnDanger: { background:'#e05252', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:700, cursor:'pointer' },
-  msgOk: { margin:'12px 28px 0', background:'rgba(76,175,125,0.12)', border:'1px solid rgba(76,175,125,0.3)', color:'#4caf7d', borderRadius:8, padding:'10px 16px', fontSize:13 },
-  msgErr: { margin:'12px 28px 0', background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', color:'#e05252', borderRadius:8, padding:'10px 16px', fontSize:13 },
+  selMes: { background:'rgba(255,255,255,0.5)', border:'1px solid rgba(0,0,0,0.1)', color:'rgba(0,0,0,0.8)', padding:'7px 10px', borderRadius:8, fontSize:13, outline:'none' },
+  selAnio: { background:'rgba(255,255,255,0.5)', border:'1px solid rgba(0,0,0,0.1)', color:'rgba(0,0,0,0.8)', padding:'7px 10px', borderRadius:8, fontSize:13, outline:'none', width:80 },
+  btnPrimary: { background:'linear-gradient(135deg, #c8a84b, #a08930)', color:'#fff', border:'none', borderRadius:10, padding:'8px 18px', fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:0.5, boxShadow:'0 4px 20px rgba(200,168,75,0.25)' },
+  btnSecondary: { background:'rgba(255,255,255,0.4)', color:'rgba(0,0,0,0.6)', border:'1px solid rgba(0,0,0,0.1)', borderRadius:10, padding:'8px 16px', fontSize:13, cursor:'pointer', backdropFilter:'blur(8px)' },
+  btnEdit: { background:'rgba(255,255,255,0.3)', color:'#c8a84b', border:'1px solid rgba(200,168,75,0.3)', borderRadius:7, padding:'5px 14px', fontSize:12, cursor:'pointer' },
+  btnDel: { background:'rgba(239,68,68,0.08)', color:'#dc2626', border:'1px solid rgba(239,68,68,0.2)', borderRadius:7, padding:'5px 14px', fontSize:12, cursor:'pointer' },
+  btnDanger: { background:'#dc2626', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:700, cursor:'pointer' },
+  msgOk: { margin:'12px 28px 0', background:'rgba(34,197,94,0.08)', border:'1px solid rgba(34,197,94,0.2)', color:'#15803d', borderRadius:12, padding:'10px 16px', fontSize:13 },
+  msgErr: { margin:'12px 28px 0', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', color:'#dc2626', borderRadius:12, padding:'10px 16px', fontSize:13 },
   resumenGrid: { display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:10, padding:'20px 28px 0' },
-  sumCard: { background:'#1c1f26', border:'1px solid rgba(200,168,75,0.15)', borderRadius:10, padding:'12px 14px' },
-  sumCardBig: { background:'#1a1e27', border:'1px solid rgba(200,168,75,0.3)' },
-  sumLabel: { fontSize:10, color:'#8b8a85', letterSpacing:0.8, textTransform:'uppercase', marginBottom:4 },
+  sumCard: { background:'rgba(255,255,255,0.4)', backdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.5)', borderRadius:14, padding:'12px 14px', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' },
+  sumCardBig: { background:'rgba(255,255,255,0.55)', border:'1px solid rgba(200,168,75,0.3)' },
+  sumLabel: { fontSize:10, color:'rgba(0,0,0,0.4)', letterSpacing:0.8, textTransform:'uppercase', marginBottom:4 },
   sumVal: { fontSize:15, fontWeight:700 },
   section: { padding:'20px 28px 0' },
-  sectionTitle: { fontSize:11, color:'#8b8a85', textTransform:'uppercase', letterSpacing:1, marginBottom:12, marginTop:20 },
-  loading: { color:'#8b8a85', fontSize:14, padding:'20px 0' },
-  empty: { color:'#8b8a85', fontSize:14, padding:'30px 0', textAlign:'center' },
-  card: { background:'#1c1f26', border:'1px solid rgba(200,168,75,0.15)', borderRadius:12, padding:'16px 18px', marginBottom:12 },
+  sectionTitle: { fontSize:11, color:'rgba(0,0,0,0.35)', textTransform:'uppercase', letterSpacing:1, marginBottom:12, marginTop:20 },
+  loading: { color:'rgba(0,0,0,0.35)', fontSize:14, padding:'20px 0' },
+  empty: { color:'rgba(0,0,0,0.35)', fontSize:14, padding:'30px 0', textAlign:'center' },
+  card: { background:'rgba(255,255,255,0.55)', backdropFilter:'blur(24px) saturate(1.8)', WebkitBackdropFilter:'blur(24px) saturate(1.8)', border:'1px solid rgba(255,255,255,0.6)', borderRadius:20, padding:'16px 18px', marginBottom:12, boxShadow:'0 4px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)' },
   cardTop: { display:'flex', alignItems:'center', gap:10, marginBottom:12, flexWrap:'wrap' },
-  cardFecha: { fontSize:14, fontWeight:600, color:'#f0ede6', flex:1 },
+  cardFecha: { fontSize:14, fontWeight:600, color:'rgba(0,0,0,0.85)', flex:1 },
   cajaBadge: { fontSize:11, background:'rgba(200,168,75,0.12)', color:'#c8a84b', borderRadius:20, padding:'3px 10px', letterSpacing:0.5 },
   difBadge: { fontSize:11, borderRadius:20, padding:'3px 10px', fontWeight:600 },
   cardMontos: { display:'flex', gap:16, flexWrap:'wrap', marginBottom:10 },
   montoItem: { display:'flex', flexDirection:'column', gap:2 },
-  montoLabel: { fontSize:10, color:'#8b8a85', letterSpacing:0.5 },
-  montoVal: { fontSize:14, fontWeight:600, color:'#f0ede6' },
-  cardObs: { background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'10px 12px', marginBottom:10 },
-  obsItem: { fontSize:12, color:'#8b8a85', lineHeight:1.6 },
+  montoLabel: { fontSize:10, color:'rgba(0,0,0,0.4)', letterSpacing:0.5 },
+  montoVal: { fontSize:14, fontWeight:600, color:'rgba(0,0,0,0.85)' },
+  cardObs: { background:'rgba(255,255,255,0.3)', borderRadius:8, padding:'10px 12px', marginBottom:10 },
+  obsItem: { fontSize:12, color:'rgba(0,0,0,0.5)', lineHeight:1.6 },
   obsLabel: { fontWeight:600, marginRight:4 },
   cardActions: { display:'flex', gap:8, justifyContent:'flex-end' },
   formWrap: { padding:'24px 28px' },
-  formTitle: { fontSize:17, fontWeight:700, color:'#c8a84b', marginBottom:20 },
+  formTitle: { fontSize:17, fontWeight:700, color:'rgba(0,0,0,0.85)', marginBottom:20 },
   formGrid2: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:4 },
   formGrid3: { display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:12, marginBottom:4 },
   field: { marginBottom:14 },
-  label: { display:'block', fontSize:11, color:'#8b8a85', letterSpacing:0.5, marginBottom:5 },
-  input: { width:'100%', background:'#1c1f26', border:'1px solid rgba(200,168,75,0.2)', borderRadius:8, color:'#f0ede6', padding:'9px 12px', fontSize:13, outline:'none', boxSizing:'border-box' },
-  textarea: { width:'100%', background:'#1c1f26', border:'1px solid rgba(200,168,75,0.2)', borderRadius:8, color:'#f0ede6', padding:'9px 12px', fontSize:13, outline:'none', resize:'vertical', fontFamily:'sans-serif', boxSizing:'border-box' },
+  label: { display:'block', fontSize:11, color:'rgba(0,0,0,0.45)', letterSpacing:0.5, marginBottom:5, fontWeight:600 },
+  input: { width:'100%', background:'rgba(255,255,255,0.5)', border:'1px solid rgba(0,0,0,0.1)', borderRadius:8, color:'rgba(0,0,0,0.8)', padding:'9px 12px', fontSize:13, outline:'none', boxSizing:'border-box', backdropFilter:'blur(8px)' },
+  textarea: { width:'100%', background:'rgba(255,255,255,0.5)', border:'1px solid rgba(0,0,0,0.1)', borderRadius:8, color:'rgba(0,0,0,0.8)', padding:'9px 12px', fontSize:13, outline:'none', resize:'vertical', fontFamily:'sans-serif', boxSizing:'border-box', backdropFilter:'blur(8px)' },
   difBox: { borderRadius:10, padding:'11px 16px', fontSize:14, fontWeight:700, textAlign:'center', marginTop:6 },
   difOk: { background:'rgba(76,175,125,0.12)', color:'#4caf7d', border:'1px solid rgba(76,175,125,0.25)' },
   difPos: { background:'rgba(91,155,213,0.12)', color:'#5b9bd5', border:'1px solid rgba(91,155,213,0.25)' },
   difNeg: { background:'rgba(224,82,82,0.1)', color:'#e05252', border:'1px solid rgba(224,82,82,0.25)' },
   formActions: { display:'flex', gap:12, marginTop:24 },
-  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 },
-  confirmBox: { background:'#1c1f26', border:'1px solid rgba(200,168,75,0.3)', borderRadius:14, padding:'28px 32px', maxWidth:340, width:'90%' },
-  confirmTitle: { fontSize:16, fontWeight:700, color:'#f0ede6', marginBottom:8 },
-  confirmSub: { fontSize:13, color:'#8b8a85', marginBottom:20 },
+  overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 },
+  confirmBox: { background:'rgba(255,255,255,0.85)', backdropFilter:'blur(24px)', border:'1px solid rgba(255,255,255,0.6)', borderRadius:20, padding:'28px 32px', maxWidth:340, width:'90%', boxShadow:'0 8px 40px rgba(0,0,0,0.12)' },
+  confirmTitle: { fontSize:16, fontWeight:700, color:'rgba(0,0,0,0.85)', marginBottom:8 },
+  confirmSub: { fontSize:13, color:'rgba(0,0,0,0.45)', marginBottom:20 },
   confirmActions: { display:'flex', gap:10 },
 }
