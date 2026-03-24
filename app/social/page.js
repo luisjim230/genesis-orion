@@ -2,14 +2,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 
-// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
-const GOLD   = '#ED6E2E'
-const BG     = '#0f1115'
-const SURF   = '#1c1f26'
-const SURF2  = '#22262f'
-const BORDER = 'rgba(255,255,255,0.08)'
-const TEXT   = 'rgba(253,244,244,0.88)'
-const MUTED  = 'rgba(253,244,244,0.40)'
+// ─── DESIGN TOKENS (Liquid Glass Light) ──────────────────────────────────────
+const GOLD   = '#c8a84b'
+const BG     = 'transparent'
+const SURF   = 'rgba(255,255,255,0.55)'
+const SURF2  = 'rgba(255,255,255,0.4)'
+const BORDER = 'rgba(0,0,0,0.08)'
+const TEXT   = 'rgba(0,0,0,0.8)'
+const MUTED  = 'rgba(0,0,0,0.4)'
 
 const PLAT = {
   tiktok:    { label:'TikTok',    color:'#69C9D0', icon:'🎵' },
