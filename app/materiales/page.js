@@ -257,6 +257,75 @@ function Ceramica() {
   );
 }
 
+// ─── Tab 7: Paneles y Láminas WPC / PVC ──────────────────────────────────
+const PRODUCTOS_PANEL = [
+  { grupo: 'Panel Acanalado WPC', items: [
+    { id: 'pan-12', nombre: 'Panel Acanalado 12cm × 2.90m', ancho: 0.12, largo: 2.90 },
+    { id: 'pan-16', nombre: 'Panel Acanalado 16cm × 2.90m', ancho: 0.16, largo: 2.90 },
+    { id: 'pan-177', nombre: 'Panel Acanalado 17.7cm × 2.90m', ancho: 0.177, largo: 2.90 },
+  ]},
+  { grupo: 'Lámina PVC / Bambú', items: [
+    { id: 'lam-244', nombre: 'Lámina 1.22m × 2.44m', ancho: 1.22, largo: 2.44 },
+    { id: 'lam-280', nombre: 'Lámina 1.22m × 2.80m', ancho: 1.22, largo: 2.80 },
+  ]},
+];
+
+function PanelesWPC() {
+  const [largo, setLargo] = useState('');
+  const [ancho, setAncho] = useState('');
+  const [producto, setProducto] = useState('pan-12');
+
+  const l = parseFloat(largo) || 0;
+  const a = parseFloat(ancho) || 0;
+  const m2 = l * a;
+
+  const todos = PRODUCTOS_PANEL.flatMap(g => g.items);
+  const sel = todos.find(p => p.id === producto);
+  const areaPieza = sel ? sel.ancho * sel.largo : 0;
+  const piezas = areaPieza > 0 ? Math.ceil(m2 / areaPieza) : 0;
+  const highBond = m2 > 0 ? Math.ceil(m2 / 5) : 0;
+
+  return (
+    <>
+      <div style={S.card}>
+        <div style={S.grid3}>
+          <div>
+            <div style={S.label}>Largo de la superficie (m)</div>
+            <input style={S.input} type="number" min="0" step="0.01" value={largo} onChange={e => setLargo(e.target.value)} placeholder="Ej: 3.5" />
+          </div>
+          <div>
+            <div style={S.label}>Ancho de la superficie (m)</div>
+            <input style={S.input} type="number" min="0" step="0.01" value={ancho} onChange={e => setAncho(e.target.value)} placeholder="Ej: 2.8" />
+          </div>
+          <div>
+            <div style={S.label}>Producto</div>
+            <select style={S.select} value={producto} onChange={e => setProducto(e.target.value)}>
+              {PRODUCTOS_PANEL.map(g => (
+                <optgroup key={g.grupo} label={g.grupo}>
+                  {g.items.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+        {m2 > 0 && <div style={{ fontSize:'0.9rem', color:GOLD, fontWeight:700, marginBottom:8 }}>Superficie: {ceil2(m2)} m² — Área por pieza: {ceil2(areaPieza)} m²</div>}
+        <button style={S.btnGhost} onClick={() => { setLargo(''); setAncho(''); }}>Limpiar</button>
+      </div>
+      {m2 > 0 && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead><tr><th style={S.th}>Material</th><th style={{ ...S.th, textAlign:'right' }}>Cantidad</th><th style={S.th}>Unidad</th></tr></thead>
+            <tbody>
+              <tr><td style={S.td}>{sel.nombre}</td><td style={S.tdVal}>{piezas}</td><td style={S.td}>piezas</td></tr>
+              <tr><td style={S.td}>High Bond (adhesivo) — rinde ~5 m² por cartucho</td><td style={S.tdVal}>{highBond}</td><td style={S.td}>cartuchos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Tabla reutilizable ──────────────────────────────────────────────────
 function TablaResultados({ items }) {
   return (
@@ -289,6 +358,7 @@ const TABS = [
   { id: 'bloques', label: 'Bloques', comp: Bloques },
   { id: 'planche', label: 'Planché', comp: Planche },
   { id: 'ceramica', label: 'Cerámica', comp: Ceramica },
+  { id: 'paneles', label: 'Paneles / Láminas', comp: PanelesWPC },
 ];
 
 export default function MaterialesPage() {
