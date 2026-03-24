@@ -162,7 +162,7 @@ export default function Inventario() {
     "METALES FLIX SA","MFA MAYOREO FERRETERIA Y ACABADOS",
     "MUEBLE INDUSTRIA DEL PLASTICO MIPSA","POLYACRIL DE CENTROAMERICA SA",
     "RANDALL FRANCISCO CHACON QUIROS","SUR QUIMICA SA",
-    "TERNIUM INTERNACIONAL COSTA RICA","THERMO SOLUTIONS GROUP SA",
+    "TECHOS GE SA GRUPO ELEFANTE","TERNIUM INTERNACIONAL COSTA RICA","THERMO SOLUTIONS GROUP SA",
     "TORNICENTRO INVERSIONES INDUSTRIALES GANA GANA","UNIDOS MAYOREO","ZOROLLO SA"
   ];
 
@@ -898,9 +898,9 @@ export default function Inventario() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
                       <input className="module-input" style={{ width: '100%', boxSizing: 'border-box' }} placeholder="📝 Proveedor de la orden (escribí para buscar)" value={nombreOrden} onChange={e => { setNombreOrden(e.target.value); setProveedorOrdenSeleccionado(''); setShowProvSuggestions(true); }} onFocus={() => setShowProvSuggestions(true)} onBlur={() => setTimeout(() => setShowProvSuggestions(false), 180)} autoComplete="off" />
-                      {showProvSuggestions && nombreOrden.length >= 1 && (() => { const q = nombreOrden.toLowerCase(); const kommoNombres = proveedoresKommo.map(p => p.nombre_proveedor); const todos = [...new Set([...PROVEEDORES_HISTORICOS, ...kommoNombres])].sort(); return todos.filter(p => p.toLowerCase().includes(q)); })().length > 0 && (
+                      {showProvSuggestions && nombreOrden.length >= 1 && (() => { const q = nombreOrden.toLowerCase(); const kommoNombres = proveedoresKommo.map(p => p.nombre_proveedor); const provDeItems = ordenItems.map(i => i.proveedor || i.ultimo_proveedor || '').filter(Boolean); const todos = [...new Set([...PROVEEDORES_HISTORICOS, ...kommoNombres, ...provDeItems])].sort(); return todos.filter(p => p.toLowerCase().includes(q)); })().length > 0 && (
                         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #EAE0E0', borderRadius: 8, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 200, overflowY: 'auto' }}>
-                          {[...new Set([...PROVEEDORES_HISTORICOS, ...proveedoresKommo.map(p => p.nombre_proveedor)])].sort().filter(p => p.toLowerCase().includes(nombreOrden.toLowerCase())).map((p, i) => (
+                          {[...new Set([...PROVEEDORES_HISTORICOS, ...proveedoresKommo.map(p => p.nombre_proveedor), ...ordenItems.map(i => i.proveedor || i.ultimo_proveedor || '').filter(Boolean)])].sort().filter(p => p.toLowerCase().includes(nombreOrden.toLowerCase())).map((p, i) => (
                             <div key={i} onMouseDown={() => { setNombreOrden(p); setProveedorOrdenSeleccionado(p); setShowProvSuggestions(false); }} style={{ padding: '8px 14px', cursor: 'pointer', fontSize: '0.87rem', borderBottom: '1px solid #F5EAEA' }} onMouseEnter={e => e.currentTarget.style.background='#FDF4F4'} onMouseLeave={e => e.currentTarget.style.background='#fff'}>
                               {p}
                             </div>
