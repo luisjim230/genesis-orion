@@ -647,11 +647,14 @@ export default function TrazabilidadPage() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: ords }, { data: its }, { data: cola }] = await Promise.all([
+    // Cargar pendientes/parciales y completos por separado para superar el límite de 1000 rows
+    const [{ data: ords }, { data: itsPend }, { data: itsComp }, { data: cola }] = await Promise.all([
       supabase.from('ordenes_compra').select('*').order('fecha_orden', { ascending: false }),
-      supabase.from('ordenes_compra_items').select('*').neq('estado_item', 'cancelado').range(0, 4999),
+      supabase.from('ordenes_compra_items').select('*').in('estado_item', ['pendiente', 'parcial']),
+      supabase.from('ordenes_compra_items').select('*').eq('estado_item', 'completo').order('fecha_recepcion', { ascending: false }).limit(500),
       supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null),
     ])
+    const its = [...(itsPend||[]), ...(itsComp||[])]
     // Enriquecer ordenes con pdf_url de cola
     const colaMap = {}
     ;(cola||[]).forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
