@@ -649,7 +649,7 @@ export default function TrazabilidadPage() {
     setLoading(true)
     const [{ data: ords }, { data: its }, { data: cola }] = await Promise.all([
       supabase.from('ordenes_compra').select('*').order('fecha_orden', { ascending: false }),
-      supabase.from('ordenes_compra_items').select('*').limit(5000),
+      supabase.from('ordenes_compra_items').select('*').neq('estado_item', 'cancelado').range(0, 4999),
       supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null),
     ])
     // Enriquecer ordenes con pdf_url de cola
