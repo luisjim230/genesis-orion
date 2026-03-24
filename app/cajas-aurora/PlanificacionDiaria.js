@@ -2,16 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 
-const CONCEPTOS = [
-  'N. Crédito',
-  'Transferencia',
-  'Chofer',
-  'Peajes',
-  'Gasolina',
-  'Encomienda',
-  'Desayuno/Almuerzo',
-  'Otro',
-];
+// Sugerencias de conceptos frecuentes (el usuario puede escribir lo que quiera)
+const SUGERENCIAS = ['N. Crédito', 'Transferencia', 'Chofer', 'Peajes', 'Gasolina', 'Encomienda', 'Desayuno', 'Almuerzo'];
 
 const fmt = (n) => Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const today = () => new Date().toISOString().split('T')[0];
@@ -24,7 +16,8 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   const [saving, setSaving] = useState(false);
 
   // Form para nuevo movimiento
-  const [concepto, setConcepto] = useState('N. Crédito');
+  const [concepto, setConcepto] = useState('');
+  const [msgGuardado, setMsgGuardado] = useState(null);
   const [descripcion, setDescripcion] = useState('');
   const [monto, setMonto] = useState('');
   const [responsable, setResponsable] = useState('');
@@ -48,6 +41,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   useEffect(() => { fetchDia(); }, [fetchDia]);
 
   const agregar = async () => {
+    if (!concepto.trim()) return;
     if (!monto || parseFloat(monto) === 0) return;
     setSaving(true);
     const { error } = await supabase.from('planificacion_diaria').insert({
@@ -74,10 +68,25 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   };
 
   const guardarApertura = async () => {
-    if (!movimientos.length) return;
-    for (const m of movimientos) {
-      await supabase.from('planificacion_diaria').update({ apertura_siguiente: parseFloat(apertura) || 0 }).eq('id', m.id);
+    const val = parseFloat(apertura) || 0;
+    if (movimientos.length > 0) {
+      for (const m of movimientos) {
+        await supabase.from('planificacion_diaria').update({ apertura_siguiente: val }).eq('id', m.id);
+      }
+    } else {
+      // Si no hay movimientos, crear uno de tipo "Apertura" para guardar el valor
+      await supabase.from('planificacion_diaria').insert({
+        fecha,
+        concepto: 'Apertura',
+        descripcion: 'Apertura día siguiente',
+        monto: 0,
+        apertura_siguiente: val,
+        created_by: usuario || 'cajera',
+      });
+      await fetchDia();
     }
+    setMsgGuardado('Apertura guardada correctamente');
+    setTimeout(() => setMsgGuardado(null), 3000);
   };
 
   // Totales por concepto
@@ -126,6 +135,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
             <div style={{ display:'flex', gap:8 }}>
               <input type="number" style={{ ...S.input, width:150 }} value={apertura} onChange={e => setApertura(e.target.value)} placeholder="8000" />
               <button style={{ ...S.btn, padding:'8px 14px', fontSize:'0.82rem' }} onClick={guardarApertura}>Guardar</button>
+              {msgGuardado && <span style={{ fontSize:'0.82rem', color:'#15803d', fontWeight:600 }}>{msgGuardado}</span>}
             </div>
           </div>
           <div style={{ flex:1, textAlign:'right' }}>
@@ -154,9 +164,10 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr auto', gap:12, alignItems:'flex-end' }}>
           <div>
             <div style={S.label}>Concepto</div>
-            <select style={S.select} value={concepto} onChange={e => setConcepto(e.target.value)}>
-              {CONCEPTOS.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <input list="conceptos-list" style={S.input} value={concepto} onChange={e => setConcepto(e.target.value)} placeholder="Ej: N. Crédito, Transf..." />
+            <datalist id="conceptos-list">
+              {SUGERENCIAS.map(c => <option key={c} value={c} />)}
+            </datalist>
           </div>
           <div>
             <div style={S.label}>Descripción</div>
