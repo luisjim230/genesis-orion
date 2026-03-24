@@ -173,8 +173,7 @@ export default function TareasEquipoPage(){
 
   const tabStyle = (active) => ({padding:'8px 20px',borderRadius:10,border:'none',cursor:'pointer',fontFamily:'Rubik,sans-serif',fontSize:13,fontWeight:active?600:400,background:active?GOLD:'rgba(255,255,255,0.5)',color:active?'#fff':'rgba(0,0,0,0.55)',transition:'all 0.2s'});
 
-  // Auto-fill solicitado_por on first render
-  useEffect(()=>{if(perfil?.nombre && !form.solicitado_por && showForm && !editId) setForm(f=>({...f,solicitado_por:perfil.nombre}))},[perfil,showForm,editId]);
+  // Auto-fill removed — solicitado_por set on button click below
 
   return (
     <div style={{maxWidth:900,margin:'0 auto',padding:'0 16px'}}>
@@ -188,7 +187,7 @@ export default function TareasEquipoPage(){
         <button style={tabStyle(tab==='finalizadas')} onClick={()=>setTab('finalizadas')}>Finalizadas ({finalizadas.length})</button>
         <button style={tabStyle(tab==='todas')} onClick={()=>setTab('todas')}>Todas ({tareas.length})</button>
         <div style={{flex:1}}/>
-        {!showForm && btn('+ Nueva Tarea',()=>{setEditId(null);setForm(blank());setShowForm(true)})}
+        {!showForm && btn('+ Nueva Tarea',()=>{setEditId(null);setForm({...blank(),solicitado_por:perfil?.nombre||''});setShowForm(true)})}
       </div>
 
       <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap'}}>
