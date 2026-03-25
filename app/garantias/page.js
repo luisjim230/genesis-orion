@@ -457,6 +457,8 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
         prioridad: form.prioridad,
         observaciones: form.observaciones || null,
         estado: 'pendiente',
+        creado_por: perfil?.nombre || 'Sistema',
+        creado_en: new Date().toISOString(),
         timeline,
       }
 
