@@ -31,9 +31,9 @@ const ESTADO_LABELS = {
 }
 
 const TIPO_CONFIG = {
-  garantia: { color: '#3b82f6', label: '\uD83D\uDD27 Garant\u00eda' },
-  reparacion: { color: '#8b5cf6', label: '\uD83D\uDD28 Reparaci\u00f3n' },
-  cambio: { color: '#f97316', label: '\uD83D\uDD04 Cambio' },
+  garantia: { color: '#3b82f6', label: '🔧 Garantía' },
+  reparacion: { color: '#8b5cf6', label: '🔨 Reparación' },
+  cambio: { color: '#f97316', label: '🔄 Cambio' },
 }
 
 const PRIORIDAD_COLORS = { alta: '#ef4444', media: '#f97316', baja: '#22c55e' }
@@ -277,10 +277,10 @@ function VistaLista({ casos, busqueda, setBusqueda, tabActivo, setTabActivo, onN
   const resueltosEsteMes = casos.filter(c => c.estado === 'resuelto' && new Date(c.updated_at || c.created_at) >= inicioMes).length
 
   const kpis = [
-    { label: 'Pendientes', valor: casos.filter(c => c.estado === 'pendiente').length, color: ESTADO_COLORS.pendiente, emoji: '\u23F3' },
-    { label: 'En Proceso', valor: casos.filter(c => c.estado === 'en_proceso').length, color: ESTADO_COLORS.en_proceso, emoji: '\u2699\uFE0F' },
-    { label: 'Esp. Proveedor', valor: casos.filter(c => c.estado === 'esperando_proveedor').length, color: ESTADO_COLORS.esperando_proveedor, emoji: '\uD83D\uDCE6' },
-    { label: 'Resueltos (mes)', valor: resueltosEsteMes, color: ESTADO_COLORS.resuelto, emoji: '\u2705' },
+    { label: 'Pendientes', valor: casos.filter(c => c.estado === 'pendiente').length, color: ESTADO_COLORS.pendiente, emoji: '⏳' },
+    { label: 'En Proceso', valor: casos.filter(c => c.estado === 'en_proceso').length, color: ESTADO_COLORS.en_proceso, emoji: '⚙' },
+    { label: 'Esp. Proveedor', valor: casos.filter(c => c.estado === 'esperando_proveedor').length, color: ESTADO_COLORS.esperando_proveedor, emoji: '📦' },
+    { label: 'Resueltos (mes)', valor: resueltosEsteMes, color: ESTADO_COLORS.resuelto, emoji: '✅' },
   ]
 
   const tabs = [
@@ -294,7 +294,7 @@ function VistaLista({ casos, busqueda, setBusqueda, tabActivo, setTabActivo, onN
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: '1.5em', fontWeight: 700, margin: 0, fontFamily: 'Rubik, sans-serif' }}>
-          \uD83D\uDD04 Devoluciones y Garant\u00edas
+          🔄 Devoluciones y Garantías
         </h1>
         <button style={S.btn(GOLD)} onClick={onNuevo}>+ Nuevo Caso</button>
       </div>
@@ -424,7 +424,7 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
 
   async function guardar() {
     if (!form.cliente_nombre || !form.producto_nombre || !form.fecha_recepcion || !form.motivo_dano) {
-      alert('Completa los campos obligatorios: nombre del cliente, producto, fecha de recepci\u00f3n y motivo del da\u00f1o.')
+      alert('Completa los campos obligatorios: nombre del cliente, producto, fecha de recepción y motivo del daño.')
       return
     }
 
@@ -478,10 +478,10 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
   return (
     <>
       <button style={{ ...S.btnOutline, marginBottom: 16 }} onClick={onVolver}>
-        \u2190 Volver a lista
+        ← Volver a lista
       </button>
       <h2 style={{ fontSize: '1.3em', fontWeight: 700, marginBottom: 20, fontFamily: 'Rubik, sans-serif' }}>
-        Nuevo Caso de Garant\u00eda / Devoluci\u00f3n
+        Nuevo Caso de Garantía / Devolución
       </h2>
 
       {/* Datos del Cliente */}
@@ -495,25 +495,25 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
             <input style={S.input} value={form.cliente_nombre} onChange={e => set('cliente_nombre', e.target.value)} placeholder="Nombre completo" />
           </div>
           <div>
-            <label style={S.label}>N\u00famero de factura</label>
+            <label style={S.label}>Número de factura</label>
             <input style={S.input} value={form.cliente_factura} onChange={e => set('cliente_factura', e.target.value)} placeholder="Factura" />
           </div>
           <div>
-            <label style={S.label}>Tel\u00e9fono</label>
-            <input style={S.input} value={form.cliente_telefono} onChange={e => set('cliente_telefono', e.target.value)} placeholder="Tel\u00e9fono" />
+            <label style={S.label}>Teléfono</label>
+            <input style={S.input} value={form.cliente_telefono} onChange={e => set('cliente_telefono', e.target.value)} placeholder="Teléfono" />
           </div>
         </div>
       </div>
 
-      {/* Producto y Da\u00f1o */}
+      {/* Producto y Daño */}
       <div style={S.card}>
         <h3 style={{ fontSize: '0.95em', fontWeight: 700, marginBottom: 14, color: GOLD, fontFamily: 'Rubik, sans-serif' }}>
-          Producto y Da\u00f1o
+          Producto y Daño
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <label style={S.label}>C\u00f3digo de producto</label>
-            <input style={S.input} value={form.producto_codigo} onChange={e => set('producto_codigo', e.target.value)} placeholder="C\u00f3digo" />
+            <label style={S.label}>Código de producto</label>
+            <input style={S.input} value={form.producto_codigo} onChange={e => set('producto_codigo', e.target.value)} placeholder="Código" />
           </div>
           <div>
             <label style={S.label}>Nombre del producto *</label>
@@ -521,12 +521,12 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
           </div>
         </div>
         <div style={{ marginBottom: 14 }}>
-          <label style={S.label}>Fecha de recepci\u00f3n *</label>
+          <label style={S.label}>Fecha de recepción *</label>
           <input style={{ ...S.input, maxWidth: 220 }} type="date" value={form.fecha_recepcion} onChange={e => set('fecha_recepcion', e.target.value)} />
         </div>
         <div>
-          <label style={S.label}>Motivo del da\u00f1o *</label>
-          <textarea style={S.textarea} value={form.motivo_dano} onChange={e => set('motivo_dano', e.target.value)} placeholder="Descripci\u00f3n del da\u00f1o o motivo de devoluci\u00f3n..." />
+          <label style={S.label}>Motivo del daño *</label>
+          <textarea style={S.textarea} value={form.motivo_dano} onChange={e => set('motivo_dano', e.target.value)} placeholder="Descripción del daño o motivo de devolución..." />
         </div>
       </div>
 
@@ -541,8 +541,8 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
             <label style={S.label}>Tipo de proceso</label>
             <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
               {[
-                { val: 'garantia', label: 'Garant\u00eda' },
-                { val: 'reparacion', label: 'Reparaci\u00f3n' },
+                { val: 'garantia', label: 'Garantía' },
+                { val: 'reparacion', label: 'Reparación' },
                 { val: 'cambio', label: 'Cambio' },
               ].map(t => (
                 <label key={t.val} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.84em', cursor: 'pointer', fontFamily: 'Rubik, sans-serif' }}>
@@ -555,12 +555,7 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
           {/* Vendedor */}
           <div>
             <label style={S.label}>Vendedor encargado</label>
-            <select style={S.select} value={form.vendedor_encargado} onChange={e => set('vendedor_encargado', e.target.value)}>
-              <option value="">Seleccionar...</option>
-              {vendedores.map(v => (
-                <option key={v.id} value={v.nombre}>{v.nombre}</option>
-              ))}
-            </select>
+            <input style={S.input} value={form.vendedor_encargado} onChange={e => set('vendedor_encargado', e.target.value)} placeholder="Nombre del vendedor" />
           </div>
           {/* Proveedor */}
           <div>
@@ -594,7 +589,7 @@ function VistaNuevo({ vendedores, perfil, onVolver, onGuardado }) {
       {/* Save */}
       <div style={{ display: 'flex', gap: 12 }}>
         <button style={S.btn(GOLD)} onClick={guardar} disabled={guardando}>
-          {guardando ? 'Guardando...' : '\uD83D\uDCBE Guardar Caso'}
+          {guardando ? 'Guardando...' : '💾 Guardar Caso'}
         </button>
         <button style={S.btnOutline} onClick={onVolver}>Cancelar</button>
       </div>
@@ -666,7 +661,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
   }
 
   async function cerrarCaso() {
-    if (!confirm('\u00bfSeguro que deseas cerrar este caso?')) return
+    if (!confirm('¿Seguro que deseas cerrar este caso?')) return
     setGuardando(true)
     const nuevoTimeline = [
       ...timeline,
@@ -683,7 +678,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
   }
 
   async function cancelarCaso() {
-    if (!confirm('\u00bfSeguro que deseas cancelar este caso? Esta acci\u00f3n no se puede deshacer.')) return
+    if (!confirm('¿Seguro que deseas cancelar este caso? Esta acción no se puede deshacer.')) return
     setGuardando(true)
     const nuevoTimeline = [
       ...timeline,
@@ -732,7 +727,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
   return (
     <>
       <button style={{ ...S.btnOutline, marginBottom: 16 }} onClick={onVolver}>
-        \u2190 Volver a lista
+        ← Volver a lista
       </button>
 
       {/* Header */}
@@ -746,17 +741,17 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
           {caso.prioridad && (
             <span style={S.badge(prioridadColor)}>{caso.prioridad.charAt(0).toUpperCase() + caso.prioridad.slice(1)}</span>
           )}
-          <span style={{ fontSize: '0.82em', color: MUTED }}>{dias} d\u00edas abierto</span>
+          <span style={{ fontSize: '0.82em', color: MUTED }}>{dias} días abierto</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {!editando && (
             <button style={S.btn('#3b82f6')} onClick={() => setEditando(true)}>
-              \u270F\uFE0F Editar
+              ✏ Editar
             </button>
           )}
           {caso.estado !== 'cerrado' && caso.estado !== 'cancelado' && (
             <button style={S.btn('#22c55e')} onClick={cerrarCaso} disabled={guardando}>
-              \u2705 Cerrar Caso
+              ✅ Cerrar Caso
             </button>
           )}
         </div>
@@ -778,7 +773,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
               <input style={S.input} value={editForm.cliente_factura} onChange={e => setEditForm(p => ({ ...p, cliente_factura: e.target.value }))} />
             </div>
             <div>
-              <label style={S.label}>Tel\u00e9fono</label>
+              <label style={S.label}>Teléfono</label>
               <input style={S.input} value={editForm.cliente_telefono} onChange={e => setEditForm(p => ({ ...p, cliente_telefono: e.target.value }))} />
             </div>
             <div>
@@ -786,7 +781,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
               <input style={S.input} value={editForm.producto_nombre} onChange={e => setEditForm(p => ({ ...p, producto_nombre: e.target.value }))} />
             </div>
             <div>
-              <label style={S.label}>C\u00f3digo</label>
+              <label style={S.label}>Código</label>
               <input style={S.input} value={editForm.producto_codigo} onChange={e => setEditForm(p => ({ ...p, producto_codigo: e.target.value }))} />
             </div>
             <div>
@@ -795,10 +790,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
             </div>
             <div>
               <label style={S.label}>Vendedor</label>
-              <select style={S.select} value={editForm.vendedor_encargado} onChange={e => setEditForm(p => ({ ...p, vendedor_encargado: e.target.value }))}>
-                <option value="">Seleccionar...</option>
-                {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
-              </select>
+              <input style={S.input} value={editForm.vendedor_encargado} onChange={e => setEditForm(p => ({ ...p, vendedor_encargado: e.target.value }))} placeholder="Nombre del vendedor" />
             </div>
             <div>
               <label style={S.label}>Prioridad</label>
@@ -810,7 +802,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
-            <label style={S.label}>Motivo del da\u00f1o</label>
+            <label style={S.label}>Motivo del daño</label>
             <textarea style={S.textarea} value={editForm.motivo_dano} onChange={e => setEditForm(p => ({ ...p, motivo_dano: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 14 }}>
@@ -836,10 +828,10 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
               Datos del Cliente
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><span style={S.label}>Nombre</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_nombre || '\u2014'}</div></div>
-              <div><span style={S.label}>Tel\u00e9fono</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_telefono || '\u2014'}</div></div>
-              <div><span style={S.label}>Factura</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_factura || '\u2014'}</div></div>
-              <div><span style={S.label}>Fecha recepci\u00f3n</span><div style={{ fontSize: '0.88em' }}>{fmtFecha(caso.fecha_recepcion)}</div></div>
+              <div><span style={S.label}>Nombre</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_nombre || '—'}</div></div>
+              <div><span style={S.label}>Teléfono</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_telefono || '—'}</div></div>
+              <div><span style={S.label}>Factura</span><div style={{ fontSize: '0.88em' }}>{caso.cliente_factura || '—'}</div></div>
+              <div><span style={S.label}>Fecha recepción</span><div style={{ fontSize: '0.88em' }}>{fmtFecha(caso.fecha_recepcion)}</div></div>
             </div>
           </div>
 
@@ -849,20 +841,20 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
               Producto
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><span style={S.label}>Nombre</span><div style={{ fontSize: '0.88em' }}>{caso.producto_nombre || '\u2014'}</div></div>
-              <div><span style={S.label}>C\u00f3digo</span><div style={{ fontSize: '0.88em' }}>{caso.producto_codigo || '\u2014'}</div></div>
-              <div><span style={S.label}>Proveedor</span><div style={{ fontSize: '0.88em' }}>{caso.proveedor || '\u2014'}</div></div>
+              <div><span style={S.label}>Nombre</span><div style={{ fontSize: '0.88em' }}>{caso.producto_nombre || '—'}</div></div>
+              <div><span style={S.label}>Código</span><div style={{ fontSize: '0.88em' }}>{caso.producto_codigo || '—'}</div></div>
+              <div><span style={S.label}>Proveedor</span><div style={{ fontSize: '0.88em' }}>{caso.proveedor || '—'}</div></div>
             </div>
           </div>
 
-          {/* Motivo de Da\u00f1o */}
+          {/* Motivo de Daño */}
           <div style={S.card}>
             <h3 style={{ fontSize: '0.9em', fontWeight: 700, marginBottom: 12, color: GOLD, fontFamily: 'Rubik, sans-serif' }}>
-              Motivo del Da\u00f1o
+              Motivo del Daño
             </h3>
-            <p style={{ fontSize: '0.88em', lineHeight: 1.5, margin: 0 }}>{caso.motivo_dano || '\u2014'}</p>
+            <p style={{ fontSize: '0.88em', lineHeight: 1.5, margin: 0 }}>{caso.motivo_dano || '—'}</p>
             <div style={{ marginTop: 12, padding: '16px', background: 'rgba(0,0,0,0.03)', borderRadius: 10, textAlign: 'center', color: MUTED, fontSize: '0.8em' }}>
-              \uD83D\uDCF7 Fotos del da\u00f1o (pr\u00f3ximamente)
+              📷 Fotos del daño (próximamente)
             </div>
           </div>
 
@@ -873,7 +865,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
             </h3>
             {[
               { campo: 'respuesta_proveedor', label: 'Respuesta del proveedor', val: respuestaProveedor, setVal: setRespuestaProveedor, type: 'text' },
-              { campo: 'boleta_devolucion', label: 'Boleta de devoluci\u00f3n', val: boletaDevolucion, setVal: setBoletaDevolucion, type: 'text' },
+              { campo: 'boleta_devolucion', label: 'Boleta de devolución', val: boletaDevolucion, setVal: setBoletaDevolucion, type: 'text' },
               { campo: 'fecha_retiro_proveedor', label: 'Fecha retiro proveedor', val: fechaRetiroProveedor, setVal: setFechaRetiroProveedor, type: 'date' },
               { campo: 'fecha_recibe_material', label: 'Fecha recibe material', val: fechaRecibeMaterial, setVal: setFechaRecibeMaterial, type: 'date' },
               { campo: 'fecha_cliente_retira', label: 'Fecha cliente retira', val: fechaClienteRetira, setVal: setFechaClienteRetira, type: 'date' },
@@ -893,7 +885,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
                   onClick={() => guardarCampoProveedor(f.campo, f.val, f.label)}
                   disabled={guardando}
                 >
-                  \uD83D\uDCBE
+                  💾
                 </button>
               </div>
             ))}
@@ -902,10 +894,10 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
 
         {/* RIGHT column */}
         <div>
-          {/* L\u00ednea de Tiempo */}
+          {/* Línea de Tiempo */}
           <div style={S.card}>
             <h3 style={{ fontSize: '0.9em', fontWeight: 700, marginBottom: 16, color: GOLD, fontFamily: 'Rubik, sans-serif' }}>
-              L\u00ednea de Tiempo
+              Línea de Tiempo
             </h3>
             {timeline.length === 0 && (
               <div style={{ color: MUTED, fontSize: '0.84em', textAlign: 'center', padding: 20 }}>
@@ -956,17 +948,17 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
             </div>
           </div>
 
-          {/* Agregar Actualizaci\u00f3n */}
+          {/* Agregar Actualización */}
           {caso.estado !== 'cerrado' && caso.estado !== 'cancelado' && (
             <div style={S.card}>
               <h3 style={{ fontSize: '0.9em', fontWeight: 700, marginBottom: 12, color: GOLD, fontFamily: 'Rubik, sans-serif' }}>
-                Agregar Actualizaci\u00f3n
+                Agregar Actualización
               </h3>
               <textarea
                 style={{ ...S.textarea, marginBottom: 10 }}
                 value={nuevaActualizacion}
                 onChange={e => setNuevaActualizacion(e.target.value)}
-                placeholder="Escribe una actualizaci\u00f3n..."
+                placeholder="Escribe una actualización..."
               />
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <select style={{ ...S.select, flex: 1 }} value={nuevoEstado} onChange={e => setNuevoEstado(e.target.value)}>
@@ -992,7 +984,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
                 onClick={cancelarCaso}
                 disabled={guardando}
               >
-                \u274C Cancelar Caso
+                ❌ Cancelar Caso
               </button>
             </div>
           )}
