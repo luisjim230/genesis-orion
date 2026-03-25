@@ -14,6 +14,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   const [apertura, setApertura] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [historial, setHistorial] = useState([]);
 
   // Form para nuevo movimiento
   const [concepto, setConcepto] = useState('');
@@ -39,6 +40,29 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   }, [fecha]);
 
   useEffect(() => { fetchDia(); }, [fetchDia]);
+
+  // Cargar historial de los últimos 30 días
+  useEffect(() => {
+    (async () => {
+      const hace30 = new Date();
+      hace30.setDate(hace30.getDate() - 30);
+      const { data } = await supabase
+        .from('planificacion_diaria')
+        .select('*')
+        .gte('fecha', hace30.toISOString().split('T')[0])
+        .order('fecha', { ascending: false })
+        .order('created_at', { ascending: true });
+      if (data) {
+        // Agrupar por fecha
+        const grouped = {};
+        data.forEach(m => {
+          if (!grouped[m.fecha]) grouped[m.fecha] = [];
+          grouped[m.fecha].push(m);
+        });
+        setHistorial(Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])));
+      }
+    })();
+  }, [movimientos]);
 
   const agregar = async () => {
     if (!concepto.trim()) return;
@@ -186,7 +210,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
         </div>
       </div>
 
-      {/* Tabla de movimientos */}
+      {/* Tabla de movimientos del día seleccionado */}
       <div style={S.card}>
         {loading ? (
           <div style={{ textAlign:'center', color:'rgba(0,0,0,0.3)', padding:40 }}>Cargando...</div>
@@ -232,6 +256,54 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
           </div>
         )}
       </div>
+
+      {/* Historial de días — tarjetas como en Cierre de Caja */}
+      {historial.length > 0 && (
+        <div>
+          <div style={{ fontSize:'0.78rem', fontWeight:700, color:'rgba(0,0,0,0.35)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:12, marginTop:8 }}>
+            Historial — últimos 30 días · {historial.length} registros
+          </div>
+          {historial.map(([fechaH, movs]) => {
+            const totH = {};
+            let totalH = 0;
+            movs.forEach(m => {
+              if (m.monto > 0) {
+                totH[m.concepto] = (totH[m.concepto] || 0) + Number(m.monto);
+                totalH += Number(m.monto);
+              }
+            });
+            const aperturaH = movs[0]?.apertura_siguiente || 0;
+            const fechaObj = new Date(fechaH + 'T12:00:00');
+            const dia = fechaObj.toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long' });
+            const esHoy = fechaH === today();
+            return (
+              <div key={fechaH} style={{ ...S.card, cursor:'pointer', border: esHoy ? '2px solid #c8a84b' : S.card.border }}
+                onClick={() => setFecha(fechaH)}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                  <div style={{ fontWeight:700, fontSize:'0.92rem', color:'rgba(0,0,0,0.8)' }}>
+                    {dia}{esHoy && <span style={{ marginLeft:8, fontSize:'0.72rem', color:'#c8a84b', fontWeight:600 }}>HOY</span>}
+                  </div>
+                  <div style={{ fontSize:'1.1rem', fontWeight:700, color:'#c8a84b' }}>₡{fmt(totalH)}</div>
+                </div>
+                <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                  {Object.entries(totH).map(([c, t]) => (
+                    <div key={c} style={{ fontSize:'0.78rem' }}>
+                      <span style={{ color:'rgba(0,0,0,0.4)' }}>{c}</span>
+                      <span style={{ marginLeft:6, fontWeight:700, color: conceptoColor[c] || '#333' }}>₡{fmt(t)}</span>
+                      <span style={{ marginLeft:4, color:'rgba(0,0,0,0.25)', fontSize:'0.72rem' }}>{movs.filter(m => m.concepto === c).length} mov.</span>
+                    </div>
+                  ))}
+                </div>
+                {aperturaH > 0 && (
+                  <div style={{ marginTop:8, fontSize:'0.75rem', color:'rgba(0,0,0,0.35)' }}>
+                    Apertura día siguiente: ₡{fmt(aperturaH)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
