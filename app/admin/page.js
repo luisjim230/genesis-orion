@@ -37,6 +37,7 @@ const MODULOS = [
   { key:'pagos',        label:'Coordinación de pagos', emoji:'💸' },
   { key:'tareas-equipo',label:'Tareas Equipo',  emoji:'📋' },
   { key:'materiales',   label:'Cálculo de materiales', emoji:'🧱' },
+  { key:'garantias',   label:'Devoluciones y Garantías', emoji:'🔄' },
   { key:'vendedores',   label:'Vendedores',      emoji:'🏷️' },
   { key:'admin',        label:'Admin',           emoji:'🔐' },
 ]

@@ -11,7 +11,7 @@ const ALL_NAV=[
   {group:'Comercial',items:[{href:'/comercial',key:'comercial',icon:'💼',name:'Comercial'}]},
   {group:'Importaciones',items:[{href:'/cif',key:'cif',icon:'🧮',name:'Calculadora de importación'},{href:'/contenedores',key:'contenedores',icon:'🚢',name:'Cargas en tránsito'},{href:'/mercado',key:'mercado',icon:'⚡',name:'Mercado'}]},
   {group:'Operaciones',items:[{href:'/cajas-aurora',key:'cajas-aurora',icon:'🌅',name:'Cajas'}]},{group:'Transportes',items:[{href:'/entregas',key:'entregas',icon:'🚛',name:'Entregas · Trazabilidad'}]},{group:'Gestión',items:[{href:'/finanzas',key:'finanzas',icon:'💰',name:'Finanzas'},{href:'/finanzas/bancos',key:'bancos',icon:'🏦',name:'Bancos'},{href:'/pagos',key:'pagos',icon:'💸',name:'Coordinación de pagos'},{href:'/tareas',key:'tareas',icon:'✅',name:'Tareas'},{href:'/tareas-equipo',key:'tareas-equipo',icon:'📋',name:'Tareas Equipo'},{href:'/social',key:'social',icon:'📱',name:'Redes Sociales'},{href:'/kommo-proveedores',key:'kommo-proveedores',icon:'📲',name:'WhatsApp Proveedores'}]},
-  {group:'Herramientas',items:[{href:'/ponderacion',key:'ponderacion',icon:'⚖️',name:'Promedios ponderados'},{href:'/materiales',key:'materiales',icon:'🧱',name:'Cálculo de materiales'}]},
+  {group:'Herramientas',items:[{href:'/ponderacion',key:'ponderacion',icon:'⚖️',name:'Promedios ponderados'},{href:'/materiales',key:'materiales',icon:'🧱',name:'Cálculo de materiales'},{href:'/garantias',key:'garantias',icon:'🔄',name:'Devoluciones y Garantías'}]},
   {group:'Admin',items:[{href:'/admin',key:'admin',icon:'👥',name:'Usuarios',adminOnly:true}]},
 ];
 const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8a84b',logistica:'#b794f4'};

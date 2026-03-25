@@ -23,6 +23,7 @@ const NAV = [
   { href: '/kommo-proveedores', icon: '📲', name: 'WhatsApp Proveedores' },
   { href: '/ponderacion',       icon: '⚖️', name: 'Ponderados' },
   { href: '/materiales',        icon: '🧱', name: 'Materiales' },
+  { href: '/garantias',         icon: '🔄', name: 'Garantías' },
   { href: '/vendedores',        icon: '🏷️', name: 'Vendedores' },
 ];
 
