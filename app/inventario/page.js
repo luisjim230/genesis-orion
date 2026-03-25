@@ -76,10 +76,7 @@ function ColFilter({ label, values, selected, onSelect, onSort, activeSort }) {
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.3 }}>{label}</span>
-      <button onClick={() => setOpen(o => !o)} style={{ background: isActive ? 'var(--orange, #f97316)' : '#e5e7eb', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: isActive ? 'white' : '#6b7280', flexShrink: 0 }} title="Filtrar / Ordenar">
-      <div style={{ marginBottom:12 }}>
-        <SyncBadge reporteIds={["minimos_maximos", "items_lista_general", "items_comprados"]} label="Datos inventario" />
-      </div>{isActive ? '▼' : '▾'}</button>
+      <button onClick={() => setOpen(o => !o)} style={{ background: isActive ? 'var(--orange, #f97316)' : '#e5e7eb', border: 'none', borderRadius: 4, width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: isActive ? 'white' : '#6b7280', flexShrink: 0 }} title="Filtrar / Ordenar">{isActive ? '▼' : '▾'}</button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 9999, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.14)', minWidth: 200, padding: 8 }}>
           <div style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: 6, marginBottom: 6 }}>
@@ -133,6 +130,25 @@ export default function Inventario() {
   // { [proveedor]: { [codigo]: cantidad } }
   const [cantidadesEditadas, setCantidadesEditadas] = useState({});
   const [sortProveedores, setSortProveedores] = useState({});
+
+  // ── Ítems ocultos de sugerencia de compras ──────────────────────────────
+  const [itemsOcultos, setItemsOcultos] = useState(new Set());
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  useEffect(() => {
+    supabase.from('items_ocultos_compras').select('codigo,proveedor').then(({ data }) => {
+      if (data) setItemsOcultos(new Set(data.map(d => `${d.codigo}__${d.proveedor || ''}`)));
+    });
+  }, []);
+  async function ocultarItem(codigo, proveedor) {
+    const key = `${codigo}__${proveedor || ''}`;
+    await supabase.from('items_ocultos_compras').upsert({ codigo, proveedor, oculto_por: 'admin', fecha_oculto: new Date().toISOString() }, { onConflict: 'codigo,proveedor' });
+    setItemsOcultos(prev => new Set([...prev, key]));
+  }
+  async function mostrarItem(codigo, proveedor) {
+    const key = `${codigo}__${proveedor || ''}`;
+    await supabase.from('items_ocultos_compras').delete().eq('codigo', codigo).eq('proveedor', proveedor);
+    setItemsOcultos(prev => { const s = new Set(prev); s.delete(key); return s; });
+  }
 
   // ── NUEVO: estado de generación de ZIP ────────────────────────────────────
   const [zipGenerando, setZipGenerando] = useState(false)
@@ -294,9 +310,12 @@ export default function Inventario() {
   const calcAComprar = calc.filter(i => i._cantComprar > 0 || i._alerta === '🟡 Prestar atención');
 
   const porProveedor = {};
+  let totalOcultosCount = 0;
   calcAComprar.forEach(i => {
     const p = (i.ultimo_proveedor || 'Sin proveedor').trim();
     if (proveedoresPausados.has(p)) return;
+    const key = `${i.codigo}__${p}`;
+    if (itemsOcultos.has(key)) { totalOcultosCount++; if (!mostrarOcultos) return; }
     if (!porProveedor[p]) porProveedor[p] = [];
     porProveedor[p].push(i);
   });
@@ -571,6 +590,7 @@ export default function Inventario() {
               <span style={{ fontSize: '0.78rem', background: datos.length >= 4000 ? '#F0FFF4' : datos.length >= 1000 ? '#FFFBEB' : '#FFF5F5', color: datos.length >= 4000 ? '#276749' : datos.length >= 1000 ? '#7B341E' : '#C53030', border: '1px solid', borderColor: datos.length >= 4000 ? '#9AE6B4' : datos.length >= 1000 ? '#FAD776' : '#FEB2B2', borderRadius: 12, padding: '2px 10px', fontWeight: 600 }}>
                 {datos.length.toLocaleString()} registros en BD
               </span>
+              <SyncBadge reporteIds={["minimos_maximos", "items_lista_general", "items_comprados"]} label="Datos inventario" />
             </div>
           )}
 
@@ -627,6 +647,11 @@ export default function Inventario() {
                 <button className="btn-outline" onClick={() => setProveedoresSeleccionados(new Set(proveedoresList))}>☑️ Seleccionar todos</button>
                 <button className="btn-outline" onClick={() => setProveedoresSeleccionados(new Set())}>⬜ Deseleccionar todos</button>
                 <button className="btn-primary" onClick={() => { setCalc(calcularAlertas(datos, transitoMap, dias)); setCantidadesEditadas({}); }}>🔄 Recalcular propuesta</button>
+                {totalOcultosCount > 0 && (
+                  <button className="btn-outline" style={{ fontSize: '0.78rem', color: mostrarOcultos ? 'var(--orange)' : '#999' }} onClick={() => setMostrarOcultos(!mostrarOcultos)}>
+                    {mostrarOcultos ? `👁️ Ocultar desactivados (${totalOcultosCount})` : `👁️‍🗨️ Mostrar desactivados (${totalOcultosCount})`}
+                  </button>
+                )}
                 <div style={{ flex: 1 }} />
                 {/* ── NUEVO: Botón exportar ZIP masivo ── */}
                 <button
@@ -705,7 +730,9 @@ export default function Inventario() {
                                 { key: '_sugerencia', label: 'Cant. sugerida' },
                                 { key: '_cantComprar', label: 'Cant. a pedir ✏️' },
                                 { key: 'ultimo_costo', label: 'Último costo' },
+                                { key: '_ocultar', label: '' },
                               ].map(col => {
+                                if (col.key === '_ocultar') return <th key="_ocultar" style={{ width: 70 }}></th>;
                                 const active = sortProveedores[prov]?.col === col.key;
                                 const dir = sortProveedores[prov]?.dir;
                                 return (
@@ -764,6 +791,13 @@ export default function Inventario() {
                                     />
                                   </td>
                                   <td style={{ textAlign: 'right' }}><input type='number' value={parseFloat(item.ultimo_costo)||0} onChange={e => { e.stopPropagation(); const v=parseFloat(e.target.value)||0; setCalc(prev=>prev.map(x=>x.codigo===item.codigo?{...x,ultimo_costo:v}:x)); }} onClick={e=>e.stopPropagation()} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    {itemsOcultos.has(`${item.codigo}__${prov}`) ? (
+                                      <button onClick={() => mostrarItem(item.codigo, prov)} style={{ background: '#F0FFF4', color: '#276749', border: '1px solid #9AE6B4', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>✅ Activar</button>
+                                    ) : (
+                                      <button onClick={() => ocultarItem(item.codigo, prov)} style={{ background: '#FFF5F5', color: '#C53030', border: '1px solid #FEB2B2', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>🚫 Ocultar</button>
+                                    )}
+                                  </td>
                                 </tr>
                               );
                             })}
