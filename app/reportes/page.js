@@ -137,6 +137,17 @@ const REPORTES = {
     columnas_originales:['Factura',' Fecha',' Modo de pago',' Vendedor',' Cliente',' Subtotal',' Descuento',' Impuesto',' Total',' Observaciones','Moneda'],
     modulos_destino:['vendedores'],
   },
+  neo_ordenes_compra_estado:{
+    nombre:'Lista de órdenes de compra', emoji:'📋',
+    descripcion:'Estado de OC en NEO: Registrada/Aplicada/Anulada, Comprada Sí/Parcial/No.',
+    header_row:1, titulo_valor:'Lista de órdenes de compra',
+    columnas:['numero_neo','estado_neo','fecha','fecha_entrega','hora','usuario_registro','comprada','compras','proveedor','termino_pago','referencia','observaciones','total','moneda'],
+    columnas_originales:['Número','Estado','Fecha','Fecha estimada de entrega','Hora','Usuario de registro','Comprada','Compras','Proveedor','Término de pago','Referencia','Observaciones','Total','Moneda'],
+    fecha_col:'fecha',
+    upsert_key:'numero_neo,proveedor',
+    modulos_destino:['trazabilidad'],
+    post_upload: 'cruzar_oc_trazabilidad',
+  },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -415,6 +426,11 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
       const idx = parseInt(idxStr);
       record[norm] = limpiar(row[idx], norm);
     }
+    // Extraer numero_sol de observaciones para OC de NEO
+    if (record.observaciones) {
+      const matchOC = String(record.observaciones).match(/OC-\d{4}-\d{4}/);
+      if (matchOC) record.numero_sol = matchOC[0];
+    }
     records.push(record);
   }
   
@@ -479,10 +495,14 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
     let intentos = 0;
     let ok = false;
     while (intentos < 3 && !ok) {
+      const cfgUpsert = Object.values(REPORTES).find(c => c.columnas && Object.keys(REPORTES).find(k => k === tabla && REPORTES[k].upsert_key));
+      const upsertKey = REPORTES[tabla]?.upsert_key;
       const { error } = tabla === 'neo_items_facturados'
         ? await supabase.from(tabla).upsert(batch, { onConflict: 'factura,codigo_interno' })
         : tabla === 'neo_lista_items'
         ? await supabase.from(tabla).upsert(batch, { onConflict: 'codigo_interno' })
+        : upsertKey
+        ? await supabase.from(tabla).upsert(batch, { onConflict: upsertKey })
         : await supabase.from(tabla).insert(batch);
       if (!error) {
         total += batch.length;
@@ -634,6 +654,39 @@ function TabSubir() {
             console.log('[SOL] Match trazabilidad auto:', matchData);
             if (matchData.ok) res.matchTrazabilidad = `✅ Match: ${matchData.completados} completos, ${matchData.parciales} parciales`;
           } catch(e) { console.warn('[SOL] Match auto falló:', e.message); }
+        }
+
+        // ── Auto-cruce OC NEO → Trazabilidad ──────────────────────────
+        if (tipo === 'neo_ordenes_compra_estado' && cantidad > 0) {
+          try {
+            // Leer las OC recién subidas que tienen numero_sol
+            const { data: ocsNeo } = await supabase
+              .from('neo_ordenes_compra_estado')
+              .select('numero_sol,comprada,estado_neo,numero_neo,proveedor')
+              .not('numero_sol', 'is', null);
+            if (ocsNeo?.length) {
+              let actualizados = 0;
+              for (const oc of ocsNeo) {
+                // Buscar la orden en SOL
+                const { data: ordenSol } = await supabase
+                  .from('ordenes_compra')
+                  .select('id')
+                  .eq('numero_orden', oc.numero_sol)
+                  .limit(1);
+                if (ordenSol?.length) {
+                  // Actualizar con el numero NEO y estado de compra
+                  await supabase.from('ordenes_compra').update({
+                    numero_neo: oc.numero_neo,
+                    estado_neo: oc.estado_neo,
+                    comprada_neo: oc.comprada,
+                  }).eq('id', ordenSol[0].id);
+                  actualizados++;
+                }
+              }
+              res.matchOC = `✅ Cruce OC: ${actualizados} órdenes actualizadas de ${ocsNeo.length} con número SOL`;
+              console.log(`[SOL] Cruce OC NEO → SOL: ${actualizados} actualizadas`);
+            }
+          } catch(e) { console.warn('[SOL] Cruce OC falló:', e.message); }
         }
 
         res.estado  = cantidad > 0 ? 'ok' : 'error';
