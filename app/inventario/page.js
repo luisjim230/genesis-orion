@@ -707,7 +707,8 @@ export default function Inventario() {
                               codigo: i.codigo,
                               nombre: i.nombre,
                               cantidad: getCantidad(prov, i.codigo, i._cantComprar),
-                              costo: parseFloat(i.ultimo_costo || i.costo_unitario || i.precio || 0)
+                              costo: parseFloat(i.ultimo_costo || i.costo_unitario || i.precio || 0),
+                              descuento: parseFloat(i.descuento) || 0
                             })).filter(i => i.cantidad > 0)
                             setModalWhatsApp({ proveedor: prov, items: ocItems })
                           }}
@@ -949,7 +950,7 @@ export default function Inventario() {
                       disabled={ordenItems.length === 0}
                       onClick={() => setModalWhatsApp({
                         proveedor: proveedorOrdenSeleccionado || nombreOrden,
-                        items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad, costo: parseFloat(i.costo)||0 }))
+                        items: ordenItems.map(i => ({ codigo: i.codigo, nombre: i.nombre, cantidad: i.cantidad, costo: parseFloat(i.costo)||0, descuento: parseFloat(i.descuento)||0 }))
                       })}
                     >📱 Enviar por WhatsApp</button>
                     <button className="btn-outline" style={{ color: '#E53E3E', borderColor: '#E53E3E' }} onClick={() => { if (confirm('¿Limpiar la orden?')) setOrdenItems([]); }}>🗑 Limpiar</button>
