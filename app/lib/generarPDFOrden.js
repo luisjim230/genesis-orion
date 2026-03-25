@@ -60,7 +60,9 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   const PAGE_H = 267
   for(let i=0;i<items.length;i++){
     const item=items[i]; const qty=Number(item.cantidad)||0
-    const precio=Number(item.costo||item.costo_unitario||item.precio||0); const total=qty*precio
+    const precioBase=Number(item.costo||item.costo_unitario||item.precio||0)
+    const desc=Number(item.descuento||0)
+    const precio=desc>0?precioBase*(1-desc/100):precioBase; const total=qty*precio
     if(y + rowH*2 > PAGE_H){ doc.addPage(); y=20; doc.setFillColor(...NAVY); doc.rect(tableX,y,W-40,rowH,"F"); doc.setTextColor(...WHITE);doc.setFontSize(7.5);doc.setFont("helvetica","bold"); cx=tableX; for(const col of cols){const tx=col.a==="right"?cx+col.w-2:col.a==="center"?cx+col.w/2:cx+2;doc.text(col.l,tx,y+4.2,{align:col.a==="left"?"left":col.a});cx+=col.w} y+=rowH; doc.setFont("helvetica","normal");doc.setFontSize(7.5); }
     if(i%2===0){doc.setFillColor(248,248,248);doc.rect(tableX,y,W-40,rowH*2,'F')}
     doc.setTextColor(...BLACK); cx=tableX
@@ -75,12 +77,15 @@ export async function generarPDFOrden({ numeroSol, proveedor, items, fecha }) {
   }
   doc.setDrawColor(...LIGHT);doc.setLineWidth(0.2)
   // Totales
-  y+=6; const subtotal=items.reduce((s,i)=>s+(Number(i.cantidad)||0)*(Number(i.costo||i.costo_unitario||i.precio||0)),0)
+  y+=6
+  const subtotalBruto=items.reduce((s,i)=>s+(Number(i.cantidad)||0)*(Number(i.costo||i.costo_unitario||i.precio||0)),0)
+  const totalDescuentos=items.reduce((s,i)=>{const q=Number(i.cantidad)||0;const p=Number(i.costo||i.costo_unitario||i.precio||0);const d=Number(i.descuento||0);return s+(d>0?q*p*(d/100):0)},0)
+  const subtotal=subtotalBruto-totalDescuentos
   doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(...BLACK)
   doc.text('Valor en letras:',20,y)
   const totX=120,totW=70
   const iva=subtotal*0.13
-  const totRows=[{l:'Subtotal:',v:fmtN(subtotal)},{l:'Descuentos:',v:fmtN(0)},{l:'IVA (13%):',v:fmtN(iva)}]
+  const totRows=[{l:'Subtotal:',v:fmtN(subtotalBruto)},{l:'Descuentos:',v:totalDescuentos>0?('-'+fmtN(totalDescuentos)):fmtN(0)},{l:'IVA (13%):',v:fmtN(iva)}]
   let ty=y
   for(const row of totRows){
     doc.setFont('helvetica','normal');doc.setFontSize(8.5)

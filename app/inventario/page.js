@@ -923,7 +923,7 @@ export default function Inventario() {
                           <td style={{ minWidth: 280 }}>{i.nombre}</td>
                           <td><input type="number" min="0" value={i.cantidad} onChange={e => actualizarCantidad(i.codigo, e.target.value)} className="module-input" style={{ width: 70, padding: '4px 8px' }} /></td>
                           <td style={{ textAlign: 'right' }}><input type='number' value={i.costo} onChange={e => setOrdenItems(prev => prev.map((x,xi) => xi===idx ? {...x, costo: parseFloat(e.target.value)||0} : x))} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
-                          <td style={{ textAlign: 'right' }}>{i.descuento}%</td>
+                          <td style={{ textAlign: 'right' }}><input type='number' min="0" max="100" step="1" value={i.descuento} onChange={e => setOrdenItems(prev => prev.map((x,xi) => xi===idx ? {...x, descuento: parseFloat(e.target.value)||0} : x))} style={{width:55,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} />%</td>
                           <td style={{ fontSize: '0.78em' }}>{i.proveedor || '—'}</td>
                         </tr>
                       ))}</tbody>
