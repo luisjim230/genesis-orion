@@ -181,7 +181,7 @@ export default function GarantiasPage() {
   async function cargarDatos() {
     setLoading(true)
     const [casosRes, vendedoresRes] = await Promise.all([
-      supabase.from('garantias_casos').select('*').order('created_at', { ascending: false }),
+      supabase.from('garantias_casos').select('*').order('creado_en', { ascending: false }),
       supabase.from('perfiles').select('id, nombre'),
     ])
     if (casosRes.data) setCasos(casosRes.data)
@@ -274,7 +274,7 @@ function VistaLista({ casos, busqueda, setBusqueda, tabActivo, setTabActivo, onN
 
   const ahora = new Date()
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  const resueltosEsteMes = casos.filter(c => c.estado === 'resuelto' && new Date(c.updated_at || c.created_at) >= inicioMes).length
+  const resueltosEsteMes = casos.filter(c => c.estado === 'resuelto' && new Date(c.cerrado_en || c.creado_en) >= inicioMes).length
 
   const kpis = [
     { label: 'Pendientes', valor: casos.filter(c => c.estado === 'pendiente').length, color: ESTADO_COLORS.pendiente, emoji: '⏳' },
@@ -384,7 +384,7 @@ function VistaLista({ casos, busqueda, setBusqueda, tabActivo, setTabActivo, onN
                     <td style={S.td}><span style={S.badge(tipo.color)}>{tipo.label}</span></td>
                     <td style={S.td}><span style={S.badge(estadoColor)}>{ESTADO_LABELS[c.estado] || c.estado}</span></td>
                     <td style={S.td}>{c.vendedor_encargado || '—'}</td>
-                    <td style={S.td}>{fmtFecha(c.created_at)}</td>
+                    <td style={S.td}>{fmtFecha(c.creado_en)}</td>
                     <td style={S.td}>
                       <button style={S.btnOutline} onClick={e => { e.stopPropagation(); onDetalle(c) }}>Ver</button>
                     </td>
@@ -616,7 +616,7 @@ function VistaDetalle({ caso, setCaso, vendedores, perfil, onVolver }) {
   const [fechaRecibeMaterial, setFechaRecibeMaterial] = useState(caso.fecha_recibe_material || '')
   const [fechaClienteRetira, setFechaClienteRetira] = useState(caso.fecha_cliente_retira || '')
 
-  const dias = diasAbierto(caso.created_at)
+  const dias = diasAbierto(caso.creado_en)
   const tipo = TIPO_CONFIG[caso.tipo_proceso] || { color: MUTED, label: caso.tipo_proceso }
   const estadoColor = ESTADO_COLORS[caso.estado] || MUTED
   const timeline = Array.isArray(caso.timeline) ? caso.timeline : []
