@@ -6,8 +6,33 @@ import PlanificacionDiaria from './PlanificacionDiaria'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-const fmt = (n) => Number(n || 0).toLocaleString('es-CR', { style: 'currency', currency: 'CRC', minimumFractionDigits: 0, maximumFractionDigits: 0 })
-const fmtNum = (n) => Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+// Parsear montos al estilo CR: "144.590" = 144590, "4.920.502" = 4920502, "144,60" = 144.60
+const parseMontoCR = (val) => {
+  if (!val && val !== 0) return 0
+  const s = String(val).trim().replace(/[₡\s]/g, '')
+  if (!s) return 0
+  // Si tiene coma, la coma es decimal (ej: "144,60")
+  if (s.includes(',')) {
+    const clean = s.replace(/\./g, '').replace(',', '.')
+    return Number(clean) || 0
+  }
+  // Si tiene múltiples puntos, son separadores de miles (ej: "4.920.502")
+  const dotCount = (s.match(/\./g) || []).length
+  if (dotCount > 1) return Number(s.replace(/\./g, '')) || 0
+  // Si tiene un solo punto: si hay exactamente 3 dígitos después, es separador de miles
+  if (dotCount === 1) {
+    const parts = s.split('.')
+    if (parts[1].length === 3) return Number(s.replace('.', '')) || 0
+    // Si no, es decimal normal
+    return Number(s) || 0
+  }
+  return Number(s) || 0
+}
+const fmt = (n) => {
+  const num = Number(n || 0)
+  return '₡' + Math.round(num).toLocaleString('es-CR')
+}
+const fmtNum = (n) => Math.round(Number(n || 0)).toLocaleString('es-CR')
 const today = () => new Date().toISOString().split('T')[0]
 
 const EMPTY_FORM = {
@@ -54,8 +79,8 @@ export default function CajasAurora() {
   useEffect(() => { fetchRegistros() }, [fetchRegistros])
 
   const calcDiferencia = (f) => {
-    const sumado = Number(f.efectivo||0) + Number(f.tarjeta||0) + Number(f.transferencia||0) + Number(f.credito||0) + Number(f.otros||0)
-    const sistema = Number(f.total_sistema||0)
+    const sumado = parseMontoCR(f.efectivo) + parseMontoCR(f.tarjeta) + parseMontoCR(f.transferencia) + parseMontoCR(f.credito) + parseMontoCR(f.otros)
+    const sistema = parseMontoCR(f.total_sistema)
     return sistema > 0 ? sumado - sistema : 0
   }
 
@@ -67,12 +92,12 @@ export default function CajasAurora() {
     const payload = {
       fecha: form.fecha,
       numero_caja: form.numero_caja || null,
-      efectivo: Number(form.efectivo||0),
-      tarjeta: Number(form.tarjeta||0),
-      transferencia: Number(form.transferencia||0),
-      credito: Number(form.credito||0),
-      otros: Number(form.otros||0),
-      total_sistema: Number(form.total_sistema||0),
+      efectivo: parseMontoCR(form.efectivo),
+      tarjeta: parseMontoCR(form.tarjeta),
+      transferencia: parseMontoCR(form.transferencia),
+      credito: parseMontoCR(form.credito),
+      otros: parseMontoCR(form.otros),
+      total_sistema: parseMontoCR(form.total_sistema),
       diferencia: calcDiferencia(form),
       observaciones: form.observaciones || null,
       incidencias: form.incidencias || null,
