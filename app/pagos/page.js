@@ -249,6 +249,7 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
   const bloqueado = sesion?.estado === 'pagado'
   const [cerrando, setCerrando] = useState(false)
   const [confirmCerrar, setConfirmCerrar] = useState(false)
+  const [filtroTipo, setFiltroTipo] = useState('todos')
 
   const porProveedor = {}
   for (const it of items) {
@@ -309,6 +310,24 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
         ))}
       </div>
 
+      {/* Filtros de tipo de pago */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {[
+          ['todos', 'Todos', 'var(--text-primary)', proveedores.length],
+          ['efectivo', '💵 Efectivo', '#276749', proveedores.filter(p => porProveedor[p].tipo_pago === 'efectivo').length],
+          ['transferencia', '🏦 Transferencia', '#0C447C', proveedores.filter(p => porProveedor[p].tipo_pago === 'transferencia').length],
+          ['conjunto', '🤝 Conjunto', '#854F0B', proveedores.filter(p => porProveedor[p].tipo_pago === 'conjunto').length],
+          ['no_pagar', '🚫 No pagar', '#999', proveedores.filter(p => porProveedor[p].tipo_pago === 'no_pagar').length],
+        ].map(([key, label, color, count]) => (
+          <button key={key} onClick={() => setFiltroTipo(key)} style={{
+            padding: '6px 14px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', border: 'none',
+            background: filtroTipo === key ? color : 'var(--cream)',
+            color: filtroTipo === key ? '#fff' : 'var(--text-muted)',
+            transition: 'all 0.15s',
+          }}>{label} ({count})</button>
+        ))}
+      </div>
+
       <div style={{ ...S.card, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
@@ -321,12 +340,28 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
             </tr>
           </thead>
           <tbody>
-            {proveedores.map((prov, i) => {
+            {proveedores
+              .filter(prov => filtroTipo === 'todos' || porProveedor[prov].tipo_pago === filtroTipo)
+              .sort((a, b) => {
+                const orden = { efectivo: 0, conjunto: 1, transferencia: 2, no_pagar: 3 }
+                const oa = orden[porProveedor[a].tipo_pago] ?? 9
+                const ob = orden[porProveedor[b].tipo_pago] ?? 9
+                return oa !== ob ? oa - ob : a.localeCompare(b)
+              })
+              .map((prov, i) => {
               const p = porProveedor[prov]
+              const esEfectivo = p.tipo_pago === 'efectivo'
+              const esNoPagar = p.tipo_pago === 'no_pagar'
               return (
-                <tr key={prov} style={{ background: i % 2 === 0 ? '#fff' : 'var(--cream)' }}>
-                  <td style={{ ...S.td, fontWeight: 600 }}>{prov}</td>
-                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{CRC(p.monto)}</td>
+                <tr key={prov} style={{
+                  background: esEfectivo ? '#e6f9ed' : esNoPagar ? '#f5f0f0' : i % 2 === 0 ? '#fff' : 'var(--cream)',
+                  borderLeft: esEfectivo ? '4px solid #22c55e' : esNoPagar ? '4px solid #ccc' : '4px solid transparent',
+                }}>
+                  <td style={{ ...S.td, fontWeight: 600 }}>
+                    {esEfectivo && <span style={{ marginRight: 6 }}>💵</span>}
+                    {prov}
+                  </td>
+                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: esEfectivo ? '#276749' : 'inherit' }}>{CRC(p.monto)}</td>
                   <td style={S.td}>
                     {bloqueado ? <Pill tipo={p.tipo_pago} /> : (
                       <select
