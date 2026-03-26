@@ -34,13 +34,6 @@ const S = {
 
 // ── Configuración de reportes ──────────────────────────────────────────────
 const REPORTES = {
-  neo_items_vendidos: {
-    nombre:'Ítems más vendidos', emoji:'🏆',
-    descripcion:'Ranking de productos por ventas en un período.',
-    header_row:8, titulo_valor:'Ítems más vendidos',
-    columnas:['categoria','codigo_interno','item','ventas','utilidad','utilidad_costo_pct','unidades'],
-    columnas_originales:['Categoría','Código Interno','Ítem','Ventas','Utilidad','Utilidad/Costo','Unidades'],
-  },
   neo_minimos_maximos: {
     nombre:'Lista de mínimos y máximos', emoji:'📊',
     descripcion:'Stock actual vs mínimos y máximos definidos.',
@@ -54,20 +47,6 @@ const REPORTES = {
     header_row:1, titulo_valor:'Lista de ítems comprados',
     columnas:['compra','estado','fecha','num_factura','proveedor','tipo_item','codigo_interno','item','cantidad_comprada','cantidad_devuelta','costo_unitario_sin_imp','moneda','precio_unitario_con_imp','subtotal','descuento','subtotal_con_descuento_contab','pct_impuesto','impuestos','total','total_sin_imp_colones','existencias_al_comprar','costo_unitario_actual','costo_unitario_compra','costo_unitario_promedio','precio_unitario_actual','utilidad','tipo_de_cambio','marca','categoria'],
     columnas_originales:['Compra','Estado','Fecha','Num. Factura','Proveedor','Tipo de ítem','Código interno','Ítem','Cantidad comprada','Cantidad devuelta','Costo unitario sin impuesto','Moneda','Precio unitario con impuesto','Subtotal','Descuento','Subtotal con descuento (moneda de contab','% Impuesto','Impuestos','Total','Total sin impuesto en colones','Existencias al momento de la compra','Costo unitario actual','Costo unitario compra','Costo unitario promedio','Precio unitario actual','Utilidad','Tipo de cambio','Marca del ítem','Categoría dél ítem'],
-  },
-  neo_lista_items: {
-    nombre:'Lista de ítems', emoji:'📋',
-    descripcion:'Catálogo completo de productos con costos y precios.',
-    header_row:1, titulo_valor:'Lista de ítems',
-    columnas:['codigo_interno','codigo_cabys','tipo','categoria','marca','item','proveedor','fecha_registro','ultima_compra','ultima_venta','descripcion','costo_sin_imp','moneda_costo','precio_sin_imp','precio_con_imp','moneda_precio','iva','pct_utilidad','existencias','activo','descuento_maximo'],
-    columnas_originales:['Código interno','Código CABYS','Tipo','Categoría','Marca','Ítem','Proveedor','Fecha de registro','Última compra','Última venta','Descripción','Costo unitario sin impuesto','Moneda del costo unitario sin impuesto','Precio unitario sin impuesto','Precio unitario con impuesto','Moneda del precio unitario sin impuesto','IVA','% utilidad','Existencias','Activo','Descuento Máximo'],
-  },
-  neo_rentabilidad_proveedor: {
-    nombre:'Rentabilidad por proveedor', emoji:'💰',
-    descripcion:'Ventas, costos y utilidad desglosados por proveedor.',
-    header_row:8, titulo_valor:'Rentabilidad por proveedor',
-    columnas:['proveedor','codigo_interno','item','cantidad_comprada','cantidad_facturada','costo'],
-    columnas_originales:['Nombre del proveedor','Código interno','Ítem',' Cantidad comprada',' Cantidad facturada','Costo'],
   },
   fin_cuentas_pagar: {
     nombre:'Antigüedad saldos — Proveedores', emoji:'💸',
@@ -100,26 +79,6 @@ const REPORTES = {
     columnas:['factura','fecha','vendedor','cliente','codigo_interno','item','bodega','cantidad_facturada','cantidad_devuelta','precio_unitario','costo_unitario','subtotal','descuento','pct_descuento','impuesto','impuestos','utilidad_costo','total','tipo_cambio','territorio','marca'],
     columnas_originales:['Factura','Fecha','Vendedor','Cliente','Código interno','Ítem','Bodega','Cantidad facturada','Cantidad devuelta','Precio unitario sin impuesto','Costo unitario sin impuesto','Subtotal','Descuento','% Descuento','Impuesto','Impuestos','Utilidad/costo','Total','Tipo de cambio de venta','Territorio','Marca'],
     modulos_destino:['vendedores'],
-  },
-  neo_informe_ventas_vendedor: {
-    nombre:'Informe de ventas por vendedor', emoji:'👤',
-    descripcion:'Totales de ventas, notas de crédito, utilidad y margen por vendedor.',
-    titulo_valor:'Informe de ventas por  vendedor',
-    header_row:7, data_row:8,
-    usar_vendedor_parser: true,
-    modulos_destino:['vendedores'],
-    columnas:['vendedor','unidades_vendidas','ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'],
-    columnas_originales:['Vendedor','Unidades vendidas','Ventas sin impuestos','Ventas con impuestos','Notas a clientes sin impuestos','Notas a clientes con impuestos','Impuestos ventas','Impuestos notas','Ventas / Otros cargos','Notas a clientes / Otros cargos','Ventas totales','Notas a clientes totales','Ventas netas','Costo','Utilidad','% Utilidad','Utilidad/Costo','Transacciones','Tiquete promedio'],
-  },
-  neo_informe_ventas_categoria: {
-    nombre:'Informe de ventas por categoría', emoji:'📦',
-    descripcion:'Totales de ventas, notas de crédito, utilidad y margen por categoría y subcategoría.',
-    titulo_valor:'Informe de ventas por  Categoría del ítem',
-    header_row:7, data_row:8,
-    usar_categoria_parser: true,
-    modulos_destino:['vendedores'],
-    columnas:['categoria','subcategoria','unidades_vendidas','ventas_sin_imp','ventas_con_imp','notas_sin_imp','notas_con_imp','imp_ventas','imp_notas','ventas_otros_cargos','notas_otros_cargos','ventas_totales','notas_totales','ventas_netas','costo','utilidad','pct_utilidad','util_costo','transacciones','tiquete_promedio'],
-    columnas_originales:['Categoría del ítem','','Unidades vendidas','Ventas sin impuestos','Ventas con impuestos','Notas a clientes sin impuestos','Notas a clientes con impuestos','Impuestos ventas','Impuestos notas','Ventas / Otros cargos','Notas a clientes / Otros cargos','Ventas totales','Notas a clientes totales','Ventas netas','Costo','Utilidad','% Utilidad','Utilidad/Costo','Transacciones','Tiquete promedio'],
   },
   neo_consolidado_facturas: {
     nombre:'Consolidado de facturas', emoji:'📑',
