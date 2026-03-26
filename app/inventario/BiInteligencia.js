@@ -104,10 +104,10 @@ export default function BiInteligencia() {
     ]
   }
   const overKpis = () => {
-    const total = overstock.reduce((s, r) => s + (Number(r.capital_excedente) || 0), 0)
+    const total = overstock.reduce((s, r) => s + (Number(r.capital_atado) || 0), 0)
     const avgM = overstock.length ? overstock.reduce((s, r) => s + (Number(r.meses_cobertura) || 0), 0) / overstock.length : 0
     return [
-      { label:'Capital Excedente Total', value: fmtCRC(total), color: RED },
+      { label:'Capital Atado Total', value: fmtCRC(total), color: RED },
       { label:'# Productos Sobrestock', value: fmtN(overstock.length) },
       { label:'Prom. Meses Cobertura', value: avgM.toFixed(1), color: ORANGE },
     ]
@@ -120,7 +120,7 @@ export default function BiInteligencia() {
     ]
   }
   const refKpis = () => {
-    const avgC = reforzar.length ? reforzar.reduce((s, r) => s + (Number(r.cobertura_meses) || 0), 0) / reforzar.length : 0
+    const avgC = reforzar.length ? reforzar.reduce((s, r) => s + (Number(r.meses_cobertura) || 0), 0) / reforzar.length : 0
     return [
       { label:'# Productos a Reforzar', value: fmtN(reforzar.length), color: GREEN },
       { label:'Promedio Cobertura', value: avgC.toFixed(1) + ' meses' },
@@ -143,51 +143,45 @@ export default function BiInteligencia() {
     { key:'nombre', label:'Nombre', render: r => trunc(r.nombre), maxW:260 },
     { key:'categoria', label:'Categoria' },
     { key:'existencias', label:'Existencias', align:'right' },
-    { key:'costo_unitario', label:'Costo Unit', align:'right', render: r => fmtCRC(r.costo_unitario) },
+    { key:'ultimo_costo', label:'Costo Unit', align:'right', render: r => fmtCRC(r.ultimo_costo) },
     { key:'capital_atado', label:'Capital Atado', align:'right', render: r => fmtCRC(r.capital_atado), color: () => RED, bold:true },
-    { key:'ventas_90d', label:'Ventas 90d', align:'right', render: r => fmtN(r.ventas_90d) },
+    { key:'ultima_venta', label:'Última Venta', render: r => r.ultima_venta || 'Nunca' },
   ]
   const overCols = [
     { key:'codigo', label:'Codigo' },
     { key:'nombre', label:'Nombre', render: r => trunc(r.nombre), maxW:240 },
-    { key:'categoria', label:'Categoria' },
     { key:'existencias', label:'Existencias', align:'right' },
-    { key:'prom_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.prom_mensual) },
+    { key:'venta_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.venta_mensual) },
     { key:'meses_cobertura', label:'Meses Cobertura', align:'right', render: r => <span style={{ color: cobColor(r.meses_cobertura), fontWeight:600 }}>{Number(r.meses_cobertura || 0).toFixed(1)}</span> },
-    { key:'capital_excedente', label:'Capital Excedente', align:'right', render: r => fmtCRC(r.capital_excedente) },
-    { key:'proveedor', label:'Proveedor' },
+    { key:'capital_atado', label:'Capital Atado', align:'right', render: r => fmtCRC(r.capital_atado), color: () => RED, bold:true },
   ]
   const liqCols = [
     { key:'codigo', label:'Codigo' },
     { key:'nombre', label:'Nombre', render: r => trunc(r.nombre), maxW:240 },
     { key:'existencias', label:'Existencias', align:'right' },
-    { key:'prom_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.prom_mensual) },
+    { key:'venta_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.venta_mensual) },
     { key:'meses_cobertura', label:'Meses Cobertura', align:'right', render: r => Number(r.meses_cobertura || 0).toFixed(1) },
-    { key:'capital_atado', label:'Capital Atado', align:'right', render: r => fmtCRC(r.capital_atado) },
-    { key:'ventas_30d', label:'Ventas 30d', align:'right', render: r => fmtN(r.ventas_30d) },
-    { key:'tendencia', label:'Tendencia', render: r => <Badge text={r.tendencia || '—'} color={tendColor(r.tendencia)} /> },
+    { key:'margen_pct', label:'Margen %', align:'right', render: r => fmtPct(r.margen_pct) },
+    { key:'capital_atado', label:'Capital Atado', align:'right', render: r => fmtCRC(r.capital_atado), color: () => RED, bold:true },
   ]
   const refCols = [
     { key:'codigo', label:'Codigo' },
     { key:'nombre', label:'Nombre', render: r => trunc(r.nombre), maxW:240 },
     { key:'existencias', label:'Existencias', align:'right' },
-    { key:'prom_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.prom_mensual) },
-    { key:'cobertura_meses', label:'Cobertura Meses', align:'right', render: r => Number(r.cobertura_meses || 0).toFixed(1) },
-    { key:'ventas_30d', label:'Ventas 30d', align:'right', render: r => fmtN(r.ventas_30d) },
-    { key:'ventas_previas_30d', label:'Ventas Previas 30d', align:'right', render: r => fmtN(r.ventas_previas_30d) },
-    { key:'tendencia', label:'Tendencia', render: r => <Badge text={r.tendencia || '—'} color={tendColor(r.tendencia)} /> },
+    { key:'venta_mensual', label:'Prom.Mensual', align:'right', render: r => fmtN(r.venta_mensual) },
+    { key:'meses_cobertura', label:'Cobertura Meses', align:'right', render: r => Number(r.meses_cobertura || 0).toFixed(1) },
+    { key:'capital_potencial', label:'Potencial Ventas 3m', align:'right', render: r => fmtCRC(r.capital_potencial) },
   ]
   const trendCols = [
     { key:'codigo', label:'Codigo' },
     { key:'nombre', label:'Nombre', render: r => trunc(r.nombre), maxW:240 },
-    { key:'ventas_actual', label:'Ventas Actual (30d)', align:'right', render: r => fmtN(r.ventas_actual) },
-    { key:'ventas_anterior', label:'Ventas Anterior (30d)', align:'right', render: r => fmtN(r.ventas_anterior) },
+    { key:'venta_periodo2', label:'Ventas Actual (30d)', align:'right', render: r => fmtN(r.venta_periodo2) },
+    { key:'venta_periodo1', label:'Ventas Anterior (30d)', align:'right', render: r => fmtN(r.venta_periodo1) },
     { key:'cambio_pct', label:'Cambio %', align:'right', render: r => <span style={{ color: Number(r.cambio_pct) >= 0 ? GREEN : RED, fontWeight:600 }}>{fmtPct(r.cambio_pct)}</span> },
     { key:'tendencia', label:'Tendencia', render: r => {
       const t = r.tendencia; const icon = t === 'subiendo' ? '↗' : t === 'bajando' ? '↘' : '→'
       return <Badge text={`${icon} ${t || 'estable'}`} color={tendColor(t)} />
     }},
-    { key:'existencias', label:'Existencias', align:'right' },
   ]
 
   const tabContent = {

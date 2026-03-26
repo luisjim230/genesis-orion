@@ -118,7 +118,7 @@ export default function BiDashboard() {
                 {topRevenue.map((p,i) => (
                   <tr key={i} style={trBg(i)}>
                     <td style={tdStyle}>{i+1}</td>
-                    <td style={{ ...tdStyle, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre || p.descripcion}</td>
+                    <td style={{ ...tdStyle, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.item || p.nombre || p.descripcion}</td>
                     <td style={tdR}>{fmtCRC(p.total_revenue)}</td>
                   </tr>
                 ))}
@@ -135,7 +135,7 @@ export default function BiDashboard() {
                 {topQty.map((p,i) => (
                   <tr key={i} style={trBg(i)}>
                     <td style={tdStyle}>{i+1}</td>
-                    <td style={{ ...tdStyle, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre || p.descripcion}</td>
+                    <td style={{ ...tdStyle, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.item || p.nombre || p.descripcion}</td>
                     <td style={tdR}>{fmtQty(p.total_qty)}</td>
                   </tr>
                 ))}
@@ -187,7 +187,7 @@ export default function BiDashboard() {
               <tbody>
                 {bestMargins.map((m,i) => (
                   <tr key={i} style={trBg(i)}>
-                    <td style={{ ...tdStyle, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.nombre || m.descripcion}</td>
+                    <td style={{ ...tdStyle, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.item || m.nombre}</td>
                     <td style={{ ...tdR, color:marginColor(m.margin_pct), fontWeight:600 }}>{fmtPct(m.margin_pct)}</td>
                     <td style={tdR}>{fmtCRC(m.total_revenue)}</td>
                   </tr>
@@ -200,7 +200,7 @@ export default function BiDashboard() {
               <tbody>
                 {worstMargins.map((m,i) => (
                   <tr key={i} style={trBg(i)}>
-                    <td style={{ ...tdStyle, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.nombre || m.descripcion}</td>
+                    <td style={{ ...tdStyle, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.item || m.nombre}</td>
                     <td style={{ ...tdR, color:marginColor(m.margin_pct), fontWeight:600 }}>{fmtPct(m.margin_pct)}</td>
                     <td style={tdR}>{fmtCRC(m.total_revenue)}</td>
                   </tr>
