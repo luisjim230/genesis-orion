@@ -6,7 +6,9 @@ import { useAuth } from '../../lib/useAuth'
 const CATEGORIAS = ['Todos','Panel Sandwich','Gypsum','PVC','Ferreteria','Pintura','Electricos','Plomeria','General']
 
 export default function FichasTecnicas() {
-  const { user, role } = useAuth()
+  const { perfil } = useAuth()
+  const role = perfil?.rol
+  const user = perfil
   const [fichas, setFichas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState('Todos')
