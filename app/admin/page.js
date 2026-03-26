@@ -38,6 +38,7 @@ const MODULOS = [
   { key:'tareas-equipo',label:'Tareas Equipo',  emoji:'📋' },
   { key:'materiales',   label:'Cálculo de materiales', emoji:'🧱' },
   { key:'garantias',   label:'Devoluciones y Garantías', emoji:'🔄' },
+  { key:'rrhh',        label:'Permisos y Vacaciones', emoji:'👔' },
   { key:'vendedores',   label:'Vendedores',      emoji:'🏷️' },
   { key:'admin',        label:'Admin',           emoji:'🔐' },
 ]
