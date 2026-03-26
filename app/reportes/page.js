@@ -137,6 +137,14 @@ const REPORTES = {
     columnas_originales:['Factura',' Fecha',' Modo de pago',' Vendedor',' Cliente',' Subtotal',' Descuento',' Impuesto',' Total',' Observaciones','Moneda'],
     modulos_destino:['vendedores'],
   },
+  neo_inventario_proveedor: {
+    nombre:'Inventario por proveedor', emoji:'🏭',
+    descripcion:'Stock actual desglosado por proveedor, bodega y categoría. Enriquece el módulo de BI.',
+    header_row:9, titulo_valor:'Inventario por proveedor',
+    columnas:['proveedor','bodega','codigo_interno','categoria','item','precio_sin_imp','costo_sin_imp','existencias','costo_total'],
+    columnas_originales:['Proveedor','Bodega','Código interno','Categoría','Ítem','Precio unitario sin IVA','Costo unitario sin IVA','Existencias','Costo total'],
+    upsert_key:'proveedor,bodega,codigo_interno',
+  },
   neo_ordenes_compra_estado:{
     nombre:'Lista de órdenes de compra', emoji:'📋',
     descripcion:'Estado de OC en NEO: Registrada/Aplicada/Anulada, Comprada Sí/Parcial/No.',
