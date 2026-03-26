@@ -2,34 +2,47 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '../lib/useAuth';
 
-const NAV = [
-  { href: '/',                  icon: '⊞',  name: 'Dashboard' },
-  { href: '/inventario',        icon: '📦', name: 'Compras' },
-  { href: '/trazabilidad',      icon: '🔴', name: 'Trazabilidad' },
-  { href: '/kronos',            icon: '📈', name: 'Proyección' },
-  { href: '/reportes',          icon: '📊', name: 'Reportes' },
-  { href: '/comercial',         icon: '💼', name: 'Comercial' },
-  { href: '/cif',               icon: '🧮', name: 'Importación' },
-  { href: '/contenedores',      icon: '🚢', name: 'Cargas' },
-  { href: '/mercado',           icon: '⚡', name: 'Mercado' },
-  { href: '/cajas-aurora',      icon: '🌅', name: 'Cajas' },
-  { href: '/entregas',          icon: '🚛', name: 'Entregas' },
-  { href: '/finanzas',          icon: '💰', name: 'Finanzas' },
-  { href: '/finanzas/bancos',   icon: '🏦', name: 'Bancos' },
-  { href: '/pagos',             icon: '💸', name: 'Pagos' },
-  { href: '/tareas',            icon: '✅', name: 'Tareas' },
-  { href: '/social',            icon: '📱', name: 'Redes Sociales' },
-  { href: '/kommo-proveedores', icon: '📲', name: 'WhatsApp Proveedores' },
-  { href: '/ponderacion',       icon: '⚖️', name: 'Ponderados' },
-  { href: '/materiales',        icon: '🧱', name: 'Materiales' },
-  { href: '/garantias',         icon: '🔄', name: 'Garantías' },
-  { href: '/vendedores',        icon: '🏷️', name: 'Vendedores' },
+// Misma estructura que sidebar.js — key debe coincidir con la key del sidebar
+const ALL_NAV = [
+  { href: '/',                  icon: '⊞',  name: 'Dashboard', key: 'dashboard' },
+  { href: '/inventario',        icon: '📦', name: 'Compras', key: 'inventario' },
+  { href: '/trazabilidad',      icon: '🔴', name: 'Trazabilidad', key: 'trazabilidad' },
+  { href: '/kronos',            icon: '📈', name: 'Proyección', key: 'kronos' },
+  { href: '/reportes',          icon: '📊', name: 'Reportes', key: 'reportes' },
+  { href: '/comercial',         icon: '💼', name: 'Comercial', key: 'comercial' },
+  { href: '/cif',               icon: '🧮', name: 'Importación', key: 'cif' },
+  { href: '/contenedores',      icon: '🚢', name: 'Cargas', key: 'contenedores' },
+  { href: '/mercado',           icon: '⚡', name: 'Mercado', key: 'mercado' },
+  { href: '/cajas-aurora',      icon: '🌅', name: 'Cajas', key: 'cajas-aurora' },
+  { href: '/entregas',          icon: '🚛', name: 'Entregas', key: 'entregas' },
+  { href: '/finanzas',          icon: '💰', name: 'Finanzas', key: 'finanzas' },
+  { href: '/finanzas/bancos',   icon: '🏦', name: 'Bancos', key: 'bancos' },
+  { href: '/pagos',             icon: '💸', name: 'Pagos', key: 'pagos' },
+  { href: '/tareas',            icon: '✅', name: 'Tareas', key: 'tareas' },
+  { href: '/tareas-equipo',     icon: '📋', name: 'Tareas Equipo', key: 'tareas-equipo' },
+  { href: '/social',            icon: '📱', name: 'Redes Sociales', key: 'social' },
+  { href: '/kommo-proveedores', icon: '📲', name: 'WhatsApp Proveedores', key: 'kommo-proveedores' },
+  { href: '/ponderacion',       icon: '⚖️', name: 'Ponderados', key: 'ponderacion' },
+  { href: '/materiales',        icon: '🧱', name: 'Materiales', key: 'materiales' },
+  { href: '/fichas-tecnicas',   icon: '📄', name: 'Fichas Técnicas', key: 'fichas-tecnicas' },
+  { href: '/garantias',         icon: '🔄', name: 'Garantías', key: 'garantias' },
+  { href: '/rrhh',              icon: '👥', name: 'Recursos Humanos', key: 'rrhh' },
+  { href: '/vendedores',        icon: '🏷️', name: 'Vendedores', key: 'vendedores' },
+  { href: '/admin',             icon: '⚙️', name: 'Usuarios', key: 'admin', adminOnly: true },
 ];
 
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { perfil, loading, puedeVer } = useAuth();
+
+  // Filtrar por permisos del usuario — igual que el sidebar de desktop
+  const NAV = loading ? [] : ALL_NAV.filter(item => {
+    if (item.adminOnly) return perfil?.rol === 'admin';
+    return puedeVer(item.key);
+  });
 
   const current = NAV.find(n => n.href === pathname || (n.href !== '/' && pathname?.startsWith(n.href)));
 
