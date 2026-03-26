@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import supabase from '../../lib/supabase'
-import useAuth from '../../lib/useAuth'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 const CATEGORIAS = ['Todos','Panel Sandwich','Gypsum','PVC','Ferreteria','Pintura','Electricos','Plomeria','General']
 
