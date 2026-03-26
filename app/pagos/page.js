@@ -120,6 +120,15 @@ function TabDetalle({ sesion, items, onRefresh }) {
     onRefresh()
   }
 
+  async function eliminarProveedor(prov) {
+    if (!confirm(`¿Eliminar "${prov}" y todas sus facturas de esta sesión?`)) return
+    const ids = porProveedor[prov].map(it => it.id)
+    for (const id of ids) {
+      await supabase.from('pagos_items').delete().eq('id', id)
+    }
+    onRefresh()
+  }
+
   async function agregarProveedor() {
     if (!nuevoProveedor.trim()) return
     setSaving(true)
@@ -166,7 +175,10 @@ function TabDetalle({ sesion, items, onRefresh }) {
                 <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{prov}</span>
                 <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{its.length} factura{its.length !== 1 ? 's' : ''}</span>
               </div>
-              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{CRC(total)}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{CRC(total)}</span>
+                {!bloqueado && <button onClick={e => { e.stopPropagation(); eliminarProveedor(prov) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: '0.75rem', padding: '2px 6px', borderRadius: 6, fontWeight: 600 }} title="Eliminar proveedor">🗑</button>}
+              </div>
             </div>
 
             {isOpen && (
