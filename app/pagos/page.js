@@ -285,10 +285,12 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
 
   async function cerrarSesion() {
     setCerrando(true)
+    const totalPagado = total - totalNoPagar
     await supabase.from('pagos_sesion').update({
       estado: 'pagado',
       cerrado_en: new Date().toISOString(),
-      total,
+      total: totalPagado,
+      total_no_pagado: totalNoPagar,
     }).eq('id', sesion.id)
     setCerrando(false)
     setConfirmCerrar(false)
@@ -425,7 +427,7 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
           <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', width: 380, maxWidth: '95vw', border: '1px solid var(--border-soft)' }}>
             <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: 10 }}>¿Marcar sesión como pagada?</div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 24 }}>
-              La sesión <strong>"{sesion?.nombre}"</strong> se sellará con total {CRC(total)} y pasará al historial. No podrá editarse.
+              La sesión <strong>"{sesion?.nombre}"</strong> se sellará con total pagado <strong>{CRC(total - totalNoPagar)}</strong>{totalNoPagar > 0 ? <> (excluye {CRC(totalNoPagar)} marcados como "No pagar")</> : ''} y pasará al historial. No podrá editarse.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button style={S.btnGhost} onClick={() => setConfirmCerrar(false)}>Cancelar</button>
@@ -486,6 +488,7 @@ function TabHistorial({ sesionActivaId, onVerSesion }) {
               <th style={S.th}>Fecha</th>
               <th style={S.th}>Responsable</th>
               <th style={{ ...S.th, textAlign: 'right' }}>Total pagado</th>
+              <th style={{ ...S.th, textAlign: 'right' }}>No pagado</th>
               <th style={S.th}>Cerrada</th>
               <th style={S.th}></th>
             </tr>
@@ -498,6 +501,7 @@ function TabHistorial({ sesionActivaId, onVerSesion }) {
                   <td style={S.td}>{s.fecha}</td>
                   <td style={{ ...S.td, color: 'var(--text-muted)' }}>{s.responsable || '—'}</td>
                   <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: '#276749' }}>{CRC(s.total)}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 600, color: s.total_no_pagado > 0 ? '#e74c3c' : 'var(--text-muted)' }}>{s.total_no_pagado > 0 ? CRC(s.total_no_pagado) : '—'}</td>
                   <td style={{ ...S.td, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                     {s.cerrado_en ? new Date(s.cerrado_en).toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                   </td>
@@ -507,7 +511,7 @@ function TabHistorial({ sesionActivaId, onVerSesion }) {
                 </tr>
                 {detalleId === s.id && (
                   <tr key={s.id + '-det'}>
-                    <td colSpan={6} style={{ padding: 0, background: 'var(--cream)' }}>
+                    <td colSpan={7} style={{ padding: 0, background: 'var(--cream)' }}>
                       <div style={{ padding: '12px 20px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                           <thead>
