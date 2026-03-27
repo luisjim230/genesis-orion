@@ -354,14 +354,15 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
               const esNoPagar = p.tipo_pago === 'no_pagar'
               return (
                 <tr key={prov} style={{
-                  background: esEfectivo ? '#e6f9ed' : esNoPagar ? '#f5f0f0' : i % 2 === 0 ? '#fff' : 'var(--cream)',
-                  borderLeft: esEfectivo ? '4px solid #22c55e' : esNoPagar ? '4px solid #ccc' : '4px solid transparent',
+                  background: esEfectivo ? '#e6f9ed' : esNoPagar ? '#fde8e8' : i % 2 === 0 ? '#fff' : 'var(--cream)',
+                  borderLeft: esEfectivo ? '4px solid #22c55e' : esNoPagar ? '4px solid #e74c3c' : '4px solid transparent',
                 }}>
-                  <td style={{ ...S.td, fontWeight: 600 }}>
+                  <td style={{ ...S.td, fontWeight: 600, color: esNoPagar ? '#e74c3c' : 'inherit', textDecoration: esNoPagar ? 'line-through' : 'none' }}>
                     {esEfectivo && <span style={{ marginRight: 6 }}>💵</span>}
+                    {esNoPagar && <span style={{ marginRight: 6 }}>🚫</span>}
                     {prov}
                   </td>
-                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: esEfectivo ? '#276749' : 'inherit' }}>{CRC(p.monto)}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: esEfectivo ? '#276749' : esNoPagar ? '#e74c3c' : 'inherit' }}>{CRC(p.monto)}</td>
                   <td style={S.td}>
                     {bloqueado ? <Pill tipo={p.tipo_pago} /> : (
                       <select
