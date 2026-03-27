@@ -208,18 +208,10 @@ export default function Inventario() {
 
   async function cargarDatos() {
     setLoading(true);
-    const { data: fd } = await supabase.from('neo_minimos_maximos').select('fecha_carga').order('fecha_carga', { ascending: false }).limit(1);
-    if (!fd?.length) { setLoading(false); return; }
-    const fc = fd[0].fecha_carga;
-    setFechaCarga(fc);
-    let todos = [], offset = 0;
-    while (true) {
-      const { data } = await supabase.from('neo_minimos_maximos').select('*').eq('fecha_carga', fc).range(offset, offset + 999);
-      if (!data?.length) break;
-      todos = todos.concat(data);
-      if (data.length < 1000) break;
-      offset += 1000;
-    }
+    // Una sola query RPC que trae inventario + consumo real precalculado
+    const { data: todos, error: rpcErr } = await supabase.rpc('saturno_inventario_completo');
+    if (rpcErr || !todos?.length) { setLoading(false); return; }
+    setFechaCarga(todos[0]?.fecha_carga);
     setDatos(todos);
     const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};
