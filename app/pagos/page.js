@@ -265,6 +265,7 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
   const totalTransf = Object.values(porProveedor).filter(p => p.tipo_pago === 'transferencia').reduce((s, p) => s + p.monto, 0)
   const totalEfect = Object.values(porProveedor).filter(p => p.tipo_pago === 'efectivo').reduce((s, p) => s + p.monto, 0)
   const totalConjunto = Object.values(porProveedor).filter(p => p.tipo_pago === 'conjunto').reduce((s, p) => s + p.monto, 0)
+  const totalNoPagar = Object.values(porProveedor).filter(p => p.tipo_pago === 'no_pagar').reduce((s, p) => s + p.monto, 0)
 
   async function actualizarTipoPago(prov, tipo_pago) {
     const ids = porProveedor[prov].ids
@@ -296,12 +297,13 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
         {[
           ['Total sesión', CRC(total), 'var(--text-primary)'],
           ['Transferencias', CRC(totalTransf), '#0C447C'],
           ['Efectivo', CRC(totalEfect), '#276749'],
           ['Conjunto', CRC(totalConjunto), '#854F0B'],
+          ['🚫 No pagar', CRC(totalNoPagar), '#e74c3c'],
         ].map(([l, v, c]) => (
           <div key={l} style={S.kpi}>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>{l}</div>
