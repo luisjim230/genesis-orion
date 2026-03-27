@@ -35,27 +35,30 @@ export default function BiDashboard() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      supabase.rpc('bi_kpis_resumen', { dias }),
-      supabase.rpc('bi_top_productos_revenue', { dias }),
-      supabase.rpc('bi_top_productos_qty', { dias }),
-      supabase.rpc('bi_revenue_por_categoria', { dias }),
-      supabase.rpc('bi_revenue_por_vendedor', { dias }),
-      supabase.rpc('bi_margin_analysis', { dias }),
-    ]).then(([rKpi, rRev, rQty, rCat, rVen, rMar]) => {
-      if (cancelled) return;
-      let k = rKpi.data;
-      if (Array.isArray(k)) k = k[0];
-      if (typeof k === 'string') try { k = JSON.parse(k); } catch(e) {}
-      if (Array.isArray(k)) k = k[0];
-      setKpis(k || {});
-      setTopRevenue(rRev.data || []);
-      setTopQty(rQty.data || []);
-      setCategorias(rCat.data || []);
-      setVendedores(rVen.data || []);
-      setMargins(rMar.data || []);
+    async function fetchAll() {
+      try {
+        const [rKpi, rRev, rQty, rCat, rVen, rMar] = await Promise.all([
+          supabase.rpc('bi_kpis_resumen', { dias }),
+          supabase.rpc('bi_top_productos_revenue', { dias }),
+          supabase.rpc('bi_top_productos_qty', { dias }),
+          supabase.rpc('bi_revenue_por_categoria', { dias }),
+          supabase.rpc('bi_revenue_por_vendedor', { dias }),
+          supabase.rpc('bi_margin_analysis', { dias }),
+        ]);
+        if (cancelled) return;
+        console.log('BI Dashboard RPCs:', { kpi: rKpi, rev: rRev?.data?.length, margins: rMar?.data?.length });
+        let k = rKpi.data;
+        if (Array.isArray(k) && k.length > 0) k = k[0];
+        setKpis(k || {});
+        setTopRevenue(Array.isArray(rRev.data) ? rRev.data : []);
+        setTopQty(Array.isArray(rQty.data) ? rQty.data : []);
+        setCategorias(Array.isArray(rCat.data) ? rCat.data : []);
+        setVendedores(Array.isArray(rVen.data) ? rVen.data : []);
+        setMargins(Array.isArray(rMar.data) ? rMar.data : []);
+      } catch(e) { console.error('BI Dashboard error:', e); }
       setLoading(false);
-    });
+    }
+    fetchAll();
     return () => { cancelled = true; };
   }, [dias]);
 
@@ -113,7 +116,7 @@ export default function BiDashboard() {
       {/* Top Revenue + Top Qty */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
         <div style={card}>
-          <div style={{ ...T1, fontSize:14, marginBottom:10 }}>Top 20 Revenue</div>
+          <div style={{ ...T1, fontSize:14, marginBottom:10 }}>Top 50 Revenue</div>
           <div style={{ maxHeight:420, overflowY:'auto', borderRadius:10, border:'1px solid rgba(0,0,0,0.05)' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead><tr><th style={thStyle}>#</th><th style={thStyle}>Producto</th><th style={thR}>Revenue</th></tr></thead>
@@ -130,7 +133,7 @@ export default function BiDashboard() {
           </div>
         </div>
         <div style={card}>
-          <div style={{ ...T1, fontSize:14, marginBottom:10 }}>Top 20 Cantidad</div>
+          <div style={{ ...T1, fontSize:14, marginBottom:10 }}>Top 50 Cantidad</div>
           <div style={{ maxHeight:420, overflowY:'auto', borderRadius:10, border:'1px solid rgba(0,0,0,0.05)' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead><tr><th style={thStyle}>#</th><th style={thStyle}>Producto</th><th style={thR}>Qty</th></tr></thead>
