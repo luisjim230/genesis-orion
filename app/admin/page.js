@@ -39,6 +39,7 @@ const MODULOS = [
   { key:'materiales',   label:'Cálculo de materiales', emoji:'🧱' },
   { key:'fichas-tecnicas', label:'Fichas Técnicas', emoji:'📋' },
   { key:'garantias',   label:'Devoluciones y Garantías', emoji:'🔄' },
+  { key:'encomiendas', label:'Encomiendas', emoji:'📦' },
   { key:'rrhh',        label:'Permisos y Vacaciones', emoji:'👔' },
   { key:'vendedores',   label:'Vendedores',      emoji:'🏷️' },
   { key:'admin',        label:'Admin',           emoji:'🔐' },

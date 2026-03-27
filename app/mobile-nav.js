@@ -28,6 +28,7 @@ const ALL_NAV = [
   { href: '/materiales',        icon: '🧱', name: 'Materiales', key: 'materiales' },
   { href: '/fichas-tecnicas',   icon: '📄', name: 'Fichas Técnicas', key: 'fichas-tecnicas' },
   { href: '/garantias',         icon: '🔄', name: 'Garantías', key: 'garantias' },
+  { href: '/encomiendas',       icon: '📦', name: 'Encomiendas', key: 'encomiendas' },
   { href: '/rrhh',              icon: '👥', name: 'Recursos Humanos', key: 'rrhh' },
   { href: '/vendedores',        icon: '🏷️', name: 'Vendedores', key: 'vendedores' },
   { href: '/admin',             icon: '⚙️', name: 'Usuarios', key: 'admin', adminOnly: true },
