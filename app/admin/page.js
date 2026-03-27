@@ -25,7 +25,7 @@ const MODULOS = [
   { key:'contenedores', label:'Contenedores',    emoji:'🚢' },
   { key:'mercado',      label:'Mercado',         emoji:'💱' },
   { key:'ponderacion',  label:'Ponderación',     emoji:'⚖️' },
-  { key:'comercial',    label:'Comercial',       emoji:'📈' },
+  { key:'comercial',    label:'Comercial / Ventas', emoji:'💼' },
   { key:'reportes',     label:'Reportes',        emoji:'📊' },
   { key:'finanzas',     label:'Finanzas',        emoji:'💰' },
   { key:'cif',          label:'CIF',             emoji:'📦' },
