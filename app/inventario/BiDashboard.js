@@ -44,7 +44,10 @@ export default function BiDashboard() {
       supabase.rpc('bi_margin_analysis', { dias }),
     ]).then(([rKpi, rRev, rQty, rCat, rVen, rMar]) => {
       if (cancelled) return;
-      const k = Array.isArray(rKpi.data) ? rKpi.data[0] : rKpi.data;
+      let k = rKpi.data;
+      if (Array.isArray(k)) k = k[0];
+      if (typeof k === 'string') try { k = JSON.parse(k); } catch(e) {}
+      if (Array.isArray(k)) k = k[0];
       setKpis(k || {});
       setTopRevenue(rRev.data || []);
       setTopQty(rQty.data || []);
@@ -56,7 +59,7 @@ export default function BiDashboard() {
     return () => { cancelled = true; };
   }, [dias]);
 
-  const noData = !loading && (!kpis.total_revenue || kpis.total_revenue === 0);
+  const noData = !loading && (!kpis || !kpis.total_revenue || Number(kpis.total_revenue) === 0) && topRevenue.length === 0;
 
   const pill = d => ({
     padding:'6px 18px', borderRadius:20, border:'none', cursor:'pointer', fontFamily:FONT,
