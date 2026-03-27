@@ -399,21 +399,18 @@ export default function ComercialV2() {
   // Historial states (tab 3)
   const [historialData, setHistorialData] = useState([]);
 
-  // ── Load vendedores ────────────────────────────────────────────────────────
+  // ── Load vendedores (desde datos reales de facturación) ─────────────────────
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from('perfiles')
-        .select('id, nombre')
-        .eq('rol', 'ventas')
-        .order('nombre');
-      setVendedores(data || []);
+      const { data } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() });
+      const vends = (data || []).map(d => ({ id: d.vendedor, nombre: d.vendedor }));
+      setVendedores(vends);
       // Si no es admin, auto-llenar con su propio nombre
       if (perfil?.rol !== 'admin' && perfil?.nombre) {
         setFormVendedor(perfil.nombre);
       }
     })();
-  }, []);
+  }, [perfil]);
 
   // ── Load dashboard data ────────────────────────────────────────────────────
   const loadDashboard = useCallback(async () => {
