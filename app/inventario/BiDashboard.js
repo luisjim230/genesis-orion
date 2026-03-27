@@ -119,15 +119,21 @@ export default function BiDashboard() {
           <div style={{ ...T1, fontSize:14, marginBottom:10 }}>Top 50 Revenue</div>
           <div style={{ maxHeight:420, overflowY:'auto', borderRadius:10, border:'1px solid rgba(0,0,0,0.05)' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead><tr><th style={thStyle}>#</th><th style={thStyle}>Producto</th><th style={thR}>Revenue</th></tr></thead>
+              <thead><tr><th style={thStyle}>#</th><th style={thStyle}>Producto</th><th style={thR}>Revenue</th><th style={thR}>Margen</th><th style={thR}>Utilidad</th></tr></thead>
               <tbody>
-                {topRevenue.map((p,i) => (
+                {topRevenue.map((p,i) => {
+                  const margen = Number(p.margen_pct) || 0
+                  const utilidad = Number(p.total_revenue) * margen / 100
+                  return (
                   <tr key={i} style={trBg(i)}>
                     <td style={tdStyle}>{i+1}</td>
-                    <td style={{ ...tdStyle, maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.item || p.nombre || p.descripcion}</td>
+                    <td style={{ ...tdStyle, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.item || p.nombre || p.codigo_interno}</td>
                     <td style={tdR}>{fmtCRC(p.total_revenue)}</td>
+                    <td style={{ ...tdR, color: margen >= 30 ? '#16a34a' : margen >= 15 ? '#c8a84b' : '#dc2626', fontWeight:600 }}>{margen.toFixed(1)}%</td>
+                    <td style={{ ...tdR, fontWeight:600 }}>{fmtCRC(utilidad)}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
