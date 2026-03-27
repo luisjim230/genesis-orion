@@ -24,7 +24,7 @@ const EMPTY_ENVIO = {
   cliente: '',
   fecha_factura: today(),
   vendedor: '',
-  encomienda_empresa_id: '',
+  encomienda: '',
   numero_guia: '',
   recibio_guia: false,
   estado: 'pendiente',
@@ -231,7 +231,7 @@ export default function EncomiendasPage() {
   /* ─── Fetch empresas + zonas ─── */
   const fetchRutas = useCallback(async () => {
     const { data: emp } = await supabase.from('encomiendas_empresas').select('*').order('nombre')
-    const { data: zon } = await supabase.from('encomiendas_zonas').select('*').order('nombre')
+    const { data: zon } = await supabase.from('encomiendas_zonas').select('*').order('zona')
     setEmpresas(emp || [])
     setZonas(zon || [])
     const map = {}
@@ -352,7 +352,7 @@ export default function EncomiendasPage() {
       cliente: envio.cliente || '',
       fecha_factura: envio.fecha_factura || today(),
       vendedor: envio.vendedor || '',
-      encomienda_empresa_id: envio.encomienda_empresa_id || '',
+      encomienda: envio.encomienda || '',
       numero_guia: envio.numero_guia || '',
       recibio_guia: envio.recibio_guia || false,
       estado: envio.estado || 'pendiente',
@@ -511,7 +511,7 @@ export default function EncomiendasPage() {
                         const locs = (z.localidades || '').split(',').map(l => l.trim()).filter(Boolean)
                         return (
                           <div key={z.id} style={{ marginBottom: 12 }}>
-                            <div style={S.zonaChip}>{z.nombre}</div>
+                            <div style={S.zonaChip}>{z.zona}</div>
                             <div style={{ marginTop: 6, marginLeft: 4 }}>
                               {locs.map((l, i) => (
                                 <span key={i} style={locMatches(l) ? S.localidadHighlight : S.localidad}>
@@ -639,13 +639,15 @@ export default function EncomiendasPage() {
                     </div>
                     <div>
                       <label style={S.label}>Encomienda</label>
-                      <select style={S.select} value={formEnvio.encomienda_empresa_id}
-                        onChange={e => setFormEnvio({ ...formEnvio, encomienda_empresa_id: e.target.value })}>
-                        <option value="">— Seleccionar —</option>
+                      <input style={S.input} list="enc-empresas-list"
+                        placeholder="Escribir o seleccionar encomienda..."
+                        value={formEnvio.encomienda}
+                        onChange={e => setFormEnvio({ ...formEnvio, encomienda: e.target.value })} />
+                      <datalist id="enc-empresas-list">
                         {empresas.map(emp => (
-                          <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                          <option key={emp.id} value={emp.nombre} />
                         ))}
-                      </select>
+                      </datalist>
                     </div>
                     <div>
                       <label style={S.label}>N° Guía</label>
@@ -718,7 +720,7 @@ export default function EncomiendasPage() {
                           <td style={S.td}>{envio.cliente}</td>
                           <td style={S.td}>{envio.fecha_factura}</td>
                           <td style={S.td}>{envio.vendedor}</td>
-                          <td style={S.td}>{empresasMap[envio.encomienda_empresa_id] || '—'}</td>
+                          <td style={S.td}>{envio.encomienda || '—'}</td>
                           <td style={S.td}>{envio.numero_guia || '—'}</td>
                           <td style={S.td}>
                             <button style={S.toggle(envio.recibio_guia)} onClick={() => toggleGuia(envio)}>
