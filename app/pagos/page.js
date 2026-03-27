@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/useAuth'
 
 const CRC = (n) => '₡' + Math.round(parseFloat(n) || 0).toLocaleString('es-CR')
 const N = (v) => parseFloat(v) || 0
@@ -245,8 +246,9 @@ function TabDetalle({ sesion, items, onRefresh }) {
 }
 
 // ── Tab Resumen ejecutivo ─────────────────────────────────────────────────────
-function TabResumen({ sesion, items, onRefresh, onCerrar }) {
-  const bloqueado = sesion?.estado === 'pagado'
+function TabResumen({ sesion, items, onRefresh, onCerrar, perfil }) {
+  const esAdmin = perfil?.rol === 'admin'
+  const bloqueado = sesion?.estado === 'pagado' && !esAdmin
   const [cerrando, setCerrando] = useState(false)
   const [confirmCerrar, setConfirmCerrar] = useState(false)
   const [filtroTipo, setFiltroTipo] = useState('todos')
@@ -416,9 +418,12 @@ function TabResumen({ sesion, items, onRefresh, onCerrar }) {
         </div>
       )}
 
-      {bloqueado && (
-        <div style={{ marginTop: 16, background: '#EAF3DE', border: '1px solid #C0DD97', borderRadius: 10, padding: '12px 18px', color: '#27500A', fontSize: '0.85rem' }}>
-          ✅ Esta sesión fue cerrada el {sesion?.cerrado_en ? new Date(sesion.cerrado_en).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}. No se puede editar.
+      {sesion?.estado === 'pagado' && (
+        <div style={{ marginTop: 16, background: esAdmin ? '#FFF8E1' : '#EAF3DE', border: `1px solid ${esAdmin ? '#FAC775' : '#C0DD97'}`, borderRadius: 10, padding: '12px 18px', color: esAdmin ? '#633806' : '#27500A', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✅ Sesión cerrada el {sesion?.cerrado_en ? new Date(sesion.cerrado_en).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}.{esAdmin ? ' Admin puede editar.' : ' No se puede editar.'}</span>
+          {esAdmin && (
+            <button onClick={async () => { await supabase.from('pagos_sesion').update({ estado: 'borrador', cerrado_en: null }).eq('id', sesion.id); onCerrar(); }} style={{ background: '#e74c3c', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>🔓 Reabrir sesión</button>
+          )}
         </div>
       )}
 
@@ -550,6 +555,7 @@ function TabHistorial({ sesionActivaId, onVerSesion }) {
 
 // ── Página principal ────────────────────────────────────────────────────────
 export default function PagosPage() {
+  const { perfil } = useAuth()
   const [tab, setTab] = useState('detalle')
   const [sesion, setSesion] = useState(null)
   const [sesiones, setSesiones] = useState([])
@@ -649,7 +655,7 @@ export default function PagosPage() {
         ) : tab === 'detalle' ? (
           <TabDetalle sesion={sesion} items={items} onRefresh={onRefresh} />
         ) : tab === 'resumen' ? (
-          <TabResumen sesion={sesion} items={items} onRefresh={onRefresh} onCerrar={onCerrar} />
+          <TabResumen sesion={sesion} items={items} onRefresh={onRefresh} onCerrar={onCerrar} perfil={perfil} />
         ) : (
           <TabHistorial sesionActivaId={sesion?.id} onVerSesion={id => { const s = sesiones.find(x => x.id === id); if (s) { setSesion(s); setTab('detalle') } }} />
         )}
