@@ -74,18 +74,19 @@ export default function BiInteligencia() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [d, o, l, r, t] = await Promise.all([
+      const [d, o, l, r, t] = await Promise.allSettled([
         supabase.rpc('bi_dead_stock'),
         supabase.rpc('bi_overstock_alerts'),
         supabase.rpc('bi_liquidar_candidates'),
         supabase.rpc('bi_reforzar_candidates'),
         supabase.rpc('bi_trend_analysis'),
-      ])
-      setDeadStock(d.data || [])
-      setOverstock(o.data || [])
-      setLiquidar(l.data || [])
-      setReforzar(r.data || [])
-      setTrends(t.data || [])
+      ]).then(results => results.map(res => res.status === 'fulfilled' ? res.value : { data: [], error: res.reason }))
+      console.log('BI Inteligencia RPCs:', { dead: d.data?.length, dead_err: d.error, over: o.data?.length, liq: l.data?.length, ref: r.data?.length, trends: t.data?.length, trends_err: t.error })
+      setDeadStock(Array.isArray(d.data) ? d.data : [])
+      setOverstock(Array.isArray(o.data) ? o.data : [])
+      setLiquidar(Array.isArray(l.data) ? l.data : [])
+      setReforzar(Array.isArray(r.data) ? r.data : [])
+      setTrends(Array.isArray(t.data) ? t.data : [])
       setLoading(false)
     }
     load()
