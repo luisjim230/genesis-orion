@@ -418,7 +418,7 @@ export default function ComercialV2() {
     setLoading(true);
     try {
       // Auto data from RPC
-      const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { mes });
+      const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: mes });
       setVentasData(ventas || []);
 
       // Manual data
@@ -434,7 +434,7 @@ export default function ComercialV2() {
       const vNames = (ventas || []).map(v => v.vendedor);
       const metaMap = {};
       for (const vn of vNames) {
-        const { data: meta } = await supabase.rpc('comercial_promedio_historico', { vendedor: vn });
+        const { data: meta } = await supabase.rpc('comercial_promedio_historico', { p_vendedor: vn });
         metaMap[vn] = N(meta);
       }
       setMetasData(metaMap);
@@ -501,7 +501,7 @@ export default function ComercialV2() {
       for (const vend of vendedores) {
         const row = { vendedor: vend.nombre, meses: {} };
         for (const m of months) {
-          const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { mes: m });
+          const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: m });
           const vData = (ventas || []).find(v => v.vendedor === vend.nombre);
           const { data: manual } = await supabase
             .from('comercial_kpis_mensual')
@@ -509,7 +509,7 @@ export default function ComercialV2() {
             .eq('vendedor', vend.nombre)
             .eq('mes', m)
             .maybeSingle();
-          const { data: meta } = await supabase.rpc('comercial_promedio_historico', { vendedor: vend.nombre });
+          const { data: meta } = await supabase.rpc('comercial_promedio_historico', { p_vendedor: vend.nombre });
           if (vData) {
             const kpis = calcAllKpis(vData, manual, N(meta), vendedores.length);
             row.meses[m] = kpis.nota;
