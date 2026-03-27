@@ -536,17 +536,35 @@ export default function ComercialV2() {
       const manual = manualesData[v.vendedor] || {};
       const mb = metasData[v.vendedor] || 0;
       const kpis = calcAllKpis(v, manual, mb, vendedores.length);
-      return { vendedor: v.vendedor, kpis };
+      return { vendedor: v.vendedor, kpis, nc_monto: N(v.nc_monto), nc_facturas: N(v.nc_facturas) };
     }).sort((a, b) => b.kpis.efiFinal - a.kpis.efiFinal);
   }, [ventasData, manualesData, metasData, vendedores]);
+
+  // Date range from actual data
+  const dataRange = useMemo(() => {
+    if (ventasData.length === 0) return null;
+    let allMin = null, allMax = null;
+    ventasData.forEach(v => {
+      if (v.fecha_min && (!allMin || v.fecha_min < allMin)) allMin = v.fecha_min;
+      if (v.fecha_max && (!allMax || v.fecha_max > allMax)) allMax = v.fecha_max;
+    });
+    if (!allMin || !allMax) return null;
+    const fmtDay = f => f ? f.split('/')[0] : '';
+    const dayMin = parseInt(fmtDay(allMin), 10);
+    const dayMax = parseInt(fmtDay(allMax), 10);
+    const monthNames = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const mm = parseInt(allMin.split('/')[1], 10) - 1;
+    return { dayMin, dayMax, monthLabel: monthNames[mm] || '' };
+  }, [ventasData]);
 
   const summaryStats = useMemo(() => {
     if (dashboardRows.length === 0) return null;
     const totalVentas = dashboardRows.reduce((s, r) => s + r.kpis.ventasMes, 0);
     const avgUtil = dashboardRows.reduce((s, r) => s + r.kpis.utilPct, 0) / dashboardRows.length;
+    const totalNC = dashboardRows.reduce((s, r) => s + r.nc_monto, 0);
     const mejor = dashboardRows[0];
     const peor = dashboardRows[dashboardRows.length - 1];
-    return { totalVentas, avgUtil, mejor, peor };
+    return { totalVentas, avgUtil, totalNC, mejor, peor };
   }, [dashboardRows]);
 
   // ── Save form ──────────────────────────────────────────────────────────────
@@ -658,14 +676,19 @@ export default function ComercialV2() {
       {/* ─── TAB 1: DASHBOARD ─────────────────────────────────────────── */}
       {tab === 'dashboard' && (
         <div>
-          {/* Month selector */}
-          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Month selector + date range */}
+          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <label style={S.label}>Mes</label>
             <select style={S.select} value={mes} onChange={e => setMes(e.target.value)}>
               {monthOptions.map(o => (
                 <option key={o.val} value={o.val}>{o.label}</option>
               ))}
             </select>
+            {dataRange && (
+              <span style={{ fontSize: '0.8rem', color: C.muted, fontWeight: 600, background: 'rgba(200,168,75,0.1)', padding: '5px 12px', borderRadius: 8 }}>
+                Datos del {dataRange.dayMin} al {dataRange.dayMax} de {dataRange.monthLabel}
+              </span>
+            )}
           </div>
 
           {loading ? <Spinner /> : (
@@ -677,6 +700,11 @@ export default function ComercialV2() {
                     kicker="Total Ventas Equipo"
                     value={CRC(summaryStats.totalVentas)}
                     accent={C.gold}
+                  />
+                  <SummaryCard
+                    kicker="Notas de Crédito"
+                    value={CRC(summaryStats.totalNC)}
+                    accent={C.orange}
                   />
                   <SummaryCard
                     kicker="Promedio Utilidad %"
@@ -707,7 +735,7 @@ export default function ComercialV2() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Rubik, sans-serif' }}>
                       <thead>
                         <tr>
-                          {['#', 'Vendedor', 'Ventas Mes', 'Meta Base', 'Cumpl. Meta', 'Utilidad %', 'Llamadas', 'Conv. Cotiz.', 'Seguim.', 'Puntaje Efic.', 'Nota'].map(h => (
+                          {['#', 'Vendedor', 'Ventas Mes', 'Notas Créd.', 'Meta Base', 'Cumpl. Meta', 'Utilidad %', 'Llamadas', 'Conv. Cotiz.', 'Seguim.', 'Puntaje Efic.', 'Nota'].map(h => (
                             <th key={h} style={S.th}>{h}</th>
                           ))}
                         </tr>
@@ -729,6 +757,7 @@ export default function ComercialV2() {
                                 <td style={{ ...S.td, fontWeight: 700, color: C.gold, width: 40 }}>{idx + 1}</td>
                                 <td style={{ ...S.td, fontWeight: 700 }}>{row.vendedor}</td>
                                 <td style={S.td}>{CRC(k.ventasMes)}</td>
+                                <td style={{ ...S.td, color: row.nc_monto > 0 ? C.orange : C.muted }}>{CRC(row.nc_monto)}</td>
                                 <td style={S.td}>{CRC(k.metaBase)}</td>
                                 <td style={S.td}>
                                   <span style={{ color: k.cumplMetaBase >= 1 ? C.green : C.red, fontWeight: 600 }}>
@@ -744,7 +773,7 @@ export default function ComercialV2() {
                               </tr>
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan={11} style={{ padding: '0 16px 16px', background: 'rgba(200,168,75,0.03)' }}>
+                                  <td colSpan={12} style={{ padding: '0 16px 16px', background: 'rgba(200,168,75,0.03)' }}>
                                     <KpiDetailPanel kpis={k} />
                                   </td>
                                 </tr>
