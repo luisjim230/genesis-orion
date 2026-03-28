@@ -402,6 +402,13 @@ export default function ComercialV2() {
   // Historial states (tab 3)
   const [historialData, setHistorialData] = useState([]);
 
+  // Ganadores states (tab 4)
+  const [ganadoresData, setGanadoresData] = useState([]);
+  const [ganadoresLoading, setGanadoresLoading] = useState(false);
+  const [ganadoresMes, setGanadoresMes] = useState('');
+  const [ganadoresVendedor, setGanadoresVendedor] = useState('');
+  const [ganadoresOrden, setGanadoresOrden] = useState('utilidad');
+
   // ── Load vendedores (desde datos reales de facturación) ─────────────────────
   useEffect(() => {
     (async () => {
@@ -546,6 +553,26 @@ export default function ComercialV2() {
     if (tab === 'historial' && vendedores.length > 0) loadHistorial();
   }, [tab, vendedores, loadHistorial]);
 
+  // ── Load ganadores (tab 4) ─────────────────────────────────────────────────
+  const loadGanadores = useCallback(async () => {
+    setGanadoresLoading(true);
+    try {
+      const { data } = await supabase.rpc('comercial_top_productos', {
+        p_mes:      ganadoresMes      || null,
+        p_vendedor: ganadoresVendedor || null,
+        p_top:      100,
+      });
+      setGanadoresData(data || []);
+    } catch (e) {
+      console.error('Error ganadores:', e);
+    }
+    setGanadoresLoading(false);
+  }, [ganadoresMes, ganadoresVendedor]);
+
+  useEffect(() => {
+    if (tab === 'ganadores') loadGanadores();
+  }, [tab, ganadoresMes, ganadoresVendedor, loadGanadores]);
+
   // ── Computed dashboard data ────────────────────────────────────────────────
   const dashboardRows = useMemo(() => {
     // Cuando hay informe de ventas cargado, usar esos datos (nombres y montos correctos)
@@ -596,6 +623,15 @@ export default function ComercialV2() {
     const peor = dashboardRows[dashboardRows.length - 1];
     return { totalVentas, fuenteVentas, avgUtil, totalNC, mejor, peor };
   }, [dashboardRows, informeVentasNetas]);
+
+  // ── Ganadores sorted ──────────────────────────────────────────────────────
+  const ganadoresSorted = useMemo(() => {
+    const d = [...ganadoresData];
+    if (ganadoresOrden === 'monto')    d.sort((a, b) => N(b.total_monto)     - N(a.total_monto));
+    else if (ganadoresOrden === 'cantidad') d.sort((a, b) => N(b.total_cantidad) - N(a.total_cantidad));
+    else                               d.sort((a, b) => N(b.total_utilidad)  - N(a.total_utilidad));
+    return d;
+  }, [ganadoresData, ganadoresOrden]);
 
   // ── Save form ──────────────────────────────────────────────────────────────
   const saveForm = async () => {
@@ -692,6 +728,7 @@ export default function ComercialV2() {
           { key: 'dashboard', label: 'Dashboard' },
           { key: 'datos', label: 'Ingresar Datos' },
           { key: 'historial', label: 'Historial' },
+          { key: 'ganadores', label: '🏆 Top Productos' },
         ].map(t => (
           <button
             key={t.key}
@@ -933,6 +970,146 @@ export default function ComercialV2() {
                 )}
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ─── TAB 4: TOP PRODUCTOS GANADORES ──────────────────────────── */}
+      {tab === 'ganadores' && (
+        <div>
+          {/* Filtros */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div>
+              <label style={S.label}>Mes</label>
+              <select style={S.select} value={ganadoresMes} onChange={e => setGanadoresMes(e.target.value)}>
+                <option value="">Todos (acumulado)</option>
+                {monthOptions.map(o => (
+                  <option key={o.val} value={o.val}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={S.label}>Vendedor</label>
+              <select style={S.select} value={ganadoresVendedor} onChange={e => setGanadoresVendedor(e.target.value)}>
+                <option value="">Todos</option>
+                {vendedores.map(v => (
+                  <option key={v.id} value={v.nombre}>{v.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginTop: 18 }}>
+              {[
+                { key: 'utilidad', label: 'Por Utilidad ₡' },
+                { key: 'monto',    label: 'Por Monto' },
+                { key: 'cantidad', label: 'Por Cantidad' },
+              ].map(o => (
+                <button
+                  key={o.key}
+                  onClick={() => setGanadoresOrden(o.key)}
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    borderRadius: 9,
+                    cursor: 'pointer',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    fontFamily: 'Rubik, sans-serif',
+                    marginRight: 6,
+                    background: ganadoresOrden === o.key ? C.gold : 'rgba(255,255,255,0.5)',
+                    color:      ganadoresOrden === o.key ? C.white : C.muted,
+                    boxShadow:  ganadoresOrden === o.key ? '0 2px 8px rgba(200,168,75,0.3)' : 'none',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {ganadoresLoading ? <Spinner /> : ganadoresSorted.length === 0 ? (
+            <Empty msg="Sin datos" sub="Sube los reportes de ítems facturados para ver los productos ganadores" />
+          ) : (
+            <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+              {/* Resumen rápido */}
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: '18px 20px 14px', borderBottom: `1px solid rgba(200,168,75,0.15)` }}>
+                <div style={{ flex: '1 1 140px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>Productos</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: C.gold }}>{ganadoresSorted.length}</div>
+                </div>
+                <div style={{ flex: '1 1 180px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>Monto Total</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: C.text }}>{CRC(ganadoresSorted.reduce((s, r) => s + N(r.total_monto), 0))}</div>
+                </div>
+                <div style={{ flex: '1 1 180px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>Utilidad Total</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: C.green }}>{CRC(ganadoresSorted.reduce((s, r) => s + N(r.total_utilidad), 0))}</div>
+                </div>
+                <div style={{ flex: '1 1 140px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>Utilidad Prom.</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: C.blue }}>
+                    {(ganadoresSorted.reduce((s, r) => s + N(r.utilidad_pct), 0) / ganadoresSorted.length).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Rubik, sans-serif' }}>
+                  <thead>
+                    <tr>
+                      {['#', 'Código', 'Producto', 'Marca', 'Utilidad ₡', 'Util %', 'Monto', 'Cantidad', 'Meses', 'Mejor Vendedor', 'Peor Vendedor'].map(h => (
+                        <th key={h} style={S.th}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ganadoresSorted.map((row, idx) => {
+                      const upct = N(row.utilidad_pct);
+                      const utilColor = upct >= 30 ? C.green : upct >= 15 ? C.orange : C.red;
+                      const consMax = Math.max(...ganadoresSorted.map(r => N(r.consistencia)));
+                      const consRatio = consMax > 0 ? N(row.consistencia) / consMax : 0;
+                      const consColor = consRatio >= 0.8 ? C.green : consRatio >= 0.5 ? C.blue : C.muted;
+                      return (
+                        <tr
+                          key={row.codigo + idx}
+                          style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.3)' }}
+                        >
+                          <td style={{ ...S.td, fontWeight: 700, color: C.gold, width: 36 }}>{idx + 1}</td>
+                          <td style={{ ...S.td, fontSize: '0.75rem', color: C.muted, fontFamily: 'monospace' }}>{row.codigo}</td>
+                          <td style={{ ...S.td, fontWeight: 600, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.producto}</td>
+                          <td style={{ ...S.td, fontSize: '0.78rem', color: C.muted }}>{row.marca || '—'}</td>
+                          <td style={{ ...S.td, fontWeight: 700, color: C.green }}>{CRC(row.total_utilidad)}</td>
+                          <td style={{ ...S.td, fontWeight: 700, color: utilColor }}>{upct.toFixed(1)}%</td>
+                          <td style={S.td}>{CRC(row.total_monto)}</td>
+                          <td style={S.td}>{Math.round(N(row.total_cantidad)).toLocaleString('es-CR')}</td>
+                          <td style={{ ...S.td, textAlign: 'center' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              background: consColor + '22',
+                              color: consColor,
+                              borderRadius: 6,
+                              padding: '2px 8px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                            }}>
+                              {row.consistencia}m
+                            </span>
+                          </td>
+                          <td style={{ ...S.td, fontSize: '0.8rem' }}>
+                            <div style={{ fontWeight: 600, color: C.green }}>{row.mejor_vendedor || '—'}</div>
+                            <div style={{ fontSize: '0.72rem', color: C.muted }}>{CRC(row.mejor_vendedor_monto)}</div>
+                          </td>
+                          <td style={{ ...S.td, fontSize: '0.8rem' }}>
+                            <div style={{ fontWeight: 600, color: C.orange }}>{row.peor_vendedor || '—'}</div>
+                            <div style={{ fontSize: '0.72rem', color: C.muted }}>{CRC(row.peor_vendedor_monto)}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       )}
