@@ -609,6 +609,23 @@ function TabSubir() {
           continue;
         }
 
+        // informe de ventas por vendedor/categoría: usar API servidor (ExcelJS, maneja xml:space)
+        if (tipo === 'neo_informe_ventas_vendedor' || tipo === 'neo_informe_ventas_categoria') {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('tabla', tipo);
+          const apiRes3 = await fetch('/api/ezequiel-ventas', { method: 'POST', body: fd });
+          const apiData3 = await apiRes3.json();
+          if (!apiRes3.ok) throw new Error(apiData3.error || 'Error API ventas');
+          cantidad = apiData3.registros;
+          res.tipo = tipo;
+          res.filas = cantidad;
+          res.periodo = apiData3.periodo || new Date().toISOString().slice(0, 10);
+          res.estado = 'ok';
+          nuevos.push(res);
+          continue;
+        }
+
         const periodo  = extraerPeriodo(filas, tipo);
         const records  = procesarExcel(filas, tipo, fechaCarga, periodo);
         console.log(`[SOL] procesarExcel → ${records.length} records para ${tipo}`);
