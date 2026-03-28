@@ -388,6 +388,7 @@ export default function ComercialV2() {
   const [manualesData, setManualesData] = useState({});
   const [metasData, setMetasData] = useState({});
   const [informeVentasNetas, setInformeVentasNetas] = useState(null);
+  const [informeData, setInformeData] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [statusReportes, setStatusReportes] = useState(null);
 
@@ -426,10 +427,11 @@ export default function ComercialV2() {
       // Ventas netas desde informe oficial (más preciso que items facturados)
       const { data: informeRows } = await supabase
         .from('neo_informe_ventas_vendedor')
-        .select('ventas_netas')
+        .select('vendedor, ventas_netas, pct_utilidad, utilidad, notas_totales')
         .eq('mes', mes);
       const totalInforme = (informeRows || []).reduce((s, r) => s + N(r.ventas_netas), 0);
       setInformeVentasNetas(totalInforme > 0 ? totalInforme : null);
+      setInformeData(informeRows || []);
 
       // Status de reportes (para alertas de datos incompletos)
       const { data: stRows } = await supabase.rpc('comercial_status_reportes', { p_mes: mes });
@@ -546,13 +548,25 @@ export default function ComercialV2() {
 
   // ── Computed dashboard data ────────────────────────────────────────────────
   const dashboardRows = useMemo(() => {
-    return ventasData.map(v => {
+    // Cuando hay informe de ventas cargado, usar esos datos (nombres y montos correctos)
+    const baseData = informeData.length > 0
+      ? informeData.map(r => ({
+          vendedor:     r.vendedor,
+          ventas_mes:   N(r.ventas_netas),
+          utilidad_pct: N(r.pct_utilidad),
+          utilidad_colones: N(r.utilidad),
+          nc_monto:     N(r.notas_totales),
+          nc_facturas:  0,
+        }))
+      : ventasData;
+
+    return baseData.map(v => {
       const manual = manualesData[v.vendedor] || {};
       const mb = metasData[v.vendedor] || 0;
-      const kpis = calcAllKpis(v, manual, mb, vendedores.length);
+      const kpis = calcAllKpis(v, manual, mb, baseData.length);
       return { vendedor: v.vendedor, kpis, nc_monto: N(v.nc_monto), nc_facturas: N(v.nc_facturas) };
     }).sort((a, b) => b.kpis.efiFinal - a.kpis.efiFinal);
-  }, [ventasData, manualesData, metasData, vendedores]);
+  }, [ventasData, informeData, manualesData, metasData]);
 
   // Date range from actual data
   const dataRange = useMemo(() => {
