@@ -107,12 +107,14 @@ const REPORTES = {
   neo_informe_ventas_vendedor: {
     nombre:'Informe de ventas por vendedor', emoji:'👤',
     descripcion:'Resumen de ventas por vendedor con notas de crédito. Complementa Items Facturados para comisiones exactas.',
+    titulo_valor:'__skip__',
     usar_vendedor_parser: true,
     modulos_destino:['vendedores'],
   },
   neo_informe_ventas_categoria: {
     nombre:'Informe de ventas por categoría', emoji:'📦',
     descripcion:'Resumen de ventas por categoría de producto.',
+    titulo_valor:'__skip__',
     usar_categoria_parser: true,
   },
   neo_ordenes_compra_estado:{
