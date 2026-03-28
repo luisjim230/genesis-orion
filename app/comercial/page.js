@@ -387,6 +387,7 @@ export default function ComercialV2() {
   const [ventasData, setVentasData] = useState([]);
   const [manualesData, setManualesData] = useState({});
   const [metasData, setMetasData] = useState({});
+  const [informeVentasNetas, setInformeVentasNetas] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [statusReportes, setStatusReportes] = useState(null);
 
@@ -421,6 +422,14 @@ export default function ComercialV2() {
       // Auto data from RPC
       const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: mes });
       setVentasData(ventas || []);
+
+      // Ventas netas desde informe oficial (más preciso que items facturados)
+      const { data: informeRows } = await supabase
+        .from('neo_informe_ventas_vendedor')
+        .select('ventas_netas')
+        .eq('mes', mes);
+      const totalInforme = (informeRows || []).reduce((s, r) => s + N(r.ventas_netas), 0);
+      setInformeVentasNetas(totalInforme > 0 ? totalInforme : null);
 
       // Status de reportes (para alertas de datos incompletos)
       const { data: stRows } = await supabase.rpc('comercial_status_reportes', { p_mes: mes });
@@ -564,13 +573,15 @@ export default function ComercialV2() {
 
   const summaryStats = useMemo(() => {
     if (dashboardRows.length === 0) return null;
-    const totalVentas = dashboardRows.reduce((s, r) => s + r.kpis.ventasMes, 0);
+    const totalVentasItems = dashboardRows.reduce((s, r) => s + r.kpis.ventasMes, 0);
+    const totalVentas = informeVentasNetas != null ? informeVentasNetas : totalVentasItems;
+    const fuenteVentas = informeVentasNetas != null ? 'Informe de Ventas' : 'Ítems Facturados';
     const avgUtil = dashboardRows.reduce((s, r) => s + r.kpis.utilPct, 0) / dashboardRows.length;
     const totalNC = dashboardRows.reduce((s, r) => s + r.nc_monto, 0);
     const mejor = dashboardRows[0];
     const peor = dashboardRows[dashboardRows.length - 1];
-    return { totalVentas, avgUtil, totalNC, mejor, peor };
-  }, [dashboardRows]);
+    return { totalVentas, fuenteVentas, avgUtil, totalNC, mejor, peor };
+  }, [dashboardRows, informeVentasNetas]);
 
   // ── Save form ──────────────────────────────────────────────────────────────
   const saveForm = async () => {
@@ -726,6 +737,7 @@ export default function ComercialV2() {
                   <SummaryCard
                     kicker="Total Ventas Equipo"
                     value={CRC(summaryStats.totalVentas)}
+                    sub={<span style={{ fontSize: '0.72rem', color: C.muted }}>{summaryStats.fuenteVentas}</span>}
                     accent={C.gold}
                   />
                   <SummaryCard
