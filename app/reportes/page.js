@@ -224,7 +224,7 @@ function detectarTipo(filas, nombreArchivo) {
 
 function extraerPeriodo(filas, tipo) {
   // Caso 1: rango explícito "Del X al Y" en encabezado (cualquier reporte)
-  for (let i = 0; i < Math.min(10, filas.length); i++) {
+  for (let i = 0; i < Math.min(20, filas.length); i++) {
     const fila = Array.isArray(filas[i]) ? filas[i] : [];
     for (const v of fila) {
       const s = String(v||'').trim();
