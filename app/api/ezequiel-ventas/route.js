@@ -77,7 +77,37 @@ export async function POST(req) {
       return Response.json({ error: 'No se encontró fila de headers (Vendedor)' }, { status: 422 });
     }
 
-    console.log(`[VentasAPI] tabla=${tabla} headerRow=${headerRowNum} periodo="${periodo}" mes=${mes}`);
+    // ── Mapeo dinámico por nombre de columna (100% infalible) ───────────────
+    const HEADER_MAP = {
+      'Unidades vendidas':                   'unidades_vendidas',
+      'Ventas sin impuestos':                'ventas_sin_imp',
+      'Ventas con impuestos':                'ventas_con_imp',
+      'Notas a clientes sin impuestos':      'notas_sin_imp',
+      'Notas a clientes con impuestos':      'notas_con_imp',
+      'Impuestos ventas':                    'imp_ventas',
+      'Impuestos notas':                     'imp_notas',
+      'Ventas / Otros cargos':               'ventas_otros_cargos',
+      'Notas a clientes / Otros cargos':     'notas_otros_cargos',
+      'Ventas totales':                      'ventas_totales',
+      'Notas a clientes totales':            'notas_totales',
+      'Ventas netas':                        'ventas_netas',
+      'Costo':                               'costo',
+      'Utilidad':                            'utilidad',
+      '% Utilidad':                          'pct_utilidad',
+      'Utilidad/Costo':                      'util_costo',
+      'Transacciones':                       'transacciones',
+      'Tiquete promedio':                    'tiquete_promedio',
+    };
+
+    // Construir colMap: número de celda → campo DB
+    const colMap = {}; // { cellNum: 'campo' }
+    const headerRow = ws.getRow(headerRowNum);
+    headerRow.eachCell({ includeEmpty: false }, (cell, colNum) => {
+      const h = toStr(cell.value);
+      if (HEADER_MAP[h]) colMap[colNum] = HEADER_MAP[h];
+    });
+
+    console.log(`[VentasAPI] tabla=${tabla} headerRow=${headerRowNum} periodo="${periodo}" mes=${mes} cols=${Object.keys(colMap).length}`);
 
     // ── Leer datos ───────────────────────────────────────────────────────────
     const now     = new Date().toISOString();
@@ -87,23 +117,16 @@ export async function POST(req) {
       if (rn <= headerRowNum) return;
 
       const vendedor = toStr(row.getCell(1).value);
-      if (!vendedor) return; // fila sin nombre → subtotal de sub-grupo (skip)
+      if (!vendedor) return;
 
-      // Saltar fila de gran total
       const vendLower = vendedor.toLowerCase();
       if (vendLower.startsWith('gran total') || vendLower.startsWith('total general')) return;
 
-      const record = {
-        fecha_carga:      now,
-        periodo_reporte:  periodo,
-        mes,
-        vendedor,
-        unidades_vendidas: toNum(row.getCell(2).value),
-      };
+      const record = { fecha_carga: now, periodo_reporte: periodo, mes, vendedor };
 
-      // Columnas 3..19 → COLS_VENDEDOR[0..17]
-      COLS_VENDEDOR.forEach((col, i) => {
-        record[col] = toNum(row.getCell(i + 3).value);
+      // Leer cada columna según el mapa dinámico
+      Object.entries(colMap).forEach(([cellNum, campo]) => {
+        record[campo] = toNum(row.getCell(Number(cellNum)).value);
       });
 
       records.push(record);
