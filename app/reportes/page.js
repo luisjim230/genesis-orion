@@ -296,10 +296,14 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
       };
       // unidades en col 1, datos de col 2 en adelante → mapear
       COLS.forEach((c, i) => { record[c] = n(row[i + 2]); });
-      // Calcular mes desde periodo_reporte: "Del 01/02/2026 al 28/02/2026" → "2026-02"
+      // Calcular mes desde periodo_reporte
       if (periodo) {
-        const m = String(periodo).match(/(\d{2})\/(\d{2})\/(\d{4})/);
-        if (m) record.mes = m[3] + '-' + m[2];
+        const p = String(periodo);
+        // "Del 01/02/2026 al 28/02/2026" → "2026-02"
+        const m1 = p.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m1) record.mes = m1[3] + '-' + m1[2];
+        // "Día 2026-03-28" → "2026-03"
+        if (!record.mes) { const m2 = p.match(/(\d{4}-\d{2})/); if (m2) record.mes = m2[1]; }
       }
       records.push(record);
     }
