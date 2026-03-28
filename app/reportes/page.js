@@ -207,9 +207,9 @@ function detectarTipo(filas, nombreArchivo) {
     for (const { patron, tabla } of mapaArchivo) {
       if (nomNorm.includes(patron)) {
         if (tabla === '_informe_ventas_check') {
-          // Distinguir por contenido de fila 1: "vendedor" vs "Categoría"
-          for (let i = 0; i < Math.min(5, filas.length); i++) {
-            const txt = filas[i].map(v => String(v||'').toLowerCase()).join(' ');
+          // Distinguir por contenido: "vendedor" vs "Categoría"
+          for (let i = 0; i < Math.min(12, filas.length); i++) {
+            const txt = (filas[i]||[]).map(v => String(v||'').toLowerCase()).join(' ');
             if (txt.includes('vendedor')) return 'neo_informe_ventas_vendedor';
             if (txt.includes('categor')) return 'neo_informe_ventas_categoria';
           }
