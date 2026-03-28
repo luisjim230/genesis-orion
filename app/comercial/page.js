@@ -409,6 +409,12 @@ export default function ComercialV2() {
   const [ganadoresVendedor, setGanadoresVendedor] = useState('');
   const [ganadoresOrden, setGanadoresOrden] = useState('utilidad');
 
+  // Tendencias states (tab 5)
+  const [tendenciasData, setTendenciasData] = useState([]);
+  const [tendenciasLoading, setTendenciasLoading] = useState(false);
+  const [tendenciasVendedor, setTendenciasVendedor] = useState('');
+  const [tendenciasMetrica, setTendenciasMetrica] = useState('monto'); // 'monto'|'utilidad'|'cantidad'
+
   // ── Load vendedores (desde datos reales de facturación) ─────────────────────
   useEffect(() => {
     (async () => {
@@ -573,6 +579,24 @@ export default function ComercialV2() {
     if (tab === 'ganadores') loadGanadores();
   }, [tab, ganadoresMes, ganadoresVendedor, loadGanadores]);
 
+  // ── Load tendencias (tab 5) ────────────────────────────────────────────────
+  const loadTendencias = useCallback(async () => {
+    setTendenciasLoading(true);
+    try {
+      const { data } = await supabase.rpc('comercial_tendencias_mensuales', {
+        p_vendedor: tendenciasVendedor || null,
+      });
+      setTendenciasData(data || []);
+    } catch (e) {
+      console.error('Error tendencias:', e);
+    }
+    setTendenciasLoading(false);
+  }, [tendenciasVendedor]);
+
+  useEffect(() => {
+    if (tab === 'tendencias') loadTendencias();
+  }, [tab, tendenciasVendedor, loadTendencias]);
+
   // ── Computed dashboard data ────────────────────────────────────────────────
   const dashboardRows = useMemo(() => {
     // Cuando hay informe de ventas cargado, usar esos datos (nombres y montos correctos)
@@ -728,7 +752,8 @@ export default function ComercialV2() {
           { key: 'dashboard', label: 'Dashboard' },
           { key: 'datos', label: 'Ingresar Datos' },
           { key: 'historial', label: 'Historial' },
-          { key: 'ganadores', label: '🏆 Top Productos' },
+          { key: 'ganadores',   label: '🏆 Top Productos' },
+          { key: 'tendencias',  label: '📈 Tendencias' },
         ].map(t => (
           <button
             key={t.key}
@@ -1113,6 +1138,207 @@ export default function ComercialV2() {
           )}
         </div>
       )}
+
+      {/* ─── TAB 5: TENDENCIAS ESTACIONALES ──────────────────────────── */}
+      {tab === 'tendencias' && (() => {
+        const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        const metricaKey = tendenciasMetrica === 'monto' ? 'monto_total'
+          : tendenciasMetrica === 'utilidad' ? 'utilidad_total' : 'cantidad_total';
+
+        // Organizar datos en grid[anio][mes_num]
+        const grid = {};
+        (tendenciasData || []).forEach(r => {
+          if (!grid[r.anio]) grid[r.anio] = {};
+          grid[r.anio][r.mes_num] = r;
+        });
+        const anios = Object.keys(grid).map(Number).sort();
+        const aniosCompletos = anios.filter(a => a < 2026); // excluir año parcial del índice
+
+        // Promedio histórico por mes (excluye 2026 por ser parcial)
+        const promMes = {};
+        for (let m = 1; m <= 12; m++) {
+          const vals = aniosCompletos.map(a => N(grid[a]?.[m]?.[metricaKey])).filter(v => v > 0);
+          promMes[m] = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+        }
+        const globalProm = Object.values(promMes).filter(v => v > 0).reduce((s, v) => s + v, 0)
+          / Object.values(promMes).filter(v => v > 0).length || 1;
+
+        // Totales anuales
+        const totalAnio = {};
+        anios.forEach(a => {
+          totalAnio[a] = Object.values(grid[a] || {}).reduce((s, r) => s + N(r[metricaKey]), 0);
+        });
+
+        // Crecimiento año a año
+        const aniosGrowth = anios.filter(a => a <= 2025);
+
+        const fmtVal = v => tendenciasMetrica === 'cantidad'
+          ? Math.round(v).toLocaleString('es-CR')
+          : '₡' + (v >= 1e6 ? (v/1e6).toFixed(1) + 'M' : Math.round(v/1000) + 'K');
+
+        const heatColor = (val, promRef) => {
+          if (!promRef || !val) return 'transparent';
+          const ratio = val / promRef;
+          if (ratio >= 1.20) return 'rgba(46,125,79,0.22)';
+          if (ratio >= 1.05) return 'rgba(46,125,79,0.10)';
+          if (ratio >= 0.95) return 'transparent';
+          if (ratio >= 0.80) return 'rgba(192,64,64,0.09)';
+          return 'rgba(192,64,64,0.20)';
+        };
+
+        return (
+          <div>
+            {/* Filtros */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+              <div>
+                <label style={S.label}>Vendedor</label>
+                <select style={S.select} value={tendenciasVendedor} onChange={e => setTendenciasVendedor(e.target.value)}>
+                  <option value="">Todo el equipo</option>
+                  {vendedores.map(v => <option key={v.id} value={v.nombre}>{v.nombre}</option>)}
+                </select>
+              </div>
+              <div style={{ marginTop: 18 }}>
+                {[{k:'monto',l:'Monto ₡'},{k:'utilidad',l:'Utilidad ₡'},{k:'cantidad',l:'Cantidad'}].map(o => (
+                  <button key={o.k} onClick={() => setTendenciasMetrica(o.k)} style={{
+                    padding: '8px 16px', border: 'none', borderRadius: 9, cursor: 'pointer',
+                    fontSize: '0.82rem', fontWeight: 700, fontFamily: 'Rubik, sans-serif', marginRight: 6,
+                    background: tendenciasMetrica === o.k ? C.gold : 'rgba(255,255,255,0.5)',
+                    color: tendenciasMetrica === o.k ? C.white : C.muted,
+                    boxShadow: tendenciasMetrica === o.k ? '0 2px 8px rgba(200,168,75,0.3)' : 'none',
+                  }}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+
+            {tendenciasLoading ? <Spinner /> : tendenciasData.length === 0 ? (
+              <Empty msg="Sin datos" sub="Carga los reportes de ítems facturados para ver tendencias" />
+            ) : (<>
+
+              {/* ── Sección 1: Índice Estacional ── */}
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={S.kicker}>Patrón Estacional</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4 }}>Índice por Mes</div>
+                <div style={{ fontSize: '0.78rem', color: C.muted, marginBottom: 20 }}>
+                  100 = promedio histórico · verde = mes fuerte · rojo = mes débil · basado en {aniosCompletos.join(', ')}
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  {MESES.map((nombre, i) => {
+                    const m = i + 1;
+                    const idx = promMes[m] > 0 ? Math.round(promMes[m] / globalProm * 100) : 0;
+                    const isStrong = idx >= 105;
+                    const isWeak   = idx <= 95;
+                    const barH = Math.max(20, Math.min(120, idx * 0.9));
+                    const barColor = isStrong ? C.green : isWeak ? C.red : C.blue;
+                    return (
+                      <div key={m} style={{ flex: '1 1 60px', textAlign: 'center', minWidth: 52 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: barColor, marginBottom: 4 }}>{idx}%</div>
+                        <div style={{
+                          height: barH, background: barColor + '33', border: `2px solid ${barColor}`,
+                          borderRadius: 8, margin: '0 auto 6px', width: '80%',
+                          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                          paddingBottom: 4,
+                        }}>
+                          <div style={{ width: '60%', background: barColor, borderRadius: 4, height: `${Math.max(10, barH * 0.6)}px` }} />
+                        </div>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted }}>{nombre}</div>
+                        <div style={{ fontSize: '0.68rem', color: C.muted }}>{fmtVal(promMes[m])}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Sección 2: Tabla Año × Mes (heatmap) ── */}
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={S.kicker}>Comparativo Histórico</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4 }}>Año × Mes</div>
+                <div style={{ fontSize: '0.78rem', color: C.muted, marginBottom: 16 }}>
+                  Verde = por encima del promedio histórico del mes · Rojo = por debajo
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Rubik, sans-serif' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...S.th, textAlign: 'left', minWidth: 50 }}>Mes</th>
+                        {anios.map(a => <th key={a} style={{ ...S.th, minWidth: 80 }}>{a}</th>)}
+                        <th style={{ ...S.th, minWidth: 80, color: C.gold }}>Prom.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {MESES.map((nombre, i) => {
+                        const m = i + 1;
+                        return (
+                          <tr key={m} style={{ borderBottom: `1px solid rgba(200,168,75,0.08)` }}>
+                            <td style={{ ...S.td, fontWeight: 700, color: C.muted, fontSize: '0.82rem' }}>{nombre}</td>
+                            {anios.map(a => {
+                              const val = N(grid[a]?.[m]?.[metricaKey]);
+                              const bg  = heatColor(val, promMes[m]);
+                              return (
+                                <td key={a} style={{ ...S.td, textAlign: 'center', background: bg, fontSize: '0.78rem', fontWeight: val > 0 ? 600 : 400 }}>
+                                  {val > 0 ? fmtVal(val) : <span style={{ color: C.muted }}>—</span>}
+                                </td>
+                              );
+                            })}
+                            <td style={{ ...S.td, textAlign: 'center', fontWeight: 700, color: C.gold, fontSize: '0.78rem' }}>
+                              {promMes[m] > 0 ? fmtVal(promMes[m]) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Fila total */}
+                      <tr style={{ borderTop: `2px solid rgba(200,168,75,0.2)`, background: 'rgba(200,168,75,0.04)' }}>
+                        <td style={{ ...S.td, fontWeight: 800 }}>Total</td>
+                        {anios.map(a => (
+                          <td key={a} style={{ ...S.td, textAlign: 'center', fontWeight: 800, fontSize: '0.78rem' }}>
+                            {fmtVal(totalAnio[a])}
+                          </td>
+                        ))}
+                        <td style={{ ...S.td, textAlign: 'center', fontWeight: 800, color: C.gold, fontSize: '0.78rem' }}>
+                          {fmtVal(Object.values(totalAnio).filter(v=>v>0).reduce((s,v)=>s+v,0) / Object.values(totalAnio).filter(v=>v>0).length)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── Sección 3: Crecimiento Anual ── */}
+              <div style={{ ...S.card }}>
+                <div style={S.kicker}>Crecimiento</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Tendencia Anual</div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  {aniosGrowth.map((a, idx) => {
+                    const prev = aniosGrowth[idx - 1];
+                    const pct = prev && totalAnio[prev] > 0
+                      ? ((totalAnio[a] - totalAnio[prev]) / totalAnio[prev] * 100).toFixed(1)
+                      : null;
+                    const maxTotal = Math.max(...aniosGrowth.map(x => totalAnio[x]));
+                    const barH = maxTotal > 0 ? Math.max(40, totalAnio[a] / maxTotal * 160) : 40;
+                    const isGrow = pct !== null && parseFloat(pct) > 0;
+                    return (
+                      <div key={a} style={{ flex: '1 1 80px', textAlign: 'center', minWidth: 80 }}>
+                        {pct !== null && (
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isGrow ? C.green : C.red, marginBottom: 4 }}>
+                            {isGrow ? '▲' : '▼'} {Math.abs(pct)}%
+                          </div>
+                        )}
+                        <div style={{
+                          height: barH, background: `linear-gradient(180deg, ${C.gold}44, ${C.gold}88)`,
+                          border: `2px solid ${C.gold}`, borderRadius: '10px 10px 0 0',
+                          margin: '0 auto', width: '70%',
+                        }} />
+                        <div style={{ fontSize: '0.78rem', fontWeight: 800, color: C.text, marginTop: 6 }}>{a}</div>
+                        <div style={{ fontSize: '0.72rem', color: C.muted }}>{fmtVal(totalAnio[a])}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </>)}
+          </div>
+        );
+      })()}
 
       {/* ─── TAB 3: HISTORIAL ─────────────────────────────────────────── */}
       {tab === 'historial' && (
