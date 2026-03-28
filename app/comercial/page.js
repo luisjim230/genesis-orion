@@ -563,11 +563,11 @@ export default function ComercialV2() {
   const loadGanadores = useCallback(async () => {
     setGanadoresLoading(true);
     try {
-      const { data } = await supabase.rpc('comercial_top_productos', {
-        p_mes:      ganadoresMes      || null,
-        p_vendedor: ganadoresVendedor || null,
-        p_top:      100,
-      });
+      const params = { p_top: 100 };
+      if (ganadoresMes)      params.p_mes      = ganadoresMes;
+      if (ganadoresVendedor) params.p_vendedor  = ganadoresVendedor;
+      const { data, error } = await supabase.rpc('comercial_top_productos', params);
+      if (error) console.error('RPC ganadores error:', error);
       setGanadoresData(data || []);
     } catch (e) {
       console.error('Error ganadores:', e);
@@ -583,9 +583,10 @@ export default function ComercialV2() {
   const loadTendencias = useCallback(async () => {
     setTendenciasLoading(true);
     try {
-      const { data } = await supabase.rpc('comercial_tendencias_mensuales', {
-        p_vendedor: tendenciasVendedor || null,
-      });
+      const params = {};
+      if (tendenciasVendedor) params.p_vendedor = tendenciasVendedor;
+      const { data, error } = await supabase.rpc('comercial_tendencias_mensuales', params);
+      if (error) console.error('RPC tendencias error:', error);
       setTendenciasData(data || []);
     } catch (e) {
       console.error('Error tendencias:', e);
