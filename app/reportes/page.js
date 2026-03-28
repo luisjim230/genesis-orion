@@ -104,6 +104,17 @@ const REPORTES = {
     columnas_originales:['Proveedor','Bodega','Código interno','Categoría','Ítem','Precio unitario sin IVA','Costo unitario sin IVA','Existencias','Costo total'],
     upsert_key:'proveedor,bodega,codigo_interno',
   },
+  neo_informe_ventas_vendedor: {
+    nombre:'Informe de ventas por vendedor', emoji:'👤',
+    descripcion:'Resumen de ventas por vendedor con notas de crédito. Complementa Items Facturados para comisiones exactas.',
+    usar_vendedor_parser: true,
+    modulos_destino:['vendedores'],
+  },
+  neo_informe_ventas_categoria: {
+    nombre:'Informe de ventas por categoría', emoji:'📦',
+    descripcion:'Resumen de ventas por categoría de producto.',
+    usar_categoria_parser: true,
+  },
   neo_ordenes_compra_estado:{
     nombre:'Lista de órdenes de compra', emoji:'📋',
     descripcion:'Estado de OC en NEO: Registrada/Aplicada/Anulada, Comprada Sí/Parcial/No.',
@@ -283,6 +294,11 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
       };
       // unidades en col 1, datos de col 2 en adelante → mapear
       COLS.forEach((c, i) => { record[c] = n(row[i + 2]); });
+      // Calcular mes desde periodo_reporte: "Del 01/02/2026 al 28/02/2026" → "2026-02"
+      if (periodo) {
+        const m = String(periodo).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m) record.mes = m[3] + '-' + m[2];
+      }
       records.push(record);
     }
     return records;
