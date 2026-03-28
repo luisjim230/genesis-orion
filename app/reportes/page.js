@@ -398,6 +398,12 @@ function procesarExcel(filas, tabla, fechaCarga, periodo) {
       const matchOC = String(record.observaciones).match(/OC-\d{4}-\d{4}/);
       if (matchOC) record.numero_sol = matchOC[0];
     }
+    // Calcular columna mes (YYYY-MM) para items facturados
+    if (record.fecha) {
+      const f = String(record.fecha).split(' ')[0]; // quitar hora si existe
+      const p = f.split('/');
+      if (p.length === 3) record.mes = p[2] + '-' + p[1].padStart(2, '0');
+    }
     records.push(record);
   }
   
@@ -465,7 +471,7 @@ async function cargarASupabase(tabla, records, periodoNuevo, onProgress) {
       const cfgUpsert = Object.values(REPORTES).find(c => c.columnas && Object.keys(REPORTES).find(k => k === tabla && REPORTES[k].upsert_key));
       const upsertKey = REPORTES[tabla]?.upsert_key;
       const { error } = tabla === 'neo_items_facturados'
-        ? await supabase.from(tabla).upsert(batch, { onConflict: 'factura,codigo_interno' })
+        ? await supabase.from(tabla).upsert(batch, { onConflict: 'factura,codigo_interno,bodega' })
         : tabla === 'neo_lista_items'
         ? await supabase.from(tabla).upsert(batch, { onConflict: 'codigo_interno' })
         : upsertKey
