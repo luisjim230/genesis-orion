@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
 
 // Parse robusto: acepta "2026-03-09", "09/03/2026", serial Excel, ISO string
 function parseFecha(val) {
@@ -53,7 +51,7 @@ export async function POST(request) {
         const fOrden = parseFecha(fechaOrden);
         if (!fRecep || !fOrden) continue;
         if (fRecep <= fOrden) {
-          await supabase.from('ordenes_compra_items').update({
+          await getDb().from('ordenes_compra_items').update({
             cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null,
           }).eq('id', item.id);
           revertidos++;
@@ -142,7 +140,7 @@ export async function POST(request) {
       const nuevoEstado  = cantRecibida >= cantOrdenada ? 'completo' : 'parcial';
       res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++;
 
-      await supabase.from('ordenes_compra_items').update({
+      await getDb().from('ordenes_compra_items').update({
         cantidad_recibida: cantRecibida,
         estado_item:       nuevoEstado,
         fecha_recepcion:   fechaRecep ? fechaRecep.toISOString() : null,

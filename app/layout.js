@@ -5,6 +5,8 @@ import './globals.css';
 
 const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'SOL · Sistema de Operaciones y Logística',
   description: 'Sistema de Operaciones y Logística · Corporación Rojimo S.A.',

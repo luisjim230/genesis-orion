@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
 
 const COLUMNAS_ORIGINALES = ['Código','Tipo','Nombre','Categoría','Marca','Ubicación','Mínimo','Existencias','Máximo','Última compra','Último proveedor','Último costo unitario con descuento','Moneda','Promedio mensual vendido','Activo','Estatus'];
 const COLUMNAS_BD = ['codigo','tipo','nombre','categoria','marca','ubicacion','minimo','existencias','maximo','ultima_compra','ultimo_proveedor','ultimo_costo','moneda','promedio_mensual','activo','estatus'];
@@ -96,7 +94,7 @@ export async function POST(request) {
     if (fechasExistentes?.length) {
       const fechasUnicas = [...new Set(fechasExistentes.map(r => r.fecha_carga))];
       for (const fc of fechasUnicas) {
-        await supabase.from('neo_minimos_maximos').delete().eq('fecha_carga', fc);
+        await getDb().from('neo_minimos_maximos').delete().eq('fecha_carga', fc);
       }
     }
 
@@ -105,7 +103,7 @@ export async function POST(request) {
     let total = 0;
     for (let i = 0; i < records.length; i += BATCH) {
       const batch = records.slice(i, i + BATCH);
-      const { error } = await supabase.from('neo_minimos_maximos').insert(batch);
+      const { error } = await getDb().from('neo_minimos_maximos').insert(batch);
       if (error) throw new Error(`Batch ${Math.floor(i/BATCH)+1} falló: ${error.message}`);
       total += batch.length;
     }

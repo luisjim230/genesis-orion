@@ -1,10 +1,8 @@
 // app/api/neo/encolar-oc/route.js
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); return _sb; }
 
 function generarExcelNEO(items) {
   const ss = ['Código','Cantidad comprada','Costo unitario de la compra','Descuento']
@@ -66,7 +64,7 @@ export async function POST(request) {
     const proveedorSafe = proveedor.toUpperCase().replace(/[^A-Z0-9]/g,'_').replace(/_+/g,'_').slice(0,40)
     const ts = Date.now(); const nombreArchivo = 'OC_' + proveedorSafe + '_' + fecha + '_' + ts + '.xlsx'
     const xlsxBuffer = await buildXlsxBuffer(items)
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await getDb().storage
       .from('oc-excels')
       .upload(nombreArchivo, xlsxBuffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -91,7 +89,7 @@ export async function POST(request) {
       const nombreLote = 'OC_' + proveedorSafe + '_' + fecha + '_' + ts + sufijo + '.xlsx'
       const xlsxLote = await buildXlsxBuffer(lote)
 
-      const { error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await getDb().storage
         .from('oc-excels')
         .upload(nombreLote, xlsxLote, {
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -99,10 +97,10 @@ export async function POST(request) {
         })
       if (uploadErr) continue
 
-      const { data: consData } = await supabase.rpc('siguiente_numero_sol', { p_anio: anio })
+      const { data: consData } = await getDb().rpc('siguiente_numero_sol', { p_anio: anio })
       const numeroSol = `OC-${anio}-${String(consData).padStart(4, '0')}`
 
-      await supabase.from('cola_neo_uploads').insert({
+      await getDb().from('cola_neo_uploads').insert({
         nombre_archivo: nombreLote,
         storage_path: 'oc-excels/' + nombreLote,
         proveedor_nombre: proveedor,

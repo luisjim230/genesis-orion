@@ -1,10 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); return _sb; }
 
 export async function POST(req) {
   try {
@@ -146,8 +144,8 @@ export async function POST(req) {
     }
 
     // Borrar período anterior y reinsertar
-    await supabase.from(tabla).delete().eq('periodo_reporte', periodo);
-    const { error } = await supabase.from(tabla).insert(records);
+    await getDb().from(tabla).delete().eq('periodo_reporte', periodo);
+    const { error } = await getDb().from(tabla).insert(records);
 
     if (error) {
       console.error('[FinAPI] insert error:', error);

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+let _admin;
+function supabaseAdmin() {
+  if (!_admin) _admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+  return _admin;
+}
 
 export async function POST(req) {
   try {
@@ -22,7 +22,7 @@ export async function POST(req) {
     const usernameClean = username?.trim().toLowerCase() || null
 
     // Crear usuario en Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabaseAdmin().auth.admin.createUser({
       email: authEmail,
       password: password.trim(),
       email_confirm: true,
@@ -33,7 +33,7 @@ export async function POST(req) {
     const auth_id = authData.user.id
 
     // Insertar en usuarios_sol
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin()
       .from('usuarios_sol')
       .insert([{
         nombre: nombre.trim(),
@@ -49,7 +49,7 @@ export async function POST(req) {
 
     if (error) {
       // Rollback: borrar de Auth si falla la inserción
-      await supabaseAdmin.auth.admin.deleteUser(auth_id)
+      await supabaseAdmin().auth.admin.deleteUser(auth_id)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 

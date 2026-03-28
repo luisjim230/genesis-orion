@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); return _sb; }
 
 export async function POST(request) {
   try {
@@ -13,7 +11,7 @@ export async function POST(request) {
     if (!file) return Response.json({ error: 'No file' }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const { error } = await supabase.storage
+    const { error } = await getDb().storage
       .from('oc-pdfs')
       .upload(nombre, buffer, {
         contentType: 'application/pdf',
@@ -22,7 +20,7 @@ export async function POST(request) {
 
     if (error) return Response.json({ error: error.message }, { status: 500 })
 
-    const { data } = supabase.storage.from('oc-pdfs').getPublicUrl(nombre)
+    const { data } = getDb().storage.from('oc-pdfs').getPublicUrl(nombre)
     return Response.json({ ok: true, url: data.publicUrl })
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 })

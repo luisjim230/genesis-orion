@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+let _sb;
+function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
 
 const ALERTA_ORDER = {
   '🔴 Bajo stock': 1, '🔴 Bajo stock 🚢': 2,
@@ -56,7 +54,7 @@ export async function POST(request) {
     const fc = fd[0].fecha_carga;
     let todos = [], offset = 0;
     while (true) {
-      const { data } = await supabase.from('neo_minimos_maximos')
+      const { data } = await getDb().from('neo_minimos_maximos')
         .select('*').eq('fecha_carga', fc).range(offset, offset + 999);
       if (!data?.length) break;
       todos = todos.concat(data);
@@ -65,7 +63,7 @@ export async function POST(request) {
     }
 
     // 2. Tránsito
-    const { data: tData } = await supabase.from('ordenes_compra_items')
+    const { data: tData } = await getDb().from('ordenes_compra_items')
       .select('codigo,cantidad_ordenada,cantidad_recibida,estado_item')
       .in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};

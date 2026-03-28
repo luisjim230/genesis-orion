@@ -2,11 +2,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+let _admin;
+function supabaseAdmin() {
+  if (!_admin) _admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+  return _admin;
+}
 
 const KOMMO_TOKEN = process.env.KOMMO_TOKEN
 const KOMMO_SUBDOMAIN = process.env.KOMMO_SUBDOMAIN || 'depositojimenez'
@@ -66,7 +66,7 @@ export async function POST(req) {
     }
 
     if (contactoId) {
-      await supabaseAdmin.from('kommo_proveedores').upsert({
+      await supabaseAdmin().from('kommo_proveedores').upsert({
         nombre_proveedor: proveedor, whatsapp: telefono,
         kommo_contact_id: String(contactoId), actualizado_en: new Date().toISOString(),
       }, { onConflict: 'nombre_proveedor' })
