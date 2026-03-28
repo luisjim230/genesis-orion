@@ -502,6 +502,28 @@ function TabSubir() {
   const [resultados, setResultados] = useState([]);
   const [procesando, setProcesando] = useState(false);
   const [arrastrar, setArrastrar]   = useState(false);
+  const [statusMeses, setStatusMeses] = useState([]);
+
+  // Load report status for last 6 months
+  useEffect(() => {
+    (async () => {
+      const now = new Date();
+      const checks = [];
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const mesKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const mesLabel = d.toLocaleDateString('es-CR', { year: 'numeric', month: 'long' });
+        checks.push({ mesKey, mesLabel });
+      }
+      const results = [];
+      for (const c of checks) {
+        const { data } = await supabase.rpc('comercial_status_reportes', { p_mes: c.mesKey });
+        const st = data?.[0] || {};
+        results.push({ ...c, ...st });
+      }
+      setStatusMeses(results);
+    })();
+  }, [resultados]);
 
   const procesarArchivos = useCallback(async (files) => {
     if (!files || files.length === 0) return;
@@ -746,6 +768,58 @@ function TabSubir() {
           <input type="file" accept=".xlsx" multiple style={{ display:'none' }} onChange={onFileInput} disabled={procesando}/>
         </label>
       </div>
+
+      {/* Status de reportes comerciales por mes */}
+      {statusMeses.length > 0 && (
+        <div style={{ ...S.card, marginTop: '20px' }}>
+          <h4 style={{ color: 'var(--text-primary)', margin: '0 0 12px' }}>Estado de reportes para comisiones</h4>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12 }}>Para calculo exacto de comisiones se necesitan ambos reportes por mes.</div>
+          <table style={{ ...S.table, fontSize: '0.82rem' }}>
+            <thead>
+              <tr>
+                <th style={S.th}>Mes</th>
+                <th style={S.th}>Items Facturados</th>
+                <th style={S.th}>Informe de Ventas</th>
+                <th style={S.th}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statusMeses.map((m, i) => {
+                const completo = m.tiene_items && m.tiene_informe;
+                const parcial = m.tiene_items || m.tiene_informe;
+                const incompleto = m.tiene_items && m.items_dias < 15;
+                return (
+                  <tr key={m.mesKey} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{m.mesLabel}</td>
+                    <td style={S.td}>
+                      {m.tiene_items
+                        ? <span style={{ color: '#276749' }}>{'✓'} {Number(m.items_filas).toLocaleString()} filas ({m.items_dias} dias)</span>
+                        : <span style={{ color: '#c04040' }}>{'✗'} No cargado</span>
+                      }
+                    </td>
+                    <td style={S.td}>
+                      {m.tiene_informe
+                        ? <span style={{ color: '#276749' }}>{'✓'} {m.informe_vendedores} vendedores</span>
+                        : <span style={{ color: '#c04040' }}>{'✗'} No cargado</span>
+                      }
+                    </td>
+                    <td style={S.td}>
+                      {completo && !incompleto
+                        ? <span style={{ background: '#c6f6d5', color: '#276749', borderRadius: 4, padding: '2px 8px', fontWeight: 700, fontSize: '0.75rem' }}>COMPLETO</span>
+                        : incompleto
+                        ? <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '2px 8px', fontWeight: 700, fontSize: '0.75rem' }}>INCOMPLETO ({m.items_dias} dias)</span>
+                        : parcial
+                        ? <span style={{ background: '#fed7d7', color: '#c04040', borderRadius: 4, padding: '2px 8px', fontWeight: 700, fontSize: '0.75rem' }}>FALTA {!m.tiene_items ? 'ITEMS FACT.' : 'INF. VENTAS'}</span>
+                        : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Sin datos</span>
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Resultados */}
       {resultados.length > 0 && (

@@ -388,6 +388,7 @@ export default function ComercialV2() {
   const [manualesData, setManualesData] = useState({});
   const [metasData, setMetasData] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
+  const [statusReportes, setStatusReportes] = useState(null);
 
   // Form states (tab 2)
   const [formVendedor, setFormVendedor] = useState('');
@@ -420,6 +421,10 @@ export default function ComercialV2() {
       // Auto data from RPC
       const { data: ventas } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: mes });
       setVentasData(ventas || []);
+
+      // Status de reportes (para alertas de datos incompletos)
+      const { data: stRows } = await supabase.rpc('comercial_status_reportes', { p_mes: mes });
+      setStatusReportes(stRows?.[0] || null);
 
       // Manual data
       const { data: manuales } = await supabase
@@ -690,6 +695,28 @@ export default function ComercialV2() {
               </span>
             )}
           </div>
+
+          {/* Alert: missing reports */}
+          {statusReportes && (!statusReportes.tiene_items || !statusReportes.tiene_informe) && (
+            <div style={{ background: 'rgba(192,64,64,0.08)', border: '1px solid rgba(192,64,64,0.25)', borderRadius: 12, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>&#9888;</span>
+              <div style={{ fontSize: '0.82rem', color: C.red, fontWeight: 600, lineHeight: 1.5 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Datos incompletos para comisiones</div>
+                {!statusReportes.tiene_items && <div>Falta: Lista de items facturados</div>}
+                {!statusReportes.tiene_informe && <div>Falta: Informe de ventas por vendedor (necesario para notas de credito exactas)</div>}
+                {statusReportes.tiene_items && statusReportes.items_dias < 15 && (
+                  <div>Items facturados solo tiene {statusReportes.items_dias} dias de datos ({statusReportes.items_fecha_min} al {statusReportes.items_fecha_max})</div>
+                )}
+                <div style={{ color: C.muted, fontWeight: 500, marginTop: 4 }}>Sube los reportes faltantes en el modulo de Reportes para calculo exacto.</div>
+              </div>
+            </div>
+          )}
+          {statusReportes && statusReportes.tiene_items && statusReportes.tiene_informe && (
+            <div style={{ background: 'rgba(46,125,79,0.08)', border: '1px solid rgba(46,125,79,0.2)', borderRadius: 12, padding: '8px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: C.green, fontSize: '0.85rem' }}>&#10003;</span>
+              <span style={{ fontSize: '0.78rem', color: C.green, fontWeight: 600 }}>Datos completos — Items facturados + Informe de ventas cargados</span>
+            </div>
+          )}
 
           {loading ? <Spinner /> : (
             <>
