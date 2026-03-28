@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import SyncBadge from '../components/SyncBadge';
 import * as XLSX from 'xlsx';
@@ -523,7 +523,7 @@ function TabSubir() {
       }
       setStatusMeses(results);
     })();
-  }, [resultados]);
+  }, [resultados.length]);
 
   const procesarArchivos = useCallback(async (files) => {
     if (!files || files.length === 0) return;
