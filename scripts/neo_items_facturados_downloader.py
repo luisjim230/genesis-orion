@@ -226,6 +226,10 @@ def subir_a_supabase(excel_path):
 
     df = df[cols].copy()
 
+    # Normalizar fecha a DD/MM/YYYY (pandas la lee como "YYYY-MM-DD HH:MM:SS")
+    if "fecha" in df.columns:
+        df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce").dt.strftime("%d/%m/%Y")
+
     # Filtrar filas vacías y totales
     df = df.dropna(subset=["factura"])
     df = df[df["factura"].astype(str).str.strip() != ""]
