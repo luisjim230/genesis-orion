@@ -153,12 +153,12 @@ async def descargar():
         await iframe.locator("#fFechaInicio").fill(f_inicio)
         log.info(f"  Fecha inicio OK: {f_inicio}")
         try:
-            await iframe.locator("#fFechaFin").wait_for(timeout=5000)
+            await iframe.locator("#fFechaFin").wait_for(timeout=10000)
             await iframe.locator("#fFechaFin").click(click_count=3)
             await iframe.locator("#fFechaFin").fill(f_fin)
             log.info(f"  Fecha fin OK: {f_fin}")
         except Exception:
-            log.info(f"  Sin campo fFechaFin — usando solo inicio")
+            log.warning(f"  No se encontró #fFechaFin — continuando con inicio={f_inicio}")
 
         # ── Refrescar y esperar datos ──────────────────────────────────────────
         await iframe.get_by_role("button", name="Refrescar").click()
