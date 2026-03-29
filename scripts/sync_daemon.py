@@ -48,7 +48,7 @@ SCRIPT_MAP = {
     "items_comprados":         "neo_items_comprados_downloader.py",
     "antiguedad_proveedores":  "neo_antiguedad_proveedores_downloader.py",
     "antiguedad_clientes":     "neo_antiguedad_clientes_downloader.py",
-    "items_facturados":        None,   # upload manual por ahora
+    "items_facturados":        "neo_items_facturados_downloader.py",
     "informe_ventas_vendedor": None,
     "movimientos_contables":   None,
 }

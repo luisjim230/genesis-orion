@@ -801,7 +801,7 @@ function TabSubir() {
                 const fecha = s?.ultima_sync ? new Date(s.ultima_sync).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
                 const ok = s ? s.exitoso !== false : null;
                 const dot = ok === null ? '#888' : ok ? '#4ade80' : '#f87171';
-                const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes'].includes(key);
+                const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados'].includes(key);
                 return (
                   <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
                     <td style={S.td}>{r}</td>
