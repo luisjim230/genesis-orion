@@ -420,6 +420,7 @@ export default function ComercialV2() {
   const [productoQuery, setProductoQuery] = useState('');
   const [productoData, setProductoData] = useState([]);
   const [productoLoading, setProductoLoading] = useState(false);
+  const [productoSeleccionado, setProductoSeleccionado] = useState(null); // codigo_interno
 
   // ── Load vendedores (desde datos reales de facturación) ─────────────────────
   useEffect(() => {
@@ -607,11 +608,12 @@ export default function ComercialV2() {
   const loadProducto = useCallback(async (q) => {
     if (!q || q.trim().length < 2) return;
     setProductoLoading(true);
+    setProductoSeleccionado(null);
     try {
       const { data } = await supabase
         .from('neo_items_facturados')
         .select('fecha, cantidad_facturada, total, item, codigo_interno')
-        .ilike('item', `%${q.trim()}%`)
+        .or(`item.ilike.%${q.trim()}%,codigo_interno.ilike.%${q.trim()}%`)
         .limit(8000);
       setProductoData(data || []);
     } catch (e) { console.error(e); }
@@ -1295,14 +1297,68 @@ export default function ComercialV2() {
 
                   {!productoLoading && productoData.length > 0 && (
                     <>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4, color: C.text }}>{nombreProducto}</div>
-                      <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 16 }}>{productoData.length.toLocaleString()} registros · {panios.join(', ')}</div>
+                      {/* Lista de productos encontrados */}
+                      {(() => {
+                        const distintos = Object.values(
+                          productoData.reduce((acc, r) => {
+                            const k = r.codigo_interno || r.item;
+                            if (!acc[k]) acc[k] = { codigo: r.codigo_interno, nombre: (r.item||'').trim(), count: 0 };
+                            acc[k].count++;
+                            return acc;
+                          }, {})
+                        ).sort((a,b) => b.count - a.count);
+                        return distintos.length > 1 ? (
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 8 }}>{distintos.length} productos encontrados — elegí uno:</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {distintos.map(p => (
+                                <button key={p.codigo} onClick={() => setProductoSeleccionado(p.codigo)}
+                                  style={{ padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${productoSeleccionado === p.codigo ? C.gold : 'rgba(200,168,75,0.25)'}`, background: productoSeleccionado === p.codigo ? C.gold : 'rgba(255,255,255,0.5)', color: productoSeleccionado === p.codigo ? '#fff' : C.text, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Rubik, sans-serif' }}>
+                                  {p.nombre || p.codigo}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
+                      {/* Solo mostrar gráfico si hay producto seleccionado (o hay solo 1) */}
+                      {(() => {
+                        const distintos = [...new Set(productoData.map(r => r.codigo_interno))];
+                        const mostrar = distintos.length === 1 || productoSeleccionado;
+                        if (!mostrar) return null;
+                        const codigoFiltro = productoSeleccionado || distintos[0];
+                        const datosFiltrados = productoData.filter(r => r.codigo_interno === codigoFiltro);
+                        const nombreMostrar = (datosFiltrados[0]?.item || codigoFiltro || '').trim();
+                        // Recalcular grid solo para este producto
+                        const pgrid2 = {};
+                        datosFiltrados.forEach(r => {
+                          const d = parseFecha(r.fecha);
+                          if (!d) return;
+                          if (!pgrid2[d.anio]) pgrid2[d.anio] = {};
+                          if (!pgrid2[d.anio][d.mes]) pgrid2[d.anio][d.mes] = { monto: 0, cantidad: 0 };
+                          pgrid2[d.anio][d.mes].monto    += parseFloat(r.total || 0);
+                          pgrid2[d.anio][d.mes].cantidad += parseFloat(r.cantidad_facturada || 0);
+                        });
+                        const panios2 = Object.keys(pgrid2).map(Number).sort();
+                        const paniosHist2 = panios2.filter(a => a < 2026);
+                        const pprom2 = {};
+                        for (let m = 1; m <= 12; m++) {
+                          const vals = paniosHist2.map(a => pgrid2[a]?.[m]?.monto || 0).filter(v => v > 0);
+                          pprom2[m] = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : 0;
+                        }
+                        const pglobal2 = Object.values(pprom2).filter(v=>v>0).reduce((s,v)=>s+v,0) /
+                          (Object.values(pprom2).filter(v=>v>0).length || 1);
+                        return (
+                          <>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4, color: C.text }}>{nombreMostrar}</div>
+                            <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 16 }}>{datosFiltrados.length.toLocaleString()} registros · {panios2.join(', ')}</div>
 
                       {/* Barras estacionales */}
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
                         {MESES.map((nombre, i) => {
                           const m = i + 1;
-                          const idx = ppromMes[m] > 0 ? Math.round(ppromMes[m] / pglobalProm * 100) : 0;
+                          const idx = pprom2[m] > 0 ? Math.round(pprom2[m] / pglobal2 * 100) : 0;
                           const isStrong = idx >= 105, isWeak = idx <= 95;
                           const barH = Math.max(20, Math.min(100, idx * 0.8));
                           const col = isStrong ? C.green : isWeak ? C.red : C.blue;
@@ -1314,7 +1370,7 @@ export default function ComercialV2() {
                               </div>
                               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted }}>{nombre}</div>
                               <div style={{ fontSize: '0.65rem', color: C.muted }}>
-                                {ppromMes[m] > 0 ? '₡'+(ppromMes[m]/1e6).toFixed(1)+'M' : '—'}
+                                {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
                               </div>
                             </div>
                           );
@@ -1327,7 +1383,7 @@ export default function ComercialV2() {
                           <thead>
                             <tr>
                               <th style={{ ...S.th, textAlign: 'left' }}>Mes</th>
-                              {panios.map(a => <th key={a} style={{ ...S.th }}>{a}</th>)}
+                              {panios2.map(a => <th key={a} style={{ ...S.th }}>{a}</th>)}
                               <th style={{ ...S.th, color: C.gold }}>Prom.</th>
                             </tr>
                           </thead>
@@ -1337,9 +1393,9 @@ export default function ComercialV2() {
                               return (
                                 <tr key={m} style={{ borderBottom: '1px solid rgba(200,168,75,0.07)' }}>
                                   <td style={{ ...S.td, fontWeight: 700, color: C.muted }}>{nombre}</td>
-                                  {panios.map(a => {
-                                    const val = pgrid[a]?.[m]?.monto || 0;
-                                    const ratio = ppromMes[m] > 0 ? val/ppromMes[m] : 0;
+                                  {panios2.map(a => {
+                                    const val = pgrid2[a]?.[m]?.monto || 0;
+                                    const ratio = pprom2[m] > 0 ? val/pprom2[m] : 0;
                                     const bg = ratio >= 1.2 ? 'rgba(46,125,79,0.2)' : ratio >= 1.05 ? 'rgba(46,125,79,0.09)' : ratio > 0 && ratio <= 0.8 ? 'rgba(192,64,64,0.18)' : ratio > 0 ? 'rgba(192,64,64,0.07)' : 'transparent';
                                     return (
                                       <td key={a} style={{ ...S.td, textAlign: 'center', background: bg, fontWeight: val > 0 ? 600 : 400 }}>
@@ -1348,7 +1404,7 @@ export default function ComercialV2() {
                                     );
                                   })}
                                   <td style={{ ...S.td, textAlign: 'center', fontWeight: 700, color: C.gold }}>
-                                    {ppromMes[m] > 0 ? '₡'+(ppromMes[m]/1e6).toFixed(1)+'M' : '—'}
+                                    {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
                                   </td>
                                 </tr>
                               );
