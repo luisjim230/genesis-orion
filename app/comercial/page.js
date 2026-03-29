@@ -1412,6 +1412,9 @@ export default function ComercialV2() {
                           </tbody>
                         </table>
                       </div>
+                          </>
+                        );
+                      })()}
                     </>
                   )}
 
