@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
-import SyncBadge from '../components/SyncBadge';
 import KronosTab from './KronosTab'
 import ModalEnviarWhatsApp from '../components/ModalEnviarWhatsApp';
 
@@ -599,7 +598,6 @@ export default function Inventario() {
               <span style={{ fontSize: '0.78rem', background: datos.length >= 4000 ? '#F0FFF4' : datos.length >= 1000 ? '#FFFBEB' : '#FFF5F5', color: datos.length >= 4000 ? '#276749' : datos.length >= 1000 ? '#7B341E' : '#C53030', border: '1px solid', borderColor: datos.length >= 4000 ? '#9AE6B4' : datos.length >= 1000 ? '#FAD776' : '#FEB2B2', borderRadius: 12, padding: '2px 10px', fontWeight: 600 }}>
                 {datos.length.toLocaleString()} registros en BD
               </span>
-              <SyncBadge reporteIds={["minimos_maximos", "items_lista_general", "items_comprados"]} label="Datos inventario" />
             </div>
           )}
 
