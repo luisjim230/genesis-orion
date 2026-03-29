@@ -270,9 +270,9 @@ def subir_a_supabase(excel_path):
 
     registros = json.loads(df.to_json(orient="records", force_ascii=False))
 
-    # ── Borrar snapshot anterior e insertar nuevo ──────────────────────────────
-    log.info("Borrando snapshot anterior...")
-    supa_request("DELETE", f"{TABLA}?id=gt.0")
+    # ── Borrar solo el mes actual e insertar nuevo (preserva meses anteriores) ─
+    log.info(f"Borrando mes {mes} para re-insertar...")
+    supa_request("DELETE", f"{TABLA}?mes=eq.{mes}")
 
     log.info(f"Insertando {total:,} registros...")
     BATCH = 200
