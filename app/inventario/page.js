@@ -208,9 +208,26 @@ export default function Inventario() {
 
   async function cargarDatos() {
     setLoading(true);
-    // Una sola query RPC que trae inventario + consumo real precalculado
-    const { data: todos, error: rpcErr } = await supabase.rpc('saturno_inventario_completo');
-    if (rpcErr || !todos?.length) { setLoading(false); return; }
+    // Fetch paginado directo a la tabla (el RPC no respeta .range())
+    const BATCH = 1000;
+    let todos = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('neo_minimos_maximos')
+        .select('codigo, nombre, existencias, minimo, maximo, promedio_mensual, ultimo_proveedor, ultimo_costo, activo, categoria, fecha_carga')
+        .range(offset, offset + BATCH - 1);
+      if (error || !data?.length) break;
+      todos = [...todos, ...data];
+      if (data.length < BATCH) break;
+      offset += BATCH;
+    }
+    // Filtrar solo el snapshot más reciente
+    if (todos.length) {
+      const maxFecha = todos.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
+      todos = todos.filter(r => r.fecha_carga === maxFecha);
+    }
+    if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
     setDatos(todos);
     const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item', ['pendiente', 'parcial']);
