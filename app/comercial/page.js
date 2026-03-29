@@ -415,6 +415,12 @@ export default function ComercialV2() {
   const [tendenciasVendedor, setTendenciasVendedor] = useState('');
   const [tendenciasMetrica, setTendenciasMetrica] = useState('monto'); // 'monto'|'utilidad'|'cantidad'
 
+  // Tendencias por producto
+  const [productoSearch, setProductoSearch] = useState('');
+  const [productoQuery, setProductoQuery] = useState('');
+  const [productoData, setProductoData] = useState([]);
+  const [productoLoading, setProductoLoading] = useState(false);
+
   // ── Load vendedores (desde datos reales de facturación) ─────────────────────
   useEffect(() => {
     (async () => {
@@ -597,6 +603,20 @@ export default function ComercialV2() {
   useEffect(() => {
     if (tab === 'tendencias') loadTendencias();
   }, [tab, tendenciasVendedor, loadTendencias]);
+
+  const loadProducto = useCallback(async (q) => {
+    if (!q || q.trim().length < 2) return;
+    setProductoLoading(true);
+    try {
+      const { data } = await supabase
+        .from('neo_items_facturados')
+        .select('fecha, cantidad_facturada, total, item, codigo_interno')
+        .ilike('item', `%${q.trim()}%`)
+        .limit(8000);
+      setProductoData(data || []);
+    } catch (e) { console.error(e); }
+    setProductoLoading(false);
+  }, []);
 
   // ── Computed dashboard data ────────────────────────────────────────────────
   const dashboardRows = useMemo(() => {
@@ -1210,6 +1230,141 @@ export default function ComercialV2() {
                 ))}
               </div>
             </div>
+
+            {/* ── Sección 0: Estacionalidad por Producto ── */}
+            {(() => {
+              const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+              // Parsear fecha DD/MM/YYYY → {anio, mes}
+              const parseFecha = (f) => {
+                if (!f || typeof f !== 'string') return null;
+                const p = f.split('/');
+                if (p.length < 3) return null;
+                return { mes: parseInt(p[1]), anio: parseInt(p[2]) };
+              };
+
+              // Agrupar productoData por anio/mes
+              const pgrid = {};
+              (productoData || []).forEach(r => {
+                const d = parseFecha(r.fecha);
+                if (!d) return;
+                if (!pgrid[d.anio]) pgrid[d.anio] = {};
+                if (!pgrid[d.anio][d.mes]) pgrid[d.anio][d.mes] = { monto: 0, cantidad: 0 };
+                pgrid[d.anio][d.mes].monto    += parseFloat(r.total || 0);
+                pgrid[d.anio][d.mes].cantidad += parseFloat(r.cantidad_facturada || 0);
+              });
+              const panios = Object.keys(pgrid).map(Number).sort();
+              const paniosHist = panios.filter(a => a < 2026);
+              const ppromMes = {};
+              for (let m = 1; m <= 12; m++) {
+                const vals = paniosHist.map(a => pgrid[a]?.[m]?.monto || 0).filter(v => v > 0);
+                ppromMes[m] = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : 0;
+              }
+              const pglobalProm = Object.values(ppromMes).filter(v=>v>0).reduce((s,v)=>s+v,0) /
+                (Object.values(ppromMes).filter(v=>v>0).length || 1);
+
+              // Nombre del producto encontrado
+              const nombreProducto = productoData[0]?.item || productoQuery;
+
+              return (
+                <div style={{ ...glassCard, marginBottom: 20 }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.08em', color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>Estacionalidad por Producto</div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                    <input
+                      type="text"
+                      placeholder="Buscar producto (ej: zinc, cemento, panel...)"
+                      value={productoSearch}
+                      onChange={e => setProductoSearch(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { setProductoQuery(productoSearch); loadProducto(productoSearch); }}}
+                      style={{ flex: '1 1 260px', padding: '8px 14px', borderRadius: 10, border: `1px solid rgba(200,168,75,0.3)`, background: 'rgba(255,255,255,0.6)', fontFamily: 'Rubik, sans-serif', fontSize: '0.85rem', color: C.text, outline: 'none' }}
+                    />
+                    <button
+                      onClick={() => { setProductoQuery(productoSearch); loadProducto(productoSearch); }}
+                      style={{ padding: '8px 20px', background: C.gold, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.85rem' }}
+                    >Buscar</button>
+                    {productoData.length > 0 && (
+                      <button onClick={() => { setProductoSearch(''); setProductoQuery(''); setProductoData([]); }}
+                        style={{ padding: '8px 14px', background: 'rgba(200,64,64,0.1)', border: '1px solid rgba(200,64,64,0.2)', borderRadius: 10, color: C.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.82rem' }}>✕ Limpiar</button>
+                    )}
+                  </div>
+
+                  {productoLoading && <Spinner />}
+
+                  {!productoLoading && productoQuery && productoData.length === 0 && (
+                    <div style={{ color: C.muted, fontSize: '0.85rem', padding: '12px 0' }}>No se encontraron productos con "{productoQuery}"</div>
+                  )}
+
+                  {!productoLoading && productoData.length > 0 && (
+                    <>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4, color: C.text }}>{nombreProducto}</div>
+                      <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 16 }}>{productoData.length.toLocaleString()} registros · {panios.join(', ')}</div>
+
+                      {/* Barras estacionales */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
+                        {MESES.map((nombre, i) => {
+                          const m = i + 1;
+                          const idx = ppromMes[m] > 0 ? Math.round(ppromMes[m] / pglobalProm * 100) : 0;
+                          const isStrong = idx >= 105, isWeak = idx <= 95;
+                          const barH = Math.max(20, Math.min(100, idx * 0.8));
+                          const col = isStrong ? C.green : isWeak ? C.red : C.blue;
+                          return (
+                            <div key={m} style={{ flex: '1 1 50px', textAlign: 'center', minWidth: 44 }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: col, marginBottom: 3 }}>{idx > 0 ? `${idx}%` : '—'}</div>
+                              <div style={{ height: barH, background: col+'33', border: `2px solid ${col}`, borderRadius: 7, margin: '0 auto 5px', width: '80%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 3 }}>
+                                <div style={{ width: '60%', background: col, borderRadius: 4, height: `${Math.max(8, barH*0.6)}px` }} />
+                              </div>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted }}>{nombre}</div>
+                              <div style={{ fontSize: '0.65rem', color: C.muted }}>
+                                {ppromMes[m] > 0 ? '₡'+(ppromMes[m]/1e6).toFixed(1)+'M' : '—'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Heatmap año × mes */}
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...S.th, textAlign: 'left' }}>Mes</th>
+                              {panios.map(a => <th key={a} style={{ ...S.th }}>{a}</th>)}
+                              <th style={{ ...S.th, color: C.gold }}>Prom.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {MESES.map((nombre, i) => {
+                              const m = i + 1;
+                              return (
+                                <tr key={m} style={{ borderBottom: '1px solid rgba(200,168,75,0.07)' }}>
+                                  <td style={{ ...S.td, fontWeight: 700, color: C.muted }}>{nombre}</td>
+                                  {panios.map(a => {
+                                    const val = pgrid[a]?.[m]?.monto || 0;
+                                    const ratio = ppromMes[m] > 0 ? val/ppromMes[m] : 0;
+                                    const bg = ratio >= 1.2 ? 'rgba(46,125,79,0.2)' : ratio >= 1.05 ? 'rgba(46,125,79,0.09)' : ratio > 0 && ratio <= 0.8 ? 'rgba(192,64,64,0.18)' : ratio > 0 ? 'rgba(192,64,64,0.07)' : 'transparent';
+                                    return (
+                                      <td key={a} style={{ ...S.td, textAlign: 'center', background: bg, fontWeight: val > 0 ? 600 : 400 }}>
+                                        {val > 0 ? '₡'+(val/1e6).toFixed(1)+'M' : <span style={{ color: C.muted }}>—</span>}
+                                      </td>
+                                    );
+                                  })}
+                                  <td style={{ ...S.td, textAlign: 'center', fontWeight: 700, color: C.gold }}>
+                                    {ppromMes[m] > 0 ? '₡'+(ppromMes[m]/1e6).toFixed(1)+'M' : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {!productoQuery && (
+                    <div style={{ color: C.muted, fontSize: '0.82rem' }}>Escribe el nombre de un producto y presiona Enter o Buscar para ver su estacionalidad histórica.</div>
+                  )}
+                </div>
+              );
+            })()}
 
             {tendenciasLoading ? <Spinner /> : tendenciasData.length === 0 ? (
               <Empty msg="Sin datos" sub="Carga los reportes de ítems facturados para ver tendencias" />
