@@ -49,7 +49,7 @@ SCRIPT_MAP = {
     "antiguedad_proveedores":  "neo_antiguedad_proveedores_downloader.py",
     "antiguedad_clientes":     "neo_antiguedad_clientes_downloader.py",
     "items_facturados":        "neo_items_facturados_downloader.py",
-    "informe_ventas_vendedor": None,
+    "informe_ventas_vendedor": "neo_informe_ventas_vendedor_downloader.py",
     "movimientos_contables":   None,
 }
 
