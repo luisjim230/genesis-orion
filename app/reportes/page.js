@@ -771,13 +771,8 @@ function TabSubir() {
                 ['🛒 Lista de ítems comprados',           '🔴 Trazabilidad'],
                 ['📅 Antigüedad de saldos · proveedores','💰 Finanzas → Cuentas por pagar'],
                 ['👥 Antigüedad de saldos · clientes',   '💰 Finanzas → Cuentas por cobrar'],
-                ['🏆 Ítems más vendidos',                 '🔄 Rotación · 💼 Comercial'],
-                ['💰 Rentabilidad por proveedor',         '💼 Comercial'],
-                ['📋 Lista de ítems',                     '🔄 Rotación de productos'],
                 ['🧾 Lista de ítems facturados',          '💼 Comercial · 📈 Proyección de inventario'],
                 ['👤 Informe de ventas por vendedor',     '💼 Comercial'],
-                ['📦 Informe de ventas por Categoría',   '💼 Comercial'],
-                ['📑 Consolidado de facturas',            '💼 Comercial'],
                 ['📒 Movimientos contables',              '📒 Contabilidad'],
               ].map(([r,a],i)=>(
                 <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
