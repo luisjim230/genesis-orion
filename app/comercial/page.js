@@ -610,12 +610,25 @@ export default function ComercialV2() {
     setProductoLoading(true);
     setProductoSeleccionado(null);
     try {
-      const { data } = await supabase
-        .from('neo_items_facturados')
-        .select('fecha, cantidad_facturada, total, item, codigo_interno')
-        .or(`item.ilike.%${q.trim()}%,codigo_interno.ilike.%${q.trim()}%`)
-        .limit(8000);
-      setProductoData(data || []);
+      const qt = q.trim();
+      const [r1, r2] = await Promise.all([
+        supabase.from('neo_items_facturados')
+          .select('fecha, cantidad_facturada, total, item, codigo_interno')
+          .ilike('item', `%${qt}%`)
+          .limit(8000),
+        supabase.from('neo_items_facturados')
+          .select('fecha, cantidad_facturada, total, item, codigo_interno')
+          .ilike('codigo_interno', `%${qt}%`)
+          .limit(8000),
+      ]);
+      const seen = new Set();
+      const combined = [...(r1.data||[]), ...(r2.data||[])].filter(r => {
+        const k = `${r.fecha}|${r.codigo_interno}|${r.total}|${r.cantidad_facturada}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      setProductoData(combined);
     } catch (e) { console.error(e); }
     setProductoLoading(false);
   }, []);
