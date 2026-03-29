@@ -254,6 +254,7 @@ def subir_a_supabase(excel_path):
     df = df.dropna(subset=["vendedor"])
     df = df[df["vendedor"].astype(str).str.strip() != ""]
     df = df[~df["vendedor"].astype(str).str.upper().str.startswith("TOTAL")]
+    df = df[~df["vendedor"].astype(str).str.upper().str.startswith("GRAN TOTAL")]
 
     total = len(df)
     if total < 1:
