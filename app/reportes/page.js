@@ -525,6 +525,26 @@ function TabSubir() {
   const [procesando, setProcesando] = useState(false);
   const [arrastrar, setArrastrar]   = useState(false);
   const [statusMeses, setStatusMeses] = useState([]);
+  const [syncStatus, setSyncStatus]   = useState({});
+  const [forzando, setForzando]       = useState({});
+
+  // Cargar última fecha de sync para cada reporte
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('sync_status').select('id,ultima_sync,exitoso');
+      if (data) {
+        const map = {};
+        data.forEach(r => { map[r.id] = r; });
+        setSyncStatus(map);
+      }
+    })();
+  }, []);
+
+  async function forzarSync(scriptKey) {
+    setForzando(f => ({ ...f, [scriptKey]: true }));
+    await supabase.from('sync_requests').insert({ script: scriptKey, status: 'pending' });
+    setTimeout(() => setForzando(f => ({ ...f, [scriptKey]: false })), 3000);
+  }
 
   // Load report status for last 6 months
   useEffect(() => {
@@ -763,23 +783,49 @@ function TabSubir() {
               <tr>
                 <th style={S.th}>Reporte en NEO</th>
                 <th style={S.th}>Alimenta</th>
+                <th style={S.th}>Última carga</th>
+                <th style={S.th}></th>
               </tr>
             </thead>
             <tbody>
               {[
-                ['📊 Lista de mínimos y máximos',        '📦 Inventario · 🔄 Rotación de productos'],
-                ['🛒 Lista de ítems comprados',           '🔴 Trazabilidad'],
-                ['📅 Antigüedad de saldos · proveedores','💰 Finanzas → Cuentas por pagar'],
-                ['👥 Antigüedad de saldos · clientes',   '💰 Finanzas → Cuentas por cobrar'],
-                ['🧾 Lista de ítems facturados',          '💼 Comercial · 📈 Proyección de inventario'],
-                ['👤 Informe de ventas por vendedor',     '💼 Comercial'],
-                ['📒 Movimientos contables',              '📒 Contabilidad'],
-              ].map(([r,a],i)=>(
-                <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
-                  <td style={S.td}>{r}</td>
-                  <td style={{ ...S.td, color:'#63b3ed' }}>{a}</td>
-                </tr>
-              ))}
+                ['📊 Lista de mínimos y máximos',        '📦 Inventario · 🔄 Rotación de productos', 'minimos_maximos'],
+                ['🛒 Lista de ítems comprados',           '🔴 Trazabilidad',                          'items_comprados'],
+                ['📅 Antigüedad de saldos · proveedores','💰 Finanzas → Cuentas por pagar',           'antiguedad_proveedores'],
+                ['👥 Antigüedad de saldos · clientes',   '💰 Finanzas → Cuentas por cobrar',          'antiguedad_clientes'],
+                ['🧾 Lista de ítems facturados',          '💼 Comercial · 📈 Proyección de inventario','items_facturados'],
+                ['👤 Informe de ventas por vendedor',     '💼 Comercial',                              'informe_ventas_vendedor'],
+                ['📒 Movimientos contables',              '📒 Contabilidad',                           'movimientos_contables'],
+              ].map(([r,a,key],i) => {
+                const s = syncStatus[key];
+                const fecha = s?.ultima_sync ? new Date(s.ultima_sync).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                const ok = s ? s.exitoso !== false : null;
+                const dot = ok === null ? '#888' : ok ? '#4ade80' : '#f87171';
+                const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes'].includes(key);
+                return (
+                  <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
+                    <td style={S.td}>{r}</td>
+                    <td style={{ ...S.td, color:'#63b3ed' }}>{a}</td>
+                    <td style={{ ...S.td, whiteSpace:'nowrap' }}>
+                      <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:'0.78rem' }}>
+                        <span style={{ width:7, height:7, borderRadius:'50%', background:dot, display:'inline-block', flexShrink:0 }} />
+                        <span style={{ color: ok ? '#aaa' : '#666' }}>{fecha}</span>
+                      </span>
+                    </td>
+                    <td style={{ ...S.td, textAlign:'right' }}>
+                      {automatizado && (
+                        <button
+                          onClick={() => forzarSync(key)}
+                          disabled={!!forzando[key]}
+                          style={{ background:'transparent', border:'1px solid #2a3a50', borderRadius:6, color: forzando[key] ? '#4ade80' : '#63b3ed', padding:'3px 10px', fontSize:'0.75rem', cursor: forzando[key] ? 'default' : 'pointer', whiteSpace:'nowrap' }}
+                        >
+                          {forzando[key] ? '✓ Solicitado' : '⟳ Forzar sync'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
