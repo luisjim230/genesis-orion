@@ -39,6 +39,16 @@ function calcDias(ini, fin) {
   return count
 }
 
+function calcHoras(hi, hf) {
+  if (!hi || !hf) return 0
+  const [h1, m1] = hi.split(':').map(Number)
+  const [h2, m2] = hf.split(':').map(Number)
+  const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+  return diff > 0 ? Math.round(diff / 60 * 10) / 10 : 0
+}
+
+const FORM_VACIO = { empleado_nombre: '', puesto: '', tipo: 'vacaciones', motivo: '', fecha_inicio: '', fecha_fin: '', observaciones: '', modalidad: 'dia_completo', hora_inicio: '', hora_fin: '' }
+
 export default function RRHHPage() {
   const { perfil, loading: authLoad } = useAuth()
   const [sol, setSol] = useState([])
@@ -47,7 +57,8 @@ export default function RRHHPage() {
   const [filtro, setFiltro] = useState('activas')
   const [busq, setBusq] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ empleado_nombre: '', puesto: '', tipo: 'vacaciones', motivo: '', fecha_inicio: '', fecha_fin: '', observaciones: '' })
+  const [form, setForm] = useState({ ...FORM_VACIO })
+  const [editandoId, setEditandoId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [calMes, setCalMes] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() } })
 
@@ -61,6 +72,7 @@ export default function RRHHPage() {
   useEffect(() => { cargar() }, [cargar])
 
   const diasCalc = useMemo(() => calcDias(form.fecha_inicio, form.fecha_fin), [form.fecha_inicio, form.fecha_fin])
+  const horasCalc = useMemo(() => calcHoras(form.hora_inicio, form.hora_fin), [form.hora_inicio, form.hora_fin])
 
   const ahora = new Date()
   const mesActual = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`
@@ -79,19 +91,74 @@ export default function RRHHPage() {
     return f
   }, [sol, filtro, busq])
 
+  function iniciarEdicion(s) {
+    setForm({
+      empleado_nombre: s.empleado_nombre || '',
+      puesto: s.puesto || '',
+      tipo: s.tipo || 'vacaciones',
+      motivo: s.motivo || '',
+      fecha_inicio: s.fecha_inicio || '',
+      fecha_fin: s.fecha_fin || '',
+      observaciones: s.observaciones || '',
+      modalidad: s.modalidad || 'dia_completo',
+      hora_inicio: s.hora_inicio || '',
+      hora_fin: s.hora_fin || '',
+    })
+    setEditandoId(s.id)
+    setShowForm(true)
+  }
+
+  function cancelarForm() {
+    setForm({ ...FORM_VACIO })
+    setEditandoId(null)
+    setShowForm(false)
+  }
+
   async function guardar() {
-    if (!form.empleado_nombre || !form.fecha_inicio || !form.fecha_fin) return
+    const esPorHoras = form.modalidad === 'por_horas'
+    if (!form.empleado_nombre || !form.fecha_inicio) return
+    if (!esPorHoras && !form.fecha_fin) return
+    if (esPorHoras && (!form.hora_inicio || !form.hora_fin)) return
     setSaving(true)
     const now = new Date().toISOString()
-    const nuevo = {
-      ...form, dias_totales: diasCalc, estado: 'pendiente',
-      creado_por: perfil?.nombre || 'Sistema', creado_en: now,
-      timeline: [{ accion: 'Solicitud creada', fecha: now, usuario: perfil?.nombre || 'Sistema' }],
+
+    if (editandoId) {
+      // Editar existente
+      const sol_actual = sol.find(s => s.id === editandoId)
+      const tl = [...(sol_actual?.timeline || []), { accion: 'Editada', fecha: now, usuario: perfil?.nombre || 'Sistema' }]
+      const datos = {
+        ...form,
+        dias_totales: esPorHoras ? 0 : diasCalc,
+        horas_totales: esPorHoras ? horasCalc : null,
+        fecha_fin: esPorHoras ? form.fecha_inicio : form.fecha_fin,
+        hora_inicio: esPorHoras ? form.hora_inicio : null,
+        hora_fin: esPorHoras ? form.hora_fin : null,
+        timeline: tl,
+      }
+      await supabase.from('rrhh_solicitudes').update(datos).eq('id', editandoId)
+    } else {
+      // Nueva solicitud
+      const nuevo = {
+        ...form,
+        dias_totales: esPorHoras ? 0 : diasCalc,
+        horas_totales: esPorHoras ? horasCalc : null,
+        fecha_fin: esPorHoras ? form.fecha_inicio : form.fecha_fin,
+        hora_inicio: esPorHoras ? form.hora_inicio : null,
+        hora_fin: esPorHoras ? form.hora_fin : null,
+        estado: 'pendiente',
+        creado_por: perfil?.nombre || 'Sistema', creado_en: now,
+        timeline: [{ accion: 'Solicitud creada', fecha: now, usuario: perfil?.nombre || 'Sistema' }],
+      }
+      await supabase.from('rrhh_solicitudes').insert([nuevo])
     }
-    await supabase.from('rrhh_solicitudes').insert([nuevo])
-    setForm({ empleado_nombre: '', puesto: '', tipo: 'vacaciones', motivo: '', fecha_inicio: '', fecha_fin: '', observaciones: '' })
-    setShowForm(false)
+    cancelarForm()
     setSaving(false)
+    cargar()
+  }
+
+  async function eliminar(s) {
+    if (!confirm(`¿Eliminar solicitud de ${s.empleado_nombre}?`)) return
+    await supabase.from('rrhh_solicitudes').delete().eq('id', s.id)
     cargar()
   }
 
@@ -121,13 +188,14 @@ export default function RRHHPage() {
   const calEvents = useMemo(() => {
     const events = {}
     sol.filter(s => ['aprobado', 'pendiente'].includes(s.estado)).forEach(s => {
-      if (!s.fecha_inicio || !s.fecha_fin) return
-      let d = new Date(s.fecha_inicio + 'T00:00:00'), end = new Date(s.fecha_fin + 'T00:00:00')
+      if (!s.fecha_inicio) return
+      const fFin = s.fecha_fin || s.fecha_inicio
+      let d = new Date(s.fecha_inicio + 'T00:00:00'), end = new Date(fFin + 'T00:00:00')
       while (d <= end) {
         if (d.getFullYear() === calMes.y && d.getMonth() === calMes.m) {
           const key = d.getDate()
           if (!events[key]) events[key] = []
-          events[key].push({ nombre: s.empleado_nombre, estado: s.estado, tipo: s.tipo })
+          events[key].push({ nombre: s.empleado_nombre, estado: s.estado, tipo: s.tipo, modalidad: s.modalidad })
         }
         d.setDate(d.getDate() + 1)
       }
@@ -142,6 +210,8 @@ export default function RRHHPage() {
       </div>
     </div>
   )
+
+  const esPorHoras = form.modalidad === 'por_horas'
 
   return (
     <div style={{ minHeight: '100vh', background: BG, fontFamily: 'Rubik', color: TEXT, padding: '24px 28px' }}>
@@ -183,7 +253,7 @@ export default function RRHHPage() {
 
           {/* TOOLBAR */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-            <button onClick={() => setShowForm(!showForm)} style={{ ...S.btn(GOLD, false), borderRadius: 14, padding: '9px 22px' }}>
+            <button onClick={() => { if (showForm) cancelarForm(); else setShowForm(true) }} style={{ ...S.btn(GOLD, false), borderRadius: 14, padding: '9px 22px' }}>
               {showForm ? 'Cancelar' : '+ Nueva Solicitud'}
             </button>
             <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
@@ -201,7 +271,9 @@ export default function RRHHPage() {
           {/* FORM */}
           {showForm && (
             <div style={{ ...S.card, marginBottom: 18, padding: '24px 28px' }}>
-              <div style={{ fontSize: '1.05em', fontWeight: 700, marginBottom: 16, color: TEXT }}>Nueva Solicitud</div>
+              <div style={{ fontSize: '1.05em', fontWeight: 700, marginBottom: 16, color: TEXT }}>
+                {editandoId ? 'Editar Solicitud' : 'Nueva Solicitud'}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Empleado</label>
@@ -218,30 +290,61 @@ export default function RRHHPage() {
                   </select>
                 </div>
                 <div>
+                  <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Modalidad</label>
+                  <select style={{ ...S.input, cursor: 'pointer' }} value={form.modalidad} onChange={e => setForm({ ...form, modalidad: e.target.value, hora_inicio: '', hora_fin: '', fecha_fin: '' })}>
+                    <option value="dia_completo">Día completo</option>
+                    <option value="por_horas">Por horas</option>
+                  </select>
+                </div>
+                <div>
                   <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Motivo</label>
                   <textarea style={{ ...S.input, minHeight: 60, resize: 'vertical' }} value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })} placeholder="Razón de la solicitud" />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Fecha inicio</label>
+                  <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>
+                    {esPorHoras ? 'Fecha' : 'Fecha inicio'}
+                  </label>
                   <input type="date" style={S.input} value={form.fecha_inicio} onChange={e => setForm({ ...form, fecha_inicio: e.target.value })} />
                 </div>
-                <div>
-                  <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Fecha fin</label>
-                  <input type="date" style={S.input} value={form.fecha_fin} onChange={e => setForm({ ...form, fecha_fin: e.target.value })} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Días hábiles</label>
-                  <div style={{ ...S.input, background: 'rgba(0,0,0,0.04)', fontWeight: 700, color: GOLD }}>{diasCalc}</div>
-                </div>
+                {esPorHoras ? (
+                  <>
+                    <div>
+                      <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Hora inicio</label>
+                      <input type="time" style={S.input} value={form.hora_inicio} onChange={e => setForm({ ...form, hora_inicio: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Hora fin</label>
+                      <input type="time" style={S.input} value={form.hora_fin} onChange={e => setForm({ ...form, hora_fin: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Horas de permiso</label>
+                      <div style={{ ...S.input, background: 'rgba(0,0,0,0.04)', fontWeight: 700, color: GOLD }}>{horasCalc} hora{horasCalc !== 1 ? 's' : ''}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Fecha fin</label>
+                      <input type="date" style={S.input} value={form.fecha_fin} onChange={e => setForm({ ...form, fecha_fin: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Días hábiles</label>
+                      <div style={{ ...S.input, background: 'rgba(0,0,0,0.04)', fontWeight: 700, color: GOLD }}>{diasCalc}</div>
+                    </div>
+                  </>
+                )}
                 <div>
                   <label style={{ fontSize: '0.78em', color: MUTED, marginBottom: 4, display: 'block' }}>Observaciones</label>
                   <textarea style={{ ...S.input, minHeight: 60, resize: 'vertical' }} value={form.observaciones} onChange={e => setForm({ ...form, observaciones: e.target.value })} placeholder="Notas adicionales (opcional)" />
                 </div>
               </div>
-              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={guardar} disabled={saving || !form.empleado_nombre || !form.fecha_inicio || !form.fecha_fin}
+              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                {editandoId && (
+                  <button onClick={cancelarForm} style={{ ...S.btn('#6b7280', true), padding: '10px 24px', fontSize: '0.9em' }}>Cancelar</button>
+                )}
+                <button onClick={guardar} disabled={saving || !form.empleado_nombre || !form.fecha_inicio || (!esPorHoras && !form.fecha_fin) || (esPorHoras && (!form.hora_inicio || !form.hora_fin))}
                   style={{ ...S.btn(GOLD, false), opacity: saving ? 0.6 : 1, padding: '10px 32px', fontSize: '0.9em' }}>
-                  {saving ? 'Guardando...' : 'Guardar Solicitud'}
+                  {saving ? 'Guardando...' : editandoId ? 'Guardar Cambios' : 'Guardar Solicitud'}
                 </button>
               </div>
             </div>
@@ -253,6 +356,7 @@ export default function RRHHPage() {
           ) : filtered.map(s => {
             const tipo = TIPO_MAP[s.tipo] || { label: s.tipo, color: '#999' }
             const est = ESTADO_MAP[s.estado] || { label: s.estado, color: '#999' }
+            const esHoras = s.modalidad === 'por_horas'
             return (
               <div key={s.id} style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 180 }}>
@@ -261,12 +365,23 @@ export default function RRHHPage() {
                 </div>
                 <div style={S.badge(tipo.color)}>{tipo.label}</div>
                 <div style={{ fontSize: '0.82em', color: TEXT, minWidth: 140, textAlign: 'center' }}>
-                  {s.fecha_inicio} → {s.fecha_fin}
-                  <div style={{ fontSize: '0.78em', color: MUTED }}>{s.dias_totales} día{s.dias_totales !== 1 ? 's' : ''}</div>
+                  {esHoras ? (
+                    <>
+                      {s.fecha_inicio}
+                      <div style={{ fontSize: '0.78em', color: MUTED }}>{s.hora_inicio} - {s.hora_fin} ({s.horas_totales} hr{s.horas_totales !== 1 ? 's' : ''})</div>
+                    </>
+                  ) : (
+                    <>
+                      {s.fecha_inicio} → {s.fecha_fin}
+                      <div style={{ fontSize: '0.78em', color: MUTED }}>{s.dias_totales} día{s.dias_totales !== 1 ? 's' : ''}</div>
+                    </>
+                  )}
                 </div>
                 <div style={S.badge(est.color)}>{est.label}</div>
                 {s.estado === 'pendiente' && (
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => iniciarEdicion(s)} style={S.btn('#3b82f6', true)} title="Editar">✏️</button>
+                    <button onClick={() => eliminar(s)} style={S.btn('#ef4444', true)} title="Eliminar">🗑️</button>
                     <button onClick={() => cambiarEstado(s, 'aprobado')} style={S.btn('#22c55e', false)}>Aprobar</button>
                     <button onClick={() => cambiarEstado(s, 'rechazado')} style={S.btn('#ef4444', true)}>Rechazar</button>
                   </div>
@@ -306,7 +421,7 @@ export default function RRHHPage() {
                       background: ev.estado === 'aprobado' ? '#22c55e' : '#f97316',
                       color: '#fff', borderRadius: 4, padding: '1px 4px', fontSize: '0.6em',
                       marginBottom: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    }}>{ev.nombre?.split(' ')[0]}</div>
+                    }}>{ev.nombre?.split(' ')[0]}{ev.modalidad === 'por_horas' ? ' (hrs)' : ''}</div>
                   ))}
                 </>}
               </div>
