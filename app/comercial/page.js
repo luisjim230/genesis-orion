@@ -610,24 +610,32 @@ export default function ComercialV2() {
     setProductoLoading(true);
     setProductoSeleccionado(null);
     try {
-      const qt = q.trim();
+      const words = q.trim().split(/\s+/).filter(w => w.length > 0);
+      const mainWord = words.reduce((a, b) => a.length >= b.length ? a : b);
       const [r1, r2] = await Promise.all([
         supabase.from('neo_items_facturados')
           .select('fecha, cantidad_facturada, total, item, codigo_interno')
-          .ilike('item', `%${qt}%`)
-          .limit(8000),
+          .ilike('item', `%${mainWord}%`)
+          .limit(15000),
         supabase.from('neo_items_facturados')
           .select('fecha, cantidad_facturada, total, item, codigo_interno')
-          .ilike('codigo_interno', `%${qt}%`)
-          .limit(8000),
+          .ilike('codigo_interno', `%${mainWord}%`)
+          .limit(15000),
       ]);
       const seen = new Set();
-      const combined = [...(r1.data||[]), ...(r2.data||[])].filter(r => {
+      let combined = [...(r1.data||[]), ...(r2.data||[])].filter(r => {
         const k = `${r.fecha}|${r.codigo_interno}|${r.total}|${r.cantidad_facturada}`;
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
       });
+      const otherWords = words.filter(w => w !== mainWord);
+      if (otherWords.length > 0) {
+        combined = combined.filter(r => {
+          const text = `${r.item||''} ${r.codigo_interno||''}`.toLowerCase();
+          return otherWords.every(w => text.includes(w.toLowerCase()));
+        });
+      }
       setProductoData(combined);
     } catch (e) { console.error(e); }
     setProductoLoading(false);
@@ -1249,7 +1257,6 @@ export default function ComercialV2() {
             {/* ── Sección 0: Estacionalidad por Producto ── */}
             {(() => {
               const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-              // Parsear fecha DD/MM/YYYY → {anio, mes}
               const parseFecha = (f) => {
                 if (!f || typeof f !== 'string') return null;
                 const p = f.split('/');
@@ -1257,28 +1264,22 @@ export default function ComercialV2() {
                 return { mes: parseInt(p[1]), anio: parseInt(p[2]) };
               };
 
-              // Agrupar productoData por anio/mes
-              const pgrid = {};
+              // Agrupar productoData por codigo_interno → resumen para tabla
+              const productMap = {};
               (productoData || []).forEach(r => {
+                const k = r.codigo_interno || r.item || '?';
+                if (!productMap[k]) productMap[k] = { codigo: r.codigo_interno, nombre: (r.item||'').trim() || r.codigo_interno || '?', registros: 0, total: 0, mesesSet: new Set() };
+                productMap[k].registros++;
+                productMap[k].total += parseFloat(r.total || 0);
                 const d = parseFecha(r.fecha);
-                if (!d) return;
-                if (!pgrid[d.anio]) pgrid[d.anio] = {};
-                if (!pgrid[d.anio][d.mes]) pgrid[d.anio][d.mes] = { monto: 0, cantidad: 0 };
-                pgrid[d.anio][d.mes].monto    += parseFloat(r.total || 0);
-                pgrid[d.anio][d.mes].cantidad += parseFloat(r.cantidad_facturada || 0);
+                if (d) productMap[k].mesesSet.add(`${d.anio}-${d.mes}`);
               });
-              const panios = Object.keys(pgrid).map(Number).sort();
-              const paniosHist = panios.filter(a => a < 2026);
-              const ppromMes = {};
-              for (let m = 1; m <= 12; m++) {
-                const vals = paniosHist.map(a => pgrid[a]?.[m]?.monto || 0).filter(v => v > 0);
-                ppromMes[m] = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : 0;
-              }
-              const pglobalProm = Object.values(ppromMes).filter(v=>v>0).reduce((s,v)=>s+v,0) /
-                (Object.values(ppromMes).filter(v=>v>0).length || 1);
+              const listaProductos = Object.values(productMap)
+                .map(p => ({ ...p, meses: p.mesesSet.size }))
+                .sort((a, b) => b.total - a.total);
 
-              // Nombre del producto encontrado
-              const nombreProducto = productoData[0]?.item || productoQuery;
+              const distintos = [...new Set((productoData||[]).map(r => r.codigo_interno))];
+              const codigoSel = productoSeleccionado || (distintos.length === 1 ? distintos[0] : null);
 
               return (
                 <div style={{ ...glassCard, marginBottom: 20 }}>
@@ -1286,7 +1287,7 @@ export default function ComercialV2() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                     <input
                       type="text"
-                      placeholder="Buscar producto (ej: zinc, cemento, panel...)"
+                      placeholder="Buscar (ej: zinc, zinc 28, flat, cemento...)"
                       value={productoSearch}
                       onChange={e => setProductoSearch(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { setProductoQuery(productoSearch); loadProducto(productoSearch); }}}
@@ -1297,7 +1298,7 @@ export default function ComercialV2() {
                       style={{ padding: '8px 20px', background: C.gold, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.85rem' }}
                     >Buscar</button>
                     {productoData.length > 0 && (
-                      <button onClick={() => { setProductoSearch(''); setProductoQuery(''); setProductoData([]); }}
+                      <button onClick={() => { setProductoSearch(''); setProductoQuery(''); setProductoData([]); setProductoSeleccionado(null); }}
                         style={{ padding: '8px 14px', background: 'rgba(200,64,64,0.1)', border: '1px solid rgba(200,64,64,0.2)', borderRadius: 10, color: C.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.82rem' }}>✕ Limpiar</button>
                     )}
                   </div>
@@ -1308,42 +1309,44 @@ export default function ComercialV2() {
                     <div style={{ color: C.muted, fontSize: '0.85rem', padding: '12px 0' }}>No se encontraron productos con "{productoQuery}"</div>
                   )}
 
-                  {!productoLoading && productoData.length > 0 && (
+                  {!productoLoading && listaProductos.length > 0 && (
                     <>
-                      {/* Lista de productos encontrados */}
-                      {(() => {
-                        const distintos = Object.values(
-                          productoData.reduce((acc, r) => {
-                            const k = r.codigo_interno || r.item;
-                            if (!acc[k]) acc[k] = { codigo: r.codigo_interno, nombre: (r.item||'').trim(), count: 0 };
-                            acc[k].count++;
-                            return acc;
-                          }, {})
-                        ).sort((a,b) => b.count - a.count);
-                        return distintos.length > 1 ? (
-                          <div style={{ marginBottom: 14 }}>
-                            <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 8 }}>{distintos.length} productos encontrados — elegí uno:</div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {distintos.map(p => (
-                                <button key={p.codigo} onClick={() => setProductoSeleccionado(p.codigo)}
-                                  style={{ padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${productoSeleccionado === p.codigo ? C.gold : 'rgba(200,168,75,0.25)'}`, background: productoSeleccionado === p.codigo ? C.gold : 'rgba(255,255,255,0.5)', color: productoSeleccionado === p.codigo ? '#fff' : C.text, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Rubik, sans-serif' }}>
-                                  {p.nombre || p.codigo}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
+                      {/* Tabla de productos encontrados */}
+                      <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 8 }}>
+                        {listaProductos.length} producto{listaProductos.length !== 1 ? 's' : ''} encontrado{listaProductos.length !== 1 ? 's' : ''}{listaProductos.length > 1 ? ' — clic para ver estacionalidad' : ''}
+                      </div>
+                      <div style={{ overflowX: 'auto', marginBottom: codigoSel ? 20 : 0 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ ...S.th, textAlign: 'left' }}>Producto</th>
+                              <th style={{ ...S.th, textAlign: 'center' }}>Registros</th>
+                              <th style={{ ...S.th, textAlign: 'right' }}>Ventas totales</th>
+                              <th style={{ ...S.th, textAlign: 'right' }}>Prom/mes</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {listaProductos.map(p => {
+                              const isSel = p.codigo === codigoSel;
+                              return (
+                                <tr key={p.codigo}
+                                  onClick={() => setProductoSeleccionado(isSel ? null : p.codigo)}
+                                  style={{ cursor: 'pointer', borderBottom: '1px solid rgba(200,168,75,0.08)', borderLeft: `3px solid ${isSel ? C.gold : 'transparent'}`, background: isSel ? 'rgba(200,168,75,0.08)' : 'transparent' }}>
+                                  <td style={{ ...S.td, fontWeight: isSel ? 700 : 500, color: C.text, paddingLeft: 8 }}>{p.nombre}</td>
+                                  <td style={{ ...S.td, textAlign: 'center', color: C.muted }}>{p.registros.toLocaleString()}</td>
+                                  <td style={{ ...S.td, textAlign: 'right', fontWeight: 600 }}>₡{(p.total/1e6).toFixed(2)}M</td>
+                                  <td style={{ ...S.td, textAlign: 'right', color: C.muted }}>{p.meses > 0 ? '₡'+(p.total/p.meses/1e6).toFixed(2)+'M' : '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                      {/* Solo mostrar gráfico si hay producto seleccionado (o hay solo 1) */}
-                      {(() => {
-                        const distintos = [...new Set(productoData.map(r => r.codigo_interno))];
-                        const mostrar = distintos.length === 1 || productoSeleccionado;
-                        if (!mostrar) return null;
-                        const codigoFiltro = productoSeleccionado || distintos[0];
-                        const datosFiltrados = productoData.filter(r => r.codigo_interno === codigoFiltro);
-                        const nombreMostrar = (datosFiltrados[0]?.item || codigoFiltro || '').trim();
-                        // Recalcular grid solo para este producto
+                      {/* Gráfico de estacionalidad del producto seleccionado */}
+                      {codigoSel && (() => {
+                        const datosFiltrados = (productoData||[]).filter(r => r.codigo_interno === codigoSel);
+                        const nombreMostrar = (datosFiltrados[0]?.item || codigoSel || '').trim();
                         const pgrid2 = {};
                         datosFiltrados.forEach(r => {
                           const d = parseFecha(r.fecha);
@@ -1363,76 +1366,74 @@ export default function ComercialV2() {
                         const pglobal2 = Object.values(pprom2).filter(v=>v>0).reduce((s,v)=>s+v,0) /
                           (Object.values(pprom2).filter(v=>v>0).length || 1);
                         return (
-                          <>
-                            <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4, color: C.text }}>{nombreMostrar}</div>
+                          <div style={{ borderTop: `1px solid rgba(200,168,75,0.15)`, paddingTop: 16, marginTop: 4 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 4, color: C.text }}>{nombreMostrar}</div>
                             <div style={{ fontSize: '0.75rem', color: C.muted, marginBottom: 16 }}>{datosFiltrados.length.toLocaleString()} registros · {panios2.join(', ')}</div>
-
-                      {/* Barras estacionales */}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
-                        {MESES.map((nombre, i) => {
-                          const m = i + 1;
-                          const idx = pprom2[m] > 0 ? Math.round(pprom2[m] / pglobal2 * 100) : 0;
-                          const isStrong = idx >= 105, isWeak = idx <= 95;
-                          const barH = Math.max(20, Math.min(100, idx * 0.8));
-                          const col = isStrong ? C.green : isWeak ? C.red : C.blue;
-                          return (
-                            <div key={m} style={{ flex: '1 1 50px', textAlign: 'center', minWidth: 44 }}>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: col, marginBottom: 3 }}>{idx > 0 ? `${idx}%` : '—'}</div>
-                              <div style={{ height: barH, background: col+'33', border: `2px solid ${col}`, borderRadius: 7, margin: '0 auto 5px', width: '80%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 3 }}>
-                                <div style={{ width: '60%', background: col, borderRadius: 4, height: `${Math.max(8, barH*0.6)}px` }} />
-                              </div>
-                              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted }}>{nombre}</div>
-                              <div style={{ fontSize: '0.65rem', color: C.muted }}>
-                                {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
-                              </div>
+                            {/* Barras estacionales */}
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
+                              {MESES.map((nombre, i) => {
+                                const m = i + 1;
+                                const idx = pprom2[m] > 0 ? Math.round(pprom2[m] / pglobal2 * 100) : 0;
+                                const isStrong = idx >= 105, isWeak = idx <= 95;
+                                const barH = Math.max(20, Math.min(100, idx * 0.8));
+                                const col = isStrong ? C.green : isWeak ? C.red : C.blue;
+                                return (
+                                  <div key={m} style={{ flex: '1 1 50px', textAlign: 'center', minWidth: 44 }}>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: col, marginBottom: 3 }}>{idx > 0 ? `${idx}%` : '—'}</div>
+                                    <div style={{ height: barH, background: col+'33', border: `2px solid ${col}`, borderRadius: 7, margin: '0 auto 5px', width: '80%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 3 }}>
+                                      <div style={{ width: '60%', background: col, borderRadius: 4, height: `${Math.max(8, barH*0.6)}px` }} />
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: C.muted }}>{nombre}</div>
+                                    <div style={{ fontSize: '0.65rem', color: C.muted }}>
+                                      {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Heatmap año × mes */}
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ ...S.th, textAlign: 'left' }}>Mes</th>
-                              {panios2.map(a => <th key={a} style={{ ...S.th }}>{a}</th>)}
-                              <th style={{ ...S.th, color: C.gold }}>Prom.</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {MESES.map((nombre, i) => {
-                              const m = i + 1;
-                              return (
-                                <tr key={m} style={{ borderBottom: '1px solid rgba(200,168,75,0.07)' }}>
-                                  <td style={{ ...S.td, fontWeight: 700, color: C.muted }}>{nombre}</td>
-                                  {panios2.map(a => {
-                                    const val = pgrid2[a]?.[m]?.monto || 0;
-                                    const ratio = pprom2[m] > 0 ? val/pprom2[m] : 0;
-                                    const bg = ratio >= 1.2 ? 'rgba(46,125,79,0.2)' : ratio >= 1.05 ? 'rgba(46,125,79,0.09)' : ratio > 0 && ratio <= 0.8 ? 'rgba(192,64,64,0.18)' : ratio > 0 ? 'rgba(192,64,64,0.07)' : 'transparent';
+                            {/* Heatmap año × mes */}
+                            <div style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ ...S.th, textAlign: 'left' }}>Mes</th>
+                                    {panios2.map(a => <th key={a} style={{ ...S.th }}>{a}</th>)}
+                                    <th style={{ ...S.th, color: C.gold }}>Prom.</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {MESES.map((nombre, i) => {
+                                    const m = i + 1;
                                     return (
-                                      <td key={a} style={{ ...S.td, textAlign: 'center', background: bg, fontWeight: val > 0 ? 600 : 400 }}>
-                                        {val > 0 ? '₡'+(val/1e6).toFixed(1)+'M' : <span style={{ color: C.muted }}>—</span>}
-                                      </td>
+                                      <tr key={m} style={{ borderBottom: '1px solid rgba(200,168,75,0.07)' }}>
+                                        <td style={{ ...S.td, fontWeight: 700, color: C.muted }}>{nombre}</td>
+                                        {panios2.map(a => {
+                                          const val = pgrid2[a]?.[m]?.monto || 0;
+                                          const ratio = pprom2[m] > 0 ? val/pprom2[m] : 0;
+                                          const bg = ratio >= 1.2 ? 'rgba(46,125,79,0.2)' : ratio >= 1.05 ? 'rgba(46,125,79,0.09)' : ratio > 0 && ratio <= 0.8 ? 'rgba(192,64,64,0.18)' : ratio > 0 ? 'rgba(192,64,64,0.07)' : 'transparent';
+                                          return (
+                                            <td key={a} style={{ ...S.td, textAlign: 'center', background: bg, fontWeight: val > 0 ? 600 : 400 }}>
+                                              {val > 0 ? '₡'+(val/1e6).toFixed(1)+'M' : <span style={{ color: C.muted }}>—</span>}
+                                            </td>
+                                          );
+                                        })}
+                                        <td style={{ ...S.td, textAlign: 'center', fontWeight: 700, color: C.gold }}>
+                                          {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
+                                        </td>
+                                      </tr>
                                     );
                                   })}
-                                  <td style={{ ...S.td, textAlign: 'center', fontWeight: 700, color: C.gold }}>
-                                    {pprom2[m] > 0 ? '₡'+(pprom2[m]/1e6).toFixed(1)+'M' : '—'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                          </>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         );
                       })()}
                     </>
                   )}
 
                   {!productoQuery && (
-                    <div style={{ color: C.muted, fontSize: '0.82rem' }}>Escribe el nombre de un producto y presiona Enter o Buscar para ver su estacionalidad histórica.</div>
+                    <div style={{ color: C.muted, fontSize: '0.82rem' }}>Escribe el nombre de un producto y presiona Enter o Buscar para ver su estacionalidad histórica. Podés buscar con varias palabras, ej: "zinc 28"</div>
                   )}
                 </div>
               );
