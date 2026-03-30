@@ -420,6 +420,8 @@ export default function ComercialV2() {
   const [productoQuery, setProductoQuery] = useState('');
   const [productoData, setProductoData] = useState([]);
   const [productoLoading, setProductoLoading] = useState(false);
+  const [productoError, setProductoError] = useState(null);
+  const [productoAnio, setProductoAnio] = useState('todos');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null); // codigo_interno
 
   // ── Load vendedores (desde datos reales de facturación) ─────────────────────
@@ -609,6 +611,8 @@ export default function ComercialV2() {
     if (!q || q.trim().length < 2) return;
     setProductoLoading(true);
     setProductoSeleccionado(null);
+    setProductoError(null);
+    setProductoAnio('todos');
     try {
       const words = q.trim().split(/\s+/).filter(w => w.length > 0);
       const mainWord = words.reduce((a, b) => a.length >= b.length ? a : b);
@@ -622,6 +626,7 @@ export default function ComercialV2() {
           .ilike('codigo_interno', `%${mainWord}%`)
           .limit(15000),
       ]);
+      if (r1.error) throw r1.error;
       const seen = new Set();
       let combined = [...(r1.data||[]), ...(r2.data||[])].filter(r => {
         const k = `${r.fecha}|${r.codigo_interno}|${r.total}|${r.cantidad_facturada}`;
@@ -637,7 +642,10 @@ export default function ComercialV2() {
         });
       }
       setProductoData(combined);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('loadProducto error:', e);
+      setProductoError(e?.message || 'Error al buscar');
+    }
     setProductoLoading(false);
   }, []);
 
@@ -1264,9 +1272,17 @@ export default function ComercialV2() {
                 return { mes: parseInt(p[1]), anio: parseInt(p[2]) };
               };
 
-              // Agrupar productoData por codigo_interno → resumen para tabla
+              // Filtrar por año seleccionado
+              const datosAnio = productoAnio === 'todos'
+                ? (productoData || [])
+                : (productoData || []).filter(r => { const d = parseFecha(r.fecha); return d && d.anio === parseInt(productoAnio); });
+
+              // Años disponibles en los datos cargados
+              const aniosDisp = [...new Set((productoData||[]).map(r => { const d = parseFecha(r.fecha); return d?.anio; }).filter(Boolean))].sort((a,b) => b - a);
+
+              // Agrupar por codigo_interno → resumen para tabla
               const productMap = {};
-              (productoData || []).forEach(r => {
+              datosAnio.forEach(r => {
                 const k = r.codigo_interno || r.item || '?';
                 if (!productMap[k]) productMap[k] = { codigo: r.codigo_interno, nombre: (r.item||'').trim() || r.codigo_interno || '?', registros: 0, total: 0, mesesSet: new Set() };
                 productMap[k].registros++;
@@ -1278,7 +1294,7 @@ export default function ComercialV2() {
                 .map(p => ({ ...p, meses: p.mesesSet.size }))
                 .sort((a, b) => b.total - a.total);
 
-              const distintos = [...new Set((productoData||[]).map(r => r.codigo_interno))];
+              const distintos = [...new Set(datosAnio.map(r => r.codigo_interno))];
               const codigoSel = productoSeleccionado || (distintos.length === 1 ? distintos[0] : null);
 
               return (
@@ -1297,16 +1313,31 @@ export default function ComercialV2() {
                       onClick={() => { setProductoQuery(productoSearch); loadProducto(productoSearch); }}
                       style={{ padding: '8px 20px', background: C.gold, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.85rem' }}
                     >Buscar</button>
+                    {aniosDisp.length > 0 && (
+                      <select value={productoAnio} onChange={e => { setProductoAnio(e.target.value); setProductoSeleccionado(null); }}
+                        style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid rgba(200,168,75,0.3)`, background: 'rgba(255,255,255,0.6)', fontFamily: 'Rubik, sans-serif', fontSize: '0.85rem', color: C.text, cursor: 'pointer' }}>
+                        <option value="todos">Todos los años</option>
+                        {aniosDisp.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    )}
                     {productoData.length > 0 && (
-                      <button onClick={() => { setProductoSearch(''); setProductoQuery(''); setProductoData([]); setProductoSeleccionado(null); }}
+                      <button onClick={() => { setProductoSearch(''); setProductoQuery(''); setProductoData([]); setProductoSeleccionado(null); setProductoAnio('todos'); }}
                         style={{ padding: '8px 14px', background: 'rgba(200,64,64,0.1)', border: '1px solid rgba(200,64,64,0.2)', borderRadius: 10, color: C.red, fontWeight: 600, cursor: 'pointer', fontFamily: 'Rubik, sans-serif', fontSize: '0.82rem' }}>✕ Limpiar</button>
                     )}
                   </div>
 
                   {productoLoading && <Spinner />}
 
-                  {!productoLoading && productoQuery && productoData.length === 0 && (
+                  {!productoLoading && productoError && (
+                    <div style={{ color: C.red, fontSize: '0.85rem', padding: '12px 0' }}>Error: {productoError}</div>
+                  )}
+
+                  {!productoLoading && !productoError && productoQuery && productoData.length === 0 && (
                     <div style={{ color: C.muted, fontSize: '0.85rem', padding: '12px 0' }}>No se encontraron productos con "{productoQuery}"</div>
+                  )}
+
+                  {!productoLoading && !productoError && productoData.length > 0 && listaProductos.length === 0 && productoAnio !== 'todos' && (
+                    <div style={{ color: C.muted, fontSize: '0.85rem', padding: '12px 0' }}>No hay ventas de este producto en {productoAnio}. Prueba con otro año.</div>
                   )}
 
                   {!productoLoading && listaProductos.length > 0 && (
@@ -1345,7 +1376,7 @@ export default function ComercialV2() {
 
                       {/* Gráfico de estacionalidad del producto seleccionado */}
                       {codigoSel && (() => {
-                        const datosFiltrados = (productoData||[]).filter(r => r.codigo_interno === codigoSel);
+                        const datosFiltrados = datosAnio.filter(r => r.codigo_interno === codigoSel);
                         const nombreMostrar = (datosFiltrados[0]?.item || codigoSel || '').trim();
                         const pgrid2 = {};
                         datosFiltrados.forEach(r => {
