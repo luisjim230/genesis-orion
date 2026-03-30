@@ -63,19 +63,29 @@ def rango_fechas():
 # ─── SUPABASE ─────────────────────────────────────────────────────────────────
 
 def supa_request(method, path, data=None, prefer="resolution=merge-duplicates,return=minimal"):
+    import time
     url = f"{SUPA_URL}/rest/v1/{path}"
     body = json.dumps(data).encode() if data else None
-    req = urllib.request.Request(url, data=body, method=method)
-    req.add_header("apikey", SUPA_KEY)
-    req.add_header("Authorization", f"Bearer {SUPA_KEY}")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Prefer", prefer)
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.status
-    except urllib.error.HTTPError as e:
-        log.error(f"Supabase {method} {path}: {e.code} {e.read().decode()[:300]}")
-        return None
+    for intento in range(3):
+        req = urllib.request.Request(url, data=body, method=method)
+        req.add_header("apikey", SUPA_KEY)
+        req.add_header("Authorization", f"Bearer {SUPA_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", prefer)
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:300]
+            log.warning(f"Supabase {method} {path}: {e.code} (intento {intento+1}/3) {err}")
+            if intento < 2:
+                time.sleep(2 * (intento + 1))
+        except Exception as e:
+            log.warning(f"Supabase {method} {path}: {e} (intento {intento+1}/3)")
+            if intento < 2:
+                time.sleep(2 * (intento + 1))
+    log.error(f"Supabase {method} {path}: falló después de 3 intentos")
+    return None
 
 
 # ─── NORMALIZACIÓN ────────────────────────────────────────────────────────────
@@ -148,19 +158,49 @@ async def descargar():
         log.info("✅ Ítems facturados cargado")
 
         # ── Fechas: 1° del mes hasta hoy ──────────────────────────────────────
-        # Los campos pueden llamarse fFechaInicio/fFechaFin o tener otros IDs
-        for sel_inicio, sel_fin in [("#fFechaInicio","#fFechaFin"), ("#txtFechaInicio","#txtFechaFin")]:
+        fecha_ok = False
+        # Intentar múltiples selectores para los campos de fecha
+        selectores_fecha = [
+            ("#fFechaInicio", "#fFechaFin"),
+            ("#txtFechaInicio", "#txtFechaFin"),
+            ("input[name='fFechaInicio']", "input[name='fFechaFin']"),
+            ("input[name='txtFechaInicio']", "input[name='txtFechaFin']"),
+        ]
+        for sel_inicio, sel_fin in selectores_fecha:
             try:
-                await iframe.locator(sel_inicio).wait_for(timeout=5000)
-                await iframe.locator(sel_inicio).click(click_count=3)
-                await iframe.locator(sel_inicio).fill(f_inicio)
-                await iframe.locator(sel_fin).click(click_count=3)
-                await iframe.locator(sel_fin).fill(f_fin)
-                log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
-                break
+                el_ini = iframe.locator(sel_inicio)
+                if await el_ini.count() > 0:
+                    await el_ini.click(click_count=3)
+                    await el_ini.fill(f_inicio)
+                    await iframe.locator(sel_fin).click(click_count=3)
+                    await iframe.locator(sel_fin).fill(f_fin)
+                    log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
+                    fecha_ok = True
+                    break
             except Exception:
                 continue
-        else:
+        # Fallback: buscar cualquier input tipo fecha visible en el iframe
+        if not fecha_ok:
+            try:
+                inputs = iframe.locator("input[type='text']")
+                count = await inputs.count()
+                log.info(f"  Buscando campos de fecha entre {count} inputs...")
+                for idx in range(min(count, 10)):
+                    val = await inputs.nth(idx).get_attribute("value") or ""
+                    el_id = await inputs.nth(idx).get_attribute("id") or ""
+                    log.info(f"    input[{idx}] id='{el_id}' value='{val}'")
+                    # Si el valor parece una fecha (contiene /) intentar usarlo
+                    if "/" in val and len(val) >= 8 and idx + 1 < count:
+                        await inputs.nth(idx).click(click_count=3)
+                        await inputs.nth(idx).fill(f_inicio)
+                        await inputs.nth(idx + 1).click(click_count=3)
+                        await inputs.nth(idx + 1).fill(f_fin)
+                        log.info(f"  Fechas OK (fallback input[{idx}]): {f_inicio} → {f_fin}")
+                        fecha_ok = True
+                        break
+            except Exception as e:
+                log.warning(f"  Error en fallback de fechas: {e}")
+        if not fecha_ok:
             log.warning("  No se encontraron campos de fecha — usando valores por defecto")
 
         # ── Refrescar y esperar datos ──────────────────────────────────────────
@@ -253,7 +293,7 @@ def subir_a_supabase(excel_path):
 
     # ── Upsert: insertar o actualizar por (factura, codigo_interno, bodega) ───
     log.info(f"Insertando/actualizando {total:,} registros...")
-    BATCH = 200
+    BATCH = 80
     ok = 0
     for i in range(0, total, BATCH):
         lote = registros[i:i + BATCH]
