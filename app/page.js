@@ -200,22 +200,50 @@ export default function DashboardPage() {
           .order('creada', { ascending: false })
           .limit(8)
 
-        const { data: pagos } = await supabase
+        // Obtener solo la carga más reciente de cuentas por pagar
+        const { data: fcPagar } = await supabase
           .from('fin_cuentas_pagar')
-          .select('*')
-          .limit(2000)
+          .select('fecha_carga')
+          .order('fecha_carga', { ascending: false })
+          .limit(1)
+        const fechaCargaPagar = fcPagar?.[0]?.fecha_carga
+        let pagos = []
+        if (fechaCargaPagar) {
+          let off = 0
+          while (true) {
+            const { data } = await supabase.from('fin_cuentas_pagar').select('*').eq('fecha_carga', fechaCargaPagar).range(off, off + 999)
+            if (!data?.length) break
+            pagos = [...pagos, ...data]
+            if (data.length < 1000) break
+            off += 1000
+          }
+        }
 
-        const totalPagar = (pagos || []).reduce((sum, r) => {
+        const totalPagar = pagos.reduce((sum, r) => {
           const v = parseFloat(r['saldo_actual'] || r['Saldo actual'] || 0)
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
 
-        const { data: cobros } = await supabase
+        // Obtener solo la carga más reciente de cuentas por cobrar
+        const { data: fcCobrar } = await supabase
           .from('fin_cuentas_cobrar')
-          .select('*')
-          .limit(2000)
+          .select('fecha_carga')
+          .order('fecha_carga', { ascending: false })
+          .limit(1)
+        const fechaCargaCobrar = fcCobrar?.[0]?.fecha_carga
+        let cobros = []
+        if (fechaCargaCobrar) {
+          let off2 = 0
+          while (true) {
+            const { data } = await supabase.from('fin_cuentas_cobrar').select('*').eq('fecha_carga', fechaCargaCobrar).range(off2, off2 + 999)
+            if (!data?.length) break
+            cobros = [...cobros, ...data]
+            if (data.length < 1000) break
+            off2 += 1000
+          }
+        }
 
-        const totalCobrar = (cobros || []).reduce((sum, r) => {
+        const totalCobrar = cobros.reduce((sum, r) => {
           const v = parseFloat(r['saldo_actual'] || r['Saldo actual'] || 0)
           return sum + (isNaN(v) ? 0 : v)
         }, 0)
