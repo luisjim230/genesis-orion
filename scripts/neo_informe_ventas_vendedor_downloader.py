@@ -157,22 +157,46 @@ async def descargar():
         log.info("  Agrupado por Vendedor (13)")
 
         # ── Fechas: 1° del mes hasta hoy ──────────────────────────────────────
+        fecha_ok = False
         for sel_inicio, sel_fin in [
             ("#fFechaInicio", "#fFechaFin"),
             ("#txtFechaInicio", "#txtFechaFin"),
             ("#fInicio", "#fFin"),
+            ("input[name='fFechaInicio']", "input[name='fFechaFin']"),
         ]:
             try:
-                await iframe.locator(sel_inicio).wait_for(timeout=3000)
-                await iframe.locator(sel_inicio).click(click_count=3)
-                await iframe.locator(sel_inicio).fill(f_inicio)
-                await iframe.locator(sel_fin).click(click_count=3)
-                await iframe.locator(sel_fin).fill(f_fin)
-                log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
-                break
+                el_ini = iframe.locator(sel_inicio)
+                if await el_ini.count() > 0:
+                    await el_ini.click(click_count=3)
+                    await el_ini.fill(f_inicio)
+                    await iframe.locator(sel_fin).click(click_count=3)
+                    await iframe.locator(sel_fin).fill(f_fin)
+                    log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
+                    fecha_ok = True
+                    break
             except Exception:
                 continue
-        else:
+        # Fallback: buscar inputs con valor tipo fecha
+        if not fecha_ok:
+            try:
+                inputs = iframe.locator("input[type='text']")
+                count = await inputs.count()
+                log.info(f"  Buscando campos de fecha entre {count} inputs...")
+                for idx in range(min(count, 15)):
+                    val = await inputs.nth(idx).get_attribute("value") or ""
+                    el_id = await inputs.nth(idx).get_attribute("id") or ""
+                    log.info(f"    input[{idx}] id='{el_id}' value='{val}'")
+                    if "/" in val and len(val) >= 8 and idx + 1 < count:
+                        await inputs.nth(idx).click(click_count=3)
+                        await inputs.nth(idx).fill(f_inicio)
+                        await inputs.nth(idx + 1).click(click_count=3)
+                        await inputs.nth(idx + 1).fill(f_fin)
+                        log.info(f"  Fechas OK (fallback input[{idx}]): {f_inicio} → {f_fin}")
+                        fecha_ok = True
+                        break
+            except Exception as e:
+                log.warning(f"  Error en fallback de fechas: {e}")
+        if not fecha_ok:
             log.warning("  No se encontraron campos de fecha — usando valores por defecto")
 
         # ── Generar reporte ────────────────────────────────────────────────────
