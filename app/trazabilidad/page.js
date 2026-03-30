@@ -654,7 +654,21 @@ export default function TrazabilidadPage() {
       supabase.from('ordenes_compra_items').select('*').eq('estado_item', 'completo').order('fecha_recepcion', { ascending: false }).limit(500),
       supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null),
     ])
-    const its = [...(itsPend||[]), ...(itsComp||[])]
+    // Auto-cancelar ítems pendientes con más de 18 días
+    const DIAS_LIMITE = 18
+    const ahora = new Date()
+    const vencidos = (itsPend||[]).filter(it => {
+      const orden = (ords||[]).find(o => o.id === it.orden_id)
+      if (!orden?.fecha_orden) return false
+      const dias = Math.floor((ahora - new Date(orden.fecha_orden)) / 86400000)
+      return dias > DIAS_LIMITE
+    })
+    if (vencidos.length > 0) {
+      const ids = vencidos.map(v => v.id)
+      await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids)
+    }
+    const itsPendFiltrados = (itsPend||[]).filter(it => !vencidos.some(v => v.id === it.id))
+    const its = [...itsPendFiltrados, ...(itsComp||[])]
     // Enriquecer ordenes con pdf_url de cola
     const colaMap = {}
     ;(cola||[]).forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
