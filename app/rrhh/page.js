@@ -378,14 +378,16 @@ export default function RRHHPage() {
                   )}
                 </div>
                 <div style={S.badge(est.color)}>{est.label}</div>
-                {s.estado === 'pendiente' && (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => iniciarEdicion(s)} style={S.btn('#3b82f6', true)} title="Editar">✏️</button>
-                    <button onClick={() => eliminar(s)} style={S.btn('#ef4444', true)} title="Eliminar">🗑️</button>
-                    <button onClick={() => cambiarEstado(s, 'aprobado')} style={S.btn('#22c55e', false)}>Aprobar</button>
-                    <button onClick={() => cambiarEstado(s, 'rechazado')} style={S.btn('#ef4444', true)}>Rechazar</button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {s.estado === 'pendiente' && (
+                    <>
+                      <button onClick={() => iniciarEdicion(s)} style={S.btn('#3b82f6', true)} title="Editar">✏️</button>
+                      <button onClick={() => cambiarEstado(s, 'aprobado')} style={S.btn('#22c55e', false)}>Aprobar</button>
+                      <button onClick={() => cambiarEstado(s, 'rechazado')} style={S.btn('#ef4444', true)}>Rechazar</button>
+                    </>
+                  )}
+                  <button onClick={() => eliminar(s)} style={S.btn('#ef4444', true)} title="Eliminar">🗑️</button>
+                </div>
                 {s.motivo && <div style={{ width: '100%', fontSize: '0.8em', color: MUTED, marginTop: 2 }}>Motivo: {s.motivo}</div>}
               </div>
             )
