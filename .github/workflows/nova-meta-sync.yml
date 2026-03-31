@@ -1,0 +1,46 @@
+name: NOVA — Meta Ads Sync
+
+on:
+  schedule:
+    # 5 AM Costa Rica (UTC-6) = 11 AM UTC
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modo de sincronización'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - nightly
+          - backfill
+          - campaigns
+          - insights
+          - pixel
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Run Meta Sync
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'nightly' }}"
+          echo "🚀 Running NOVA Meta Sync in mode: $MODE"
+          python scripts/nova_meta_sync.py "$MODE"

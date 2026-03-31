@@ -15,6 +15,7 @@ const ALL_NAV = [
   { href: '/cif',               icon: '🧮', name: 'Importación', key: 'cif' },
   { href: '/contenedores',      icon: '🚢', name: 'Cargas', key: 'contenedores' },
   { href: '/mercado',           icon: '⚡', name: 'Mercado', key: 'mercado' },
+  { href: '/campanas',          icon: '📣', name: 'Campañas', key: 'campanas' },
   { href: '/cajas-aurora',      icon: '🌅', name: 'Cajas', key: 'cajas-aurora' },
   { href: '/entregas',          icon: '🚛', name: 'Entregas', key: 'entregas' },
   { href: '/finanzas',          icon: '💰', name: 'Finanzas', key: 'finanzas' },
