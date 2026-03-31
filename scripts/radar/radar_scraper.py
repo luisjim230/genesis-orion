@@ -38,42 +38,29 @@ HEADERS_SUPA = {
     "Prefer": "resolution=merge-duplicates",
 }
 
-KEYWORDS_RADAR = {
-    "pisos": [
-        "piso SPC", "piso vinílico", "piso laminado", "piso flotante",
-        "porcelanato", "cerámica para piso", "piso de madera"
-    ],
-    "paredes_revestimiento": [
-        "panel WPC", "panel de pared", "láminas PVC pared",
-        "fachaleta flexible", "piedra flexible exterior",
-        "revestimiento exterior casa", "láminas WPC"
-    ],
-    "bano": [
-        "loza sanitaria", "losa sanitaria negra", "mueble de baño",
-        "lavatorio empotrado", "grifería baño", "mampara de baño",
-        "ducha de vidrio", "sanitario color"
-    ],
-    "ventanas_puertas": [
-        "ventana UPVC", "ventana PVC", "ventana de aluminio",
-        "puerta PVC", "puerta corrediza"
-    ],
-    "iluminacion": [
-        "perfil LED", "tira LED", "iluminación LED cocina",
-        "perfil aluminio LED"
-    ],
-    "cielos_techos": [
-        "cielo raso PVC", "cielo desmontable", "techo UPVC"
-    ],
-    "remodelacion_general": [
-        "remodelación fácil", "remodelación baño", "remodelación sala",
-        "acabados de construcción", "materiales de construcción baratos",
-        "herramienta para remodelación"
-    ],
-    "griferia_accesorios": [
-        "grifería cocina", "grifería negra", "grifería dorada",
-        "fregadero acero inox", "lavaplatos empotrado"
-    ]
-}
+def cargar_keywords_desde_supabase():
+    """Lee keywords activas de la tabla radar_keywords en Supabase."""
+    url = f"{SUPABASE_URL}/rest/v1/radar_keywords"
+    headers = {**HEADERS_SUPA, "Prefer": ""}
+    params = {"activa": "eq.true", "select": "keyword,categoria"}
+    r = requests.get(url, headers=headers, params=params)
+    if r.status_code != 200:
+        log.error(f"Error cargando keywords: {r.status_code} {r.text[:200]}")
+        return {}
+    rows = r.json()
+    kw_dict = {}
+    for row in rows:
+        cat = row["categoria"]
+        kw = row["keyword"]
+        if cat not in kw_dict:
+            kw_dict[cat] = []
+        kw_dict[cat].append(kw)
+    log.info(f"  Cargadas {len(rows)} keywords activas de {len(kw_dict)} categorías")
+    return kw_dict
+
+
+# Se carga al inicio del script
+KEYWORDS_RADAR = {}
 
 REGIONES = ["CR", "GT", "MX", "US"]
 
@@ -375,8 +362,16 @@ def evaluar_productos():
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
+    global KEYWORDS_RADAR
     fuente = os.environ.get("RADAR_FUENTE", "todas")
     log.info(f"🛰️  RADAR iniciando — fuente: {fuente}")
+
+    # Cargar keywords desde Supabase
+    KEYWORDS_RADAR = cargar_keywords_desde_supabase()
+    if not KEYWORDS_RADAR:
+        log.error("No se encontraron keywords activas. Abortando.")
+        guardar_log("general", "error", 0, "Sin keywords activas en radar_keywords", 0)
+        return
 
     if fuente in ("todas", "google_trends"):
         scrape_google_trends()

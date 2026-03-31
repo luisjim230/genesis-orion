@@ -72,11 +72,15 @@ export default function RadarPage() {
   const [disparando, setDisparando] = useState(false);
   const [tabCat, setTabCat] = useState('todas');
   const [ultimoRun, setUltimoRun] = useState(null);
+  const [keywords, setKeywords] = useState([]);
+  const [kwNueva, setKwNueva] = useState('');
+  const [kwCat, setKwCat] = useState('pisos');
+  const [kwGuardando, setKwGuardando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
 
-    const [evalRes, tendRes, mlRes, logRes] = await Promise.allSettled([
+    const [evalRes, tendRes, mlRes, logRes, kwRes] = await Promise.allSettled([
       supabase.from('radar_evaluaciones')
         .select('*')
         .order('score_total', { ascending: false })
@@ -93,12 +97,17 @@ export default function RadarPage() {
         .select('*')
         .order('fecha_ejecucion', { ascending: false })
         .limit(10),
+      supabase.from('radar_keywords')
+        .select('*')
+        .order('categoria', { ascending: true })
+        .order('keyword', { ascending: true }),
     ]);
 
     if (evalRes.status === 'fulfilled') setEvaluaciones(evalRes.value.data || []);
     if (tendRes.status === 'fulfilled') setTendencias(tendRes.value.data || []);
     if (mlRes.status === 'fulfilled') setProductosML(mlRes.value.data || []);
     if (logRes.status === 'fulfilled') setLogs(logRes.value.data || []);
+    if (kwRes.status === 'fulfilled') setKeywords(kwRes.value.data || []);
 
     // Estado del último workflow
     try {
@@ -111,6 +120,30 @@ export default function RadarPage() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const agregarKeyword = async () => {
+    if (!kwNueva.trim()) return;
+    setKwGuardando(true);
+    const { error } = await supabase.from('radar_keywords').insert({ keyword: kwNueva.trim(), categoria: kwCat });
+    if (error) {
+      alert(error.code === '23505' ? 'Esa keyword ya existe en esa categoría.' : 'Error: ' + error.message);
+    } else {
+      setKwNueva('');
+      cargar();
+    }
+    setKwGuardando(false);
+  };
+
+  const toggleKeyword = async (id, activa) => {
+    await supabase.from('radar_keywords').update({ activa: !activa }).eq('id', id);
+    setKeywords(prev => prev.map(k => k.id === id ? { ...k, activa: !activa } : k));
+  };
+
+  const eliminarKeyword = async (id, keyword) => {
+    if (!confirm('¿Eliminar "' + keyword + '" del monitoreo?')) return;
+    await supabase.from('radar_keywords').delete().eq('id', id);
+    setKeywords(prev => prev.filter(k => k.id !== id));
+  };
 
   const dispararRadar = async () => {
     setDisparando(true);
@@ -315,6 +348,69 @@ export default function RadarPage() {
           ))}
         </div>
       )}
+
+      <hr style={S.divider} />
+
+      {/* Gestión de Keywords */}
+      <div style={S.section}>🔑 Keywords Monitoreadas</div>
+      <div style={S.subCap}>Agregá o desactivá keywords que RADAR monitorea en cada ejecución</div>
+
+      {/* Agregar nueva */}
+      <div style={{ ...S.card, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Nueva keyword</div>
+          <input
+            value={kwNueva}
+            onChange={e => setKwNueva(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && agregarKeyword()}
+            placeholder="Ej: piso porcelanato mate"
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--cream)', color: 'var(--text-primary)', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ minWidth: 180 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Categoría</div>
+          <select
+            value={kwCat}
+            onChange={e => setKwCat(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--cream)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' }}
+          >
+            {Object.entries(CAT_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={agregarKeyword} disabled={kwGuardando || !kwNueva.trim()} style={{ ...S.btnPrimary, opacity: kwGuardando || !kwNueva.trim() ? 0.5 : 1 }}>
+          {kwGuardando ? '⏳' : '+ Agregar'}
+        </button>
+      </div>
+
+      {/* Lista por categoría */}
+      {Object.entries(CAT_LABELS).map(([catKey, catLabel]) => {
+        const kwsCat = keywords.filter(k => k.categoria === catKey);
+        if (kwsCat.length === 0) return null;
+        return (
+          <div key={catKey} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{catLabel} <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400 }}>({kwsCat.filter(k => k.activa).length} activas)</span></div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {kwsCat.map(k => (
+                <div key={k.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: k.activa ? '#fff' : 'var(--cream)', border: '1px solid ' + (k.activa ? 'var(--border)' : 'var(--border-soft)'), borderRadius: 20, padding: '4px 12px', fontSize: '0.8rem', color: k.activa ? 'var(--text-primary)' : 'var(--text-muted)', opacity: k.activa ? 1 : 0.6 }}>
+                  <span
+                    onClick={() => toggleKeyword(k.id, k.activa)}
+                    style={{ cursor: 'pointer', fontSize: '0.75rem' }}
+                    title={k.activa ? 'Desactivar' : 'Activar'}
+                  >{k.activa ? '🟢' : '⚪'}</span>
+                  <span>{k.keyword}</span>
+                  <span
+                    onClick={() => eliminarKeyword(k.id, k.keyword)}
+                    style={{ cursor: 'pointer', fontSize: '0.7rem', color: '#E53E3E', marginLeft: 2 }}
+                    title="Eliminar"
+                  >✕</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       <hr style={S.divider} />
 
