@@ -3,18 +3,21 @@ radar_scraper.py — Scraper de inteligencia de mercado para RADAR.
 
 Fuentes:
   1. Google Trends (pytrends) — interés por keyword/región
-  2. MercadoLibre API pública — productos, precios, vendidos
+  2. MercadoLibre — scraping web de búsquedas
+  3. Amazon — scraping web MX + US
+  4. Alibaba — scraping web para precios de proveedor
+  5. Pinterest — señales de inspiración/demanda temprana
+  6. YouTube — búsquedas de tutoriales DIY como proxy de demanda
 
 Cruza datos externos con inventario interno en Supabase.
 Genera evaluaciones con score combinado.
 
 Corre en GitHub Actions: lunes 9am + jueves 2pm hora CR.
-También se puede disparar manualmente desde SOL via workflow_dispatch.
 """
 
-import os, sys, json, time, logging
-from datetime import datetime, date, timedelta
-from typing import Optional
+import os, re, json, time, logging
+from datetime import date, timedelta
+from urllib.parse import quote_plus
 
 import requests
 from pytrends.request import TrendReq
@@ -29,7 +32,7 @@ log = logging.getLogger("radar")
 # ── Config ──────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]  # service_role para insert
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 HEADERS_SUPA = {
     "apikey": SUPABASE_KEY,
@@ -38,71 +41,72 @@ HEADERS_SUPA = {
     "Prefer": "resolution=merge-duplicates",
 }
 
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+REGIONES = ["CR", "GT", "MX", "US"]
+GEO_MAP = {"CR": "CR", "GT": "GT", "MX": "MX", "US": "US"}
+
+# Se carga dinámicamente desde Supabase
+KEYWORDS_RADAR = {}
+
+
 def cargar_keywords_desde_supabase():
-    """Lee keywords activas de la tabla radar_keywords en Supabase."""
     url = f"{SUPABASE_URL}/rest/v1/radar_keywords"
     headers = {**HEADERS_SUPA, "Prefer": ""}
     params = {"activa": "eq.true", "select": "keyword,categoria"}
     r = requests.get(url, headers=headers, params=params)
     if r.status_code != 200:
-        log.error(f"Error cargando keywords: {r.status_code} {r.text[:200]}")
+        log.error(f"Error cargando keywords: {r.status_code}")
         return {}
     rows = r.json()
     kw_dict = {}
     for row in rows:
         cat = row["categoria"]
-        kw = row["keyword"]
-        if cat not in kw_dict:
-            kw_dict[cat] = []
-        kw_dict[cat].append(kw)
-    log.info(f"  Cargadas {len(rows)} keywords activas de {len(kw_dict)} categorías")
+        kw_dict.setdefault(cat, []).append(row["keyword"])
+    log.info(f"  Cargadas {len(rows)} keywords de {len(kw_dict)} categorías")
     return kw_dict
 
 
-# Se carga al inicio del script
-KEYWORDS_RADAR = {}
+# ── Helpers ─────────────────────────────────────────────────────────────
 
-REGIONES = ["CR", "GT", "MX", "US"]
-
-# Mapeo de código de región a geo de Google Trends
-GEO_MAP = {"CR": "CR", "GT": "GT", "MX": "MX", "US": "US"}
-
-# Mapeo de región a site de MercadoLibre
-ML_SITE_MAP = {"CR": "MCR", "GT": "MGT", "MX": "MLM", "US": None}
-
-
-# ── Helpers Supabase ────────────────────────────────────────────────────
-
-def supa_post(table: str, rows: list) -> int:
-    """Inserta filas en Supabase. Retorna cantidad insertada."""
+def supa_post(table, rows):
     if not rows:
         return 0
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     r = requests.post(url, headers=HEADERS_SUPA, json=rows)
     if r.status_code not in (200, 201):
-        log.error(f"Error insertando en {table}: {r.status_code} {r.text[:300]}")
+        log.error(f"Error en {table}: {r.status_code} {r.text[:200]}")
         return 0
     return len(rows)
 
 
-def supa_get(table: str, params: dict) -> list:
-    """Query GET a Supabase."""
+def supa_get(table, params):
     url = f"{SUPABASE_URL}/rest/v1/{table}"
     headers = {**HEADERS_SUPA, "Prefer": ""}
     r = requests.get(url, headers=headers, params=params)
-    if r.status_code == 200:
-        return r.json()
-    return []
+    return r.json() if r.status_code == 200 else []
 
 
-def guardar_log(fuente: str, estado: str, registros: int, mensaje: str, duracion: float):
+def guardar_log(fuente, estado, registros, mensaje, duracion):
     supa_post("radar_logs", [{
-        "fuente": fuente,
-        "estado": estado,
+        "fuente": fuente, "estado": estado,
         "registros_guardados": registros,
-        "mensaje": mensaje[:500] if mensaje else None,
+        "mensaje": (mensaje or "")[:500],
         "duracion_segundos": round(duracion, 1),
     }])
+
+
+def safe_get(url, headers=None, timeout=15):
+    """GET con manejo de errores y headers de browser."""
+    h = {"User-Agent": UA, "Accept-Language": "es-419,es;q=0.9"}
+    if headers:
+        h.update(headers)
+    try:
+        r = requests.get(url, headers=h, timeout=timeout)
+        return r
+    except Exception as e:
+        log.warning(f"  Request falló: {e}")
+        return None
 
 
 # ── 1. Google Trends ───────────────────────────────────────────────────
@@ -119,17 +123,14 @@ def scrape_google_trends():
         guardar_log("google_trends", "error", 0, str(e), time.time() - t0)
         return
 
-    all_keywords = []
-    for cat, kws in KEYWORDS_RADAR.items():
-        for kw in kws:
-            all_keywords.append((cat, kw))
+    all_keywords = [(cat, kw) for cat, kws in KEYWORDS_RADAR.items() for kw in kws]
 
     for region in REGIONES:
         geo = GEO_MAP[region]
-        # Procesar en lotes de 5 (límite de pytrends)
         for i in range(0, len(all_keywords), 5):
             batch = all_keywords[i:i+5]
             kw_list = [kw for _, kw in batch]
+            cat_map = {kw: cat for cat, kw in batch}
             try:
                 pytrends.build_payload(kw_list, cat=0, timeframe="today 3-m", geo=geo)
                 df = pytrends.interest_over_time()
@@ -137,22 +138,17 @@ def scrape_google_trends():
                     continue
 
                 rows = []
-                for _, kw in batch:
+                for kw in kw_list:
                     if kw not in df.columns:
                         continue
                     for idx, row in df.iterrows():
                         rows.append({
                             "keyword": kw,
-                            "categoria": dict(batch)[kw] if kw in dict(batch) else batch[0][0],
+                            "categoria": cat_map[kw],
                             "region": region,
                             "interes": int(row[kw]),
                             "fecha_dato": idx.strftime("%Y-%m-%d"),
                         })
-
-                # Buscar categoría correcta
-                cat_map = {kw: cat for cat, kw in batch}
-                for r in rows:
-                    r["categoria"] = cat_map.get(r["keyword"], r["categoria"])
 
                 inserted = supa_post("radar_tendencias", rows)
                 total += inserted
@@ -160,18 +156,17 @@ def scrape_google_trends():
 
             except Exception as e:
                 errores.append(f"{region}/{kw_list[0]}: {e}")
-                log.warning(f"  Error en batch {region}: {e}")
+                log.warning(f"  Error batch {region}: {e}")
 
-            time.sleep(2)  # Rate limiting
+            time.sleep(2)
 
     duracion = time.time() - t0
-    estado = "ok" if not errores else "parcial"
-    guardar_log("google_trends", estado, total,
+    guardar_log("google_trends", "ok" if not errores else "parcial", total,
                 "; ".join(errores[:3]) if errores else "OK", duracion)
-    log.info(f"  Trends terminado: {total} registros en {duracion:.0f}s")
+    log.info(f"  Trends: {total} registros en {duracion:.0f}s")
 
 
-# ── 2. MercadoLibre ───────────────────────────────────────────────────
+# ── 2. MercadoLibre (scraping web) ────────────────────────────────────
 
 def scrape_mercadolibre():
     log.info("━━ MercadoLibre ━━")
@@ -180,58 +175,327 @@ def scrape_mercadolibre():
     errores = []
     hoy = date.today().isoformat()
 
-    for region in REGIONES:
-        site = ML_SITE_MAP.get(region)
-        if not site:
-            continue
+    # Solo MX tiene ML activo y accesible
+    ml_domains = {"MX": "listado.mercadolibre.com.mx"}
 
+    for region, domain in ml_domains.items():
         for cat, keywords in KEYWORDS_RADAR.items():
             for kw in keywords:
                 try:
-                    url = f"https://api.mercadolibre.com/sites/{site}/search"
-                    params = {"q": kw, "limit": 10, "sort": "sold_quantity_desc"}
-                    r = requests.get(url, params=params, timeout=15)
-                    if r.status_code != 200:
-                        errores.append(f"{region}/{kw}: HTTP {r.status_code}")
+                    url = f"https://{domain}/{quote_plus(kw)}_OrderId_PRICE*DESC"
+                    r = safe_get(url)
+                    if not r or r.status_code != 200:
+                        errores.append(f"{region}/{kw}: HTTP {r.status_code if r else 'timeout'}")
                         continue
 
-                    data = r.json()
-                    results = data.get("results", [])
+                    html = r.text
                     rows = []
-                    for item in results[:10]:
-                        rows.append({
-                            "keyword": kw,
-                            "categoria": cat,
-                            "region": region,
-                            "titulo": (item.get("title") or "")[:200],
-                            "precio": item.get("price"),
-                            "moneda": item.get("currency_id", "USD"),
-                            "vendidos": item.get("sold_quantity", 0),
-                            "vendedor": (item.get("seller", {}).get("nickname") or "")[:100],
-                            "url": item.get("permalink", ""),
-                            "fecha_scrape": hoy,
-                        })
 
-                    inserted = supa_post("radar_productos_ml", rows)
+                    # Extraer productos del HTML
+                    items = re.findall(
+                        r'<li class="ui-search-layout__item[^"]*".*?</li>',
+                        html, re.DOTALL
+                    )[:8]
+
+                    for item_html in items:
+                        titulo_m = re.search(r'title="([^"]+)"', item_html)
+                        precio_m = re.search(r'class="andes-money-amount__fraction"[^>]*>([0-9,.]+)', item_html)
+                        link_m = re.search(r'href="(https://[^"]+)"', item_html)
+
+                        if titulo_m and precio_m:
+                            precio_str = precio_m.group(1).replace(",", "").replace(".", "")
+                            try:
+                                precio = float(precio_str)
+                            except:
+                                precio = 0
+
+                            rows.append({
+                                "keyword": kw, "categoria": cat, "region": region,
+                                "titulo": titulo_m.group(1)[:200],
+                                "precio": precio, "moneda": "MXN",
+                                "vendidos": 0, "vendedor": "",
+                                "url": link_m.group(1) if link_m else "",
+                                "fecha_scrape": hoy, "fuente": "mercadolibre",
+                            })
+
+                    inserted = supa_post("radar_productos", rows)
                     total += inserted
 
                 except Exception as e:
                     errores.append(f"{region}/{kw}: {e}")
-                    log.warning(f"  Error ML {region}/{kw}: {e}")
 
-                time.sleep(0.5)  # Rate limiting ML API
+                time.sleep(1)
 
     duracion = time.time() - t0
-    estado = "ok" if not errores else "parcial"
-    guardar_log("mercadolibre", estado, total,
+    guardar_log("mercadolibre", "ok" if not errores else "parcial", total,
                 "; ".join(errores[:3]) if errores else "OK", duracion)
-    log.info(f"  ML terminado: {total} registros en {duracion:.0f}s")
+    log.info(f"  ML: {total} registros en {duracion:.0f}s")
 
 
-# ── 3. Datos internos + Evaluación ─────────────────────────────────────
+# ── 3. Amazon (scraping web) ──────────────────────────────────────────
+
+def scrape_amazon():
+    log.info("━━ Amazon ━━")
+    t0 = time.time()
+    total = 0
+    errores = []
+    hoy = date.today().isoformat()
+
+    amazon_domains = {
+        "MX": "www.amazon.com.mx",
+        "US": "www.amazon.com",
+    }
+
+    for region, domain in amazon_domains.items():
+        for cat, keywords in KEYWORDS_RADAR.items():
+            for kw in keywords:
+                try:
+                    url = f"https://{domain}/s?k={quote_plus(kw)}"
+                    r = safe_get(url)
+                    if not r or r.status_code != 200:
+                        errores.append(f"Amazon {region}/{kw}: HTTP {r.status_code if r else 'timeout'}")
+                        continue
+
+                    html = r.text
+                    rows = []
+
+                    # Extraer productos
+                    items = re.findall(
+                        r'data-component-type="s-search-result".*?</div>\s*</div>\s*</div>\s*</div>',
+                        html, re.DOTALL
+                    )[:6]
+
+                    for item_html in items:
+                        titulo_m = re.search(r'<span class="a-text-normal"[^>]*>([^<]+)', item_html) or \
+                                   re.search(r'<h2[^>]*>.*?<span[^>]*>([^<]+)', item_html, re.DOTALL)
+                        precio_m = re.search(r'<span class="a-price-whole">([0-9,.]+)', item_html)
+                        link_m = re.search(r'href="(/[^"]*dp/[^"]+)"', item_html)
+
+                        if titulo_m:
+                            precio = 0
+                            if precio_m:
+                                try:
+                                    precio = float(precio_m.group(1).replace(",", ""))
+                                except:
+                                    pass
+
+                            rows.append({
+                                "keyword": kw, "categoria": cat, "region": region,
+                                "titulo": titulo_m.group(1).strip()[:200],
+                                "precio": precio,
+                                "moneda": "MXN" if region == "MX" else "USD",
+                                "vendidos": 0, "vendedor": "Amazon",
+                                "url": f"https://{domain}{link_m.group(1)}" if link_m else "",
+                                "fecha_scrape": hoy, "fuente": "amazon",
+                            })
+
+                    inserted = supa_post("radar_productos", rows)
+                    total += inserted
+
+                except Exception as e:
+                    errores.append(f"Amazon {region}/{kw}: {e}")
+
+                time.sleep(1.5)
+
+    duracion = time.time() - t0
+    guardar_log("amazon", "ok" if not errores else "parcial", total,
+                "; ".join(errores[:3]) if errores else "OK", duracion)
+    log.info(f"  Amazon: {total} registros en {duracion:.0f}s")
+
+
+# ── 4. Alibaba (scraping web) ─────────────────────────────────────────
+
+def scrape_alibaba():
+    log.info("━━ Alibaba ━━")
+    t0 = time.time()
+    total = 0
+    errores = []
+    hoy = date.today().isoformat()
+
+    # Solo keywords principales (no todas para no saturar)
+    main_keywords = []
+    for cat, kws in KEYWORDS_RADAR.items():
+        main_keywords.extend([(cat, kw) for kw in kws[:3]])  # Top 3 por categoría
+
+    for cat, kw in main_keywords:
+        try:
+            # Alibaba usa inglés, traducimos keywords comunes
+            kw_en = kw  # Muchos términos son universales (SPC, PVC, LED, WPC)
+            url = f"https://www.alibaba.com/trade/search?SearchText={quote_plus(kw_en)}"
+            r = safe_get(url)
+            if not r or r.status_code != 200:
+                errores.append(f"Alibaba/{kw}: HTTP {r.status_code if r else 'timeout'}")
+                continue
+
+            html = r.text
+            rows = []
+
+            # Extraer precios de proveedor
+            items = re.findall(
+                r'<div class="fy23-search-card[^"]*".*?</div>\s*</div>\s*</div>',
+                html, re.DOTALL
+            )[:5]
+
+            # Buscar precios con patrón más genérico
+            precios_encontrados = re.findall(
+                r'\$([0-9,.]+)\s*-\s*\$([0-9,.]+)',
+                html
+            )[:5]
+
+            titulos = re.findall(
+                r'title="([^"]{10,200})".*?href="(//[^"]+)"',
+                html
+            )[:5]
+
+            for i, (titulo, href) in enumerate(titulos):
+                precio_min = 0
+                precio_max = 0
+                if i < len(precios_encontrados):
+                    try:
+                        precio_min = float(precios_encontrados[i][0].replace(",", ""))
+                        precio_max = float(precios_encontrados[i][1].replace(",", ""))
+                    except:
+                        pass
+
+                rows.append({
+                    "keyword": kw, "categoria": cat, "region": "CN",
+                    "titulo": titulo[:200],
+                    "precio": precio_min,
+                    "moneda": "USD",
+                    "vendidos": 0, "vendedor": "Alibaba",
+                    "url": f"https:{href}" if href.startswith("//") else href,
+                    "fecha_scrape": hoy, "fuente": "alibaba",
+                })
+
+            inserted = supa_post("radar_productos", rows)
+            total += inserted
+
+        except Exception as e:
+            errores.append(f"Alibaba/{kw}: {e}")
+
+        time.sleep(2)
+
+    duracion = time.time() - t0
+    guardar_log("alibaba", "ok" if not errores else "parcial", total,
+                "; ".join(errores[:3]) if errores else "OK", duracion)
+    log.info(f"  Alibaba: {total} registros en {duracion:.0f}s")
+
+
+# ── 5. Pinterest Trends ───────────────────────────────────────────────
+
+def scrape_pinterest():
+    log.info("━━ Pinterest ━━")
+    t0 = time.time()
+    total = 0
+    errores = []
+    hoy = date.today().isoformat()
+
+    for cat, keywords in KEYWORDS_RADAR.items():
+        for kw in keywords:
+            try:
+                url = f"https://www.pinterest.com/search/pins/?q={quote_plus(kw)}"
+                r = safe_get(url)
+                if not r or r.status_code != 200:
+                    errores.append(f"Pinterest/{kw}: HTTP {r.status_code if r else 'timeout'}")
+                    continue
+
+                html = r.text
+
+                # Contar resultados como proxy de popularidad
+                # Pinterest pone metadata con conteo
+                count_m = re.search(r'"totalResults":\s*(\d+)', html)
+                pin_count = int(count_m.group(1)) if count_m else 0
+
+                # Buscar related searches (tendencias relacionadas)
+                related = re.findall(r'"query":"([^"]+)"', html)[:5]
+
+                if pin_count > 0 or related:
+                    rows = [{
+                        "keyword": kw, "categoria": cat, "region": "GLOBAL",
+                        "titulo": f"Pinterest: {pin_count} pins | Related: {', '.join(related[:3])}",
+                        "precio": 0, "moneda": "",
+                        "vendidos": pin_count,  # Usamos vendidos como proxy de popularidad
+                        "vendedor": "Pinterest",
+                        "url": url,
+                        "fecha_scrape": hoy, "fuente": "pinterest",
+                    }]
+                    inserted = supa_post("radar_productos", rows)
+                    total += inserted
+
+            except Exception as e:
+                errores.append(f"Pinterest/{kw}: {e}")
+
+            time.sleep(1)
+
+    duracion = time.time() - t0
+    guardar_log("pinterest", "ok" if not errores else "parcial", total,
+                "; ".join(errores[:3]) if errores else "OK", duracion)
+    log.info(f"  Pinterest: {total} registros en {duracion:.0f}s")
+
+
+# ── 6. YouTube Search ─────────────────────────────────────────────────
+
+def scrape_youtube():
+    log.info("━━ YouTube ━━")
+    t0 = time.time()
+    total = 0
+    errores = []
+    hoy = date.today().isoformat()
+
+    for cat, keywords in KEYWORDS_RADAR.items():
+        for kw in keywords:
+            try:
+                url = f"https://www.youtube.com/results?search_query={quote_plus(kw)}"
+                r = safe_get(url)
+                if not r or r.status_code != 200:
+                    errores.append(f"YouTube/{kw}: HTTP {r.status_code if r else 'timeout'}")
+                    continue
+
+                html = r.text
+
+                # Contar videos encontrados
+                video_ids = re.findall(r'"videoId":"([^"]{11})"', html)
+                unique_videos = len(set(video_ids))
+
+                # Extraer vistas de los primeros videos
+                views = re.findall(r'"viewCountText":\{"simpleText":"([\d,.]+)', html)[:5]
+                total_views = 0
+                for v in views:
+                    try:
+                        total_views += int(v.replace(",", "").replace(".", ""))
+                    except:
+                        pass
+
+                # Extraer títulos de videos
+                titles = re.findall(r'"title":\{"runs":\[\{"text":"([^"]+)"', html)[:3]
+
+                if unique_videos > 0:
+                    rows = [{
+                        "keyword": kw, "categoria": cat, "region": "GLOBAL",
+                        "titulo": f"YouTube: {unique_videos} videos | Top: {titles[0] if titles else 'N/A'}"[:200],
+                        "precio": 0, "moneda": "",
+                        "vendidos": total_views,  # Vistas como proxy de interés
+                        "vendedor": "YouTube",
+                        "url": url,
+                        "fecha_scrape": hoy, "fuente": "youtube",
+                    }]
+                    inserted = supa_post("radar_productos", rows)
+                    total += inserted
+
+            except Exception as e:
+                errores.append(f"YouTube/{kw}: {e}")
+
+            time.sleep(1)
+
+    duracion = time.time() - t0
+    guardar_log("youtube", "ok" if not errores else "parcial", total,
+                "; ".join(errores[:3]) if errores else "OK", duracion)
+    log.info(f"  YouTube: {total} registros en {duracion:.0f}s")
+
+
+# ── 7. Evaluación (cruza todo) ─────────────────────────────────────────
 
 def evaluar_productos():
-    """Cruza señales externas con datos internos y genera score."""
     log.info("━━ Evaluación de productos ━━")
     t0 = time.time()
     hoy = date.today().isoformat()
@@ -241,86 +505,80 @@ def evaluar_productos():
     for cat, keywords in KEYWORDS_RADAR.items():
         for kw in keywords:
             try:
-                # ── Señal externa: Google Trends ──
+                # ── Señal Google Trends ──
                 tendencia = {}
                 for region in ["CR", "MX", "US"]:
                     datos = supa_get("radar_tendencias", {
-                        "keyword": f"eq.{kw}",
-                        "region": f"eq.{region}",
+                        "keyword": f"eq.{kw}", "region": f"eq.{region}",
                         "fecha_dato": f"gte.{hace_3_meses}",
-                        "select": "interes",
-                        "order": "fecha_dato.desc",
-                        "limit": "1",
+                        "select": "interes", "order": "fecha_dato.desc", "limit": "1",
                     })
                     tendencia[region] = datos[0]["interes"] if datos else 0
 
-                # ── Señal externa: MercadoLibre ──
-                ml_data = supa_get("radar_productos_ml", {
-                    "keyword": f"eq.{kw}",
-                    "fecha_scrape": f"eq.{hoy}",
-                    "select": "precio,vendidos",
+                # ── Señal productos (todas las fuentes) ──
+                productos_data = supa_get("radar_productos", {
+                    "keyword": f"eq.{kw}", "fecha_scrape": f"eq.{hoy}",
+                    "select": "precio,vendidos,fuente",
                 })
-                productos_ml = len(ml_data)
+                productos_total = len(productos_data)
                 precio_promedio = 0
-                if ml_data:
-                    precios = [p["precio"] for p in ml_data if p.get("precio")]
+                if productos_data:
+                    precios = [p["precio"] for p in productos_data if p.get("precio") and p["precio"] > 0]
                     precio_promedio = sum(precios) / len(precios) if precios else 0
 
-                # ── Señal interna: catálogo NEO ──
-                # Buscar si ya vendemos algo similar
+                # Contar fuentes con resultados
+                fuentes_con_datos = len(set(p.get("fuente", "") for p in productos_data))
+
+                # ── Señal interna NEO ──
                 catalogo = supa_get("neo_lista_items", {
                     "nombre": f"ilike.*{kw.split()[0]}*",
-                    "select": "id",
-                    "limit": "1",
+                    "select": "id", "limit": "1",
                 })
                 ya_en_catalogo = len(catalogo) > 0
 
-                # Buscar velocidad de categoría similar
-                # Usamos items facturados de los últimos 3 meses
                 items_facturados = supa_get("neo_items_facturados", {
                     "descripcion": f"ilike.*{kw.split()[0]}*",
-                    "select": "id",
-                    "limit": "50",
+                    "select": "id", "limit": "50",
                 })
                 velocidad = len(items_facturados)
 
-                # ── Calcular scores ──
-                # Score externo (0-100): peso CR 40%, MX 35%, US 25%
+                # ── Score externo (0-100) ──
                 score_ext = (
                     tendencia.get("CR", 0) * 0.40 +
                     tendencia.get("MX", 0) * 0.35 +
                     tendencia.get("US", 0) * 0.25
                 )
-                # Bonus por demanda ML
-                if productos_ml > 5:
+                # Bonus por presencia en múltiples fuentes
+                if fuentes_con_datos >= 3:
+                    score_ext = min(100, score_ext * 1.25)
+                elif fuentes_con_datos >= 2:
                     score_ext = min(100, score_ext * 1.15)
+                elif productos_total > 5:
+                    score_ext = min(100, score_ext * 1.10)
 
-                # Score interno (0-100)
+                # ── Score interno (0-100) ──
                 score_int = 0
                 if ya_en_catalogo:
-                    score_int += 30  # Ya lo vendemos, señal fuerte
+                    score_int += 30
                 if velocidad > 20:
                     score_int += 40
                 elif velocidad > 5:
                     score_int += 20
-                # Sinergia con catálogo
+
                 complementarios = supa_get("neo_lista_items", {
                     "nombre": f"ilike.*{cat.split('_')[0]}*",
-                    "select": "id",
-                    "limit": "20",
+                    "select": "id", "limit": "20",
                 })
                 n_complementarios = len(complementarios)
                 if n_complementarios > 3:
                     score_int += 30
                 elif n_complementarios > 0:
                     score_int += 15
-
                 score_int = min(100, score_int)
 
-                # Score total: 60% externo + 40% interno
+                # ── Score total ──
                 score_total = round(score_ext * 0.6 + score_int * 0.4, 1)
 
-                # Recomendación
                 if score_total >= 70:
                     recomendacion = "🟢 Oportunidad fuerte — evaluar importación"
                 elif score_total >= 45:
@@ -331,15 +589,14 @@ def evaluar_productos():
                     recomendacion = "⚪ Sin señal relevante"
 
                 row = {
-                    "keyword": kw,
-                    "categoria": cat,
+                    "keyword": kw, "categoria": cat,
                     "score_externo": round(score_ext, 1),
                     "score_interno": round(score_int, 1),
                     "score_total": score_total,
                     "tendencia_cr": tendencia.get("CR", 0),
                     "tendencia_mx": tendencia.get("MX", 0),
                     "tendencia_us": tendencia.get("US", 0),
-                    "productos_ml": productos_ml,
+                    "productos_ml": productos_total,
                     "precio_promedio_ml": round(precio_promedio, 2),
                     "ya_en_catalogo": ya_en_catalogo,
                     "complementarios_disponibles": n_complementarios,
@@ -356,7 +613,7 @@ def evaluar_productos():
 
     duracion = time.time() - t0
     guardar_log("evaluacion", "ok", total, "OK", duracion)
-    log.info(f"  Evaluación terminada: {total} registros en {duracion:.0f}s")
+    log.info(f"  Evaluación: {total} registros en {duracion:.0f}s")
 
 
 # ── Main ────────────────────────────────────────────────────────────────
@@ -366,11 +623,10 @@ def main():
     fuente = os.environ.get("RADAR_FUENTE", "todas")
     log.info(f"🛰️  RADAR iniciando — fuente: {fuente}")
 
-    # Cargar keywords desde Supabase
     KEYWORDS_RADAR = cargar_keywords_desde_supabase()
     if not KEYWORDS_RADAR:
-        log.error("No se encontraron keywords activas. Abortando.")
-        guardar_log("general", "error", 0, "Sin keywords activas en radar_keywords", 0)
+        log.error("Sin keywords activas. Abortando.")
+        guardar_log("general", "error", 0, "Sin keywords activas", 0)
         return
 
     if fuente in ("todas", "google_trends"):
@@ -378,6 +634,18 @@ def main():
 
     if fuente in ("todas", "mercadolibre"):
         scrape_mercadolibre()
+
+    if fuente in ("todas", "amazon"):
+        scrape_amazon()
+
+    if fuente in ("todas", "alibaba"):
+        scrape_alibaba()
+
+    if fuente in ("todas", "pinterest"):
+        scrape_pinterest()
+
+    if fuente in ("todas", "youtube"):
+        scrape_youtube()
 
     if fuente in ("todas", "evaluacion"):
         evaluar_productos()

@@ -89,10 +89,10 @@ export default function RadarPage() {
         .select('keyword,categoria,region,interes,fecha_dato')
         .order('fecha_dato', { ascending: false })
         .limit(200),
-      supabase.from('radar_productos_ml')
-        .select('keyword,categoria,region,titulo,precio,moneda,vendidos,vendedor,url,fecha_scrape')
+      supabase.from('radar_productos')
+        .select('keyword,categoria,region,titulo,precio,moneda,vendidos,vendedor,url,fecha_scrape,fuente')
         .order('vendidos', { ascending: false })
-        .limit(100),
+        .limit(150),
       supabase.from('radar_logs')
         .select('*')
         .order('fecha_ejecucion', { ascending: false })
@@ -323,29 +323,41 @@ export default function RadarPage() {
 
       <hr style={S.divider} />
 
-      {/* Productos MercadoLibre */}
-      <div style={S.section}>🛒 Productos Destacados en MercadoLibre</div>
-      <div style={S.subCap}>Los más vendidos por keyword · Última captura</div>
+      {/* Productos por fuente */}
+      <div style={S.section}>🛒 Productos y Señales por Fuente</div>
+      <div style={S.subCap}>MercadoLibre · Amazon · Alibaba · Pinterest · YouTube</div>
 
       {productosML.length === 0 ? (
         <div style={{ ...S.card, textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>
-          Sin datos de MercadoLibre aún.
+          Sin datos de productos aún. Presioná "Actualizar ahora".
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-          {productosML.slice(0, 12).map((p, i) => (
-            <div key={i} style={{ ...S.card, borderLeft: '4px solid #f48771' }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 4 }}>{REGION_FLAGS[p.region] || ''} {p.keyword}</div>
-              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {p.url ? <a href={p.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>{p.titulo}</a> : p.titulo}
+          {productosML.slice(0, 18).map((p, i) => {
+            const fuenteInfo = {
+              mercadolibre: { icon: '🟡', color: '#D69E2E', label: 'MercadoLibre' },
+              amazon: { icon: '📦', color: '#FF9900', label: 'Amazon' },
+              alibaba: { icon: '🏭', color: '#FF6A00', label: 'Alibaba' },
+              pinterest: { icon: '📌', color: '#E60023', label: 'Pinterest' },
+              youtube: { icon: '▶️', color: '#FF0000', label: 'YouTube' },
+            }[p.fuente] || { icon: '🔍', color: '#666', label: p.fuente };
+            return (
+              <div key={i} style={{ ...S.card, borderLeft: `4px solid ${fuenteInfo.color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{REGION_FLAGS[p.region] || '🌐'} {p.keyword}</span>
+                  <span style={{ fontSize: '0.68rem', background: fuenteInfo.color + '22', color: fuenteInfo.color, padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>{fuenteInfo.icon} {fuenteInfo.label}</span>
+                </div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.url ? <a href={p.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>{p.titulo}</a> : p.titulo}
+                </div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  {p.precio > 0 && <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8a84b' }}>{p.moneda} {p.precio?.toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>}
+                  {p.vendidos > 0 && <div style={{ fontSize: '0.78rem', color: '#38A169' }}>{p.fuente === 'youtube' ? `${p.vendidos.toLocaleString()} vistas` : p.fuente === 'pinterest' ? `${p.vendidos.toLocaleString()} pins` : `${p.vendidos} vendidos`}</div>}
+                </div>
+                {p.vendedor && p.vendedor !== 'Pinterest' && p.vendedor !== 'YouTube' && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Vendedor: {p.vendedor}</div>}
               </div>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8a84b' }}>{p.moneda} {p.precio?.toLocaleString('es-CR', { maximumFractionDigits: 0 })}</div>
-                {p.vendidos > 0 && <div style={{ fontSize: '0.78rem', color: '#38A169' }}>{p.vendidos} vendidos</div>}
-              </div>
-              {p.vendedor && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Vendedor: {p.vendedor}</div>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -457,7 +469,11 @@ export default function RadarPage() {
           <div style={{ marginBottom: 12 }}>
             <strong style={{ color: 'var(--text-primary)' }}>Score Externo (60%)</strong><br />
             Google Trends: interés de búsqueda ponderado por región (CR 40%, MX 35%, US 25%).<br />
-            MercadoLibre: cantidad de productos y volumen de ventas como proxy de demanda real.
+            MercadoLibre + Amazon: productos y precios reales en el mercado.<br />
+            Alibaba: precios de proveedor para calcular margen potencial.<br />
+            Pinterest: señal temprana de inspiración (la gente busca antes de comprar).<br />
+            YouTube: tutoriales DIY como proxy de demanda futura.<br />
+            Bonus: +25% score si aparece en 3+ fuentes, +15% si aparece en 2.
           </div>
           <div style={{ marginBottom: 12 }}>
             <strong style={{ color: 'var(--text-primary)' }}>Score Interno (40%)</strong><br />
