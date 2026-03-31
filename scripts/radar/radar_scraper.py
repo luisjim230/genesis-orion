@@ -120,7 +120,7 @@ def scrape_google_trends():
     errores = []
 
     try:
-        pytrends = TrendReq(hl="es", tz=360, retries=3, backoff_factor=2)
+        pytrends = TrendReq(hl="es", tz=360)
     except Exception as e:
         guardar_log("google_trends", "error", 0, str(e), time.time() - t0)
         return
@@ -199,18 +199,22 @@ def scrape_mercadolibre():
                 html = r.text
                 rows = []
 
-                # Extraer títulos con poly-component__title
-                titles = re.findall(
-                    r'class="poly-component__title[^"]*"[^>]*>([^<]+)', html
-                )
-                # Extraer precios
-                precios = re.findall(
-                    r'andes-money-amount__fraction[^>]*>([0-9,]+)', html
-                )
-                # Extraer links
-                links = re.findall(
-                    r'href="(https://www\.mercadolibre\.com\.mx/[^"]+)"', html
-                )
+                # Intentar múltiples patrones de títulos (ML cambia el HTML)
+                titles = re.findall(r'poly-component__title[^>]*>([^<]+)', html)
+                if not titles:
+                    titles = re.findall(r'ui-search-item__title[^>]*>([^<]+)', html)
+                if not titles:
+                    titles = re.findall(r'shops__item-title[^>]*>([^<]+)', html)
+
+                # Precios
+                precios = re.findall(r'andes-money-amount__fraction[^>]*>([0-9,]+)', html)
+
+                # Links a productos (contienen MLM en la URL)
+                links = re.findall(r'href="(https://www\.mercadolibre\.com\.mx/[^"]*MLM[^"]+)"', html)
+                if not links:
+                    links = re.findall(r'href="(https://[^"]*mercadolibre\.com\.mx/[^"]+)"', html)
+
+                log.info(f"  ML debug {kw}: {len(titles)} títulos, {len(precios)} precios, {len(links)} links")
 
                 for j in range(min(len(titles), 8)):
                     precio = 0
@@ -389,9 +393,10 @@ def evaluar_productos():
                     })
                     tendencia[region] = datos[0]["interes"] if datos else 0
 
-                # ── Señal productos (todas las fuentes) ──
+                # ── Señal productos (todas las fuentes, últimos 7 días) ──
+                hace_7_dias = (date.today() - timedelta(days=7)).isoformat()
                 productos_data = supa_get("radar_productos", {
-                    "keyword": f"eq.{kw}", "fecha_scrape": f"eq.{hoy}",
+                    "keyword": f"eq.{kw}", "fecha_scrape": f"gte.{hace_7_dias}",
                     "select": "precio,vendidos,fuente",
                 })
                 productos_total = len(productos_data)
