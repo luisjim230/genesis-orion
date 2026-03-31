@@ -6,8 +6,8 @@ import { useAuth } from '../lib/useAuth';
 
 const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
 const ALL_NAV=[
-  {group:'Principal',items:[{href:'/',key:'dashboard',icon:'⊞',name:'Dashboard'}]},
-  {group:'Inventario',items:[{href:'/inventario',key:'inventario',icon:'📦',name:'Compras'},{href:'/trazabilidad',key:'trazabilidad',icon:'🔴',name:'Trazabilidad'},{href:'/kronos',key:'kronos',icon:'📈',name:'Proyección de inventario'},{href:'/reportes',key:'reportes',icon:'📊',name:'Carga de reportes'}]},
+  {group:'Principal',items:[{href:'/',key:'dashboard',icon:'⊞',name:'Dashboard'},{href:'/reportes',key:'reportes',icon:'📊',name:'Carga de reportes'}]},
+  {group:'Inventario',items:[{href:'/inventario',key:'inventario',icon:'📦',name:'Compras'},{href:'/trazabilidad',key:'trazabilidad',icon:'🔴',name:'Trazabilidad'},{href:'/kronos',key:'kronos',icon:'📈',name:'Proyección de inventario'}]},
   {group:'Comercial',items:[{href:'/comercial',key:'comercial',icon:'💼',name:'Ventas · Equipo'}]},
   {group:'Importaciones',items:[{href:'/cif',key:'cif',icon:'🧮',name:'Calculadora CIF'},{href:'/contenedores',key:'contenedores',icon:'🚢',name:'Cargas en tránsito'}]},
   {group:'Inteligencia',items:[{href:'/mercado',key:'mercado',icon:'⚡',name:'Mercado'},{href:'/radar',key:'radar',icon:'📡',name:'RADAR'}]},
