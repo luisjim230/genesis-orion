@@ -1,0 +1,40 @@
+name: RADAR Scraper
+
+on:
+  schedule:
+    # Lunes 9am hora CR = 15:00 UTC
+    - cron: '0 15 * * 1'
+    # Jueves 2pm hora CR = 20:00 UTC
+    - cron: '0 20 * * 4'
+
+  # Permite correrlo manualmente desde GitHub Actions UI o desde SOL
+  workflow_dispatch:
+    inputs:
+      fuente:
+        description: 'Fuente específica a correr (dejar vacío = todas)'
+        required: false
+        default: 'todas'
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/radar/requirements.txt
+
+      - name: Run RADAR scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RADAR_FUENTE: ${{ github.event.inputs.fuente || 'todas' }}
+        run: python scripts/radar/radar_scraper.py
