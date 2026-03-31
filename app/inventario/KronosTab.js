@@ -937,7 +937,7 @@ export default function KronosTab({ calc, transitoMap }) {
         </div>
       )}
 
-      {tabActivo === 'productos' && <TablaPlana />}
+      {tabActivo === 'productos' && TablaPlana()}
       {tabActivo === 'dashboard' && <BiDashboard />}
       {tabActivo === 'inteligencia' && <BiInteligencia />}
 
