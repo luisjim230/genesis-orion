@@ -325,7 +325,7 @@ export default function RadarPage() {
 
       {/* Productos por fuente */}
       <div style={S.section}>🛒 Productos y Señales por Fuente</div>
-      <div style={S.subCap}>MercadoLibre · Amazon · Alibaba · Pinterest · YouTube</div>
+      <div style={S.subCap}>MercadoLibre · YouTube · Google Related Queries</div>
 
       {productosML.length === 0 ? (
         <div style={{ ...S.card, textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>
@@ -340,6 +340,7 @@ export default function RadarPage() {
               alibaba: { icon: '🏭', color: '#FF6A00', label: 'Alibaba' },
               pinterest: { icon: '📌', color: '#E60023', label: 'Pinterest' },
               youtube: { icon: '▶️', color: '#FF0000', label: 'YouTube' },
+              google_related: { icon: '🔎', color: '#4285F4', label: 'Google Related' },
             }[p.fuente] || { icon: '🔍', color: '#666', label: p.fuente };
             return (
               <div key={i} style={{ ...S.card, borderLeft: `4px solid ${fuenteInfo.color}` }}>
@@ -469,10 +470,9 @@ export default function RadarPage() {
           <div style={{ marginBottom: 12 }}>
             <strong style={{ color: 'var(--text-primary)' }}>Score Externo (60%)</strong><br />
             Google Trends: interés de búsqueda ponderado por región (CR 40%, MX 35%, US 25%).<br />
-            MercadoLibre + Amazon: productos y precios reales en el mercado.<br />
-            Alibaba: precios de proveedor para calcular margen potencial.<br />
-            Pinterest: señal temprana de inspiración (la gente busca antes de comprar).<br />
+            MercadoLibre MX: productos reales con precios del mercado.<br />
             YouTube: tutoriales DIY como proxy de demanda futura.<br />
+            Google Related: búsquedas rising que indican demanda emergente.<br />
             Bonus: +25% score si aparece en 3+ fuentes, +15% si aparece en 2.
           </div>
           <div style={{ marginBottom: 12 }}>
