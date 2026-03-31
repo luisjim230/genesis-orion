@@ -1,16 +1,18 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/useAuth';
 
 const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
 const ALL_NAV=[
   {group:'Principal',items:[{href:'/',key:'dashboard',icon:'⊞',name:'Dashboard'}]},
-  {group:'Inventario',items:[{href:'/inventario',key:'inventario',icon:'📦',name:'Compras'},{href:'/trazabilidad',key:'trazabilidad',icon:'🔴',name:'Trazabilidad de inventario y compras'},{href:'/kronos',key:'kronos',icon:'📈',name:'Proyección de inventario'},{href:'/reportes',key:'reportes',icon:'📊',name:'Carga de reportes'}]},
-  {group:'Comercial',items:[{href:'/comercial',key:'comercial',icon:'💼',name:'Comercial / Ventas'}]},
-  {group:'Importaciones',items:[{href:'/cif',key:'cif',icon:'🧮',name:'Calculadora de importación'},{href:'/contenedores',key:'contenedores',icon:'🚢',name:'Cargas en tránsito'},{href:'/mercado',key:'mercado',icon:'⚡',name:'Mercado'}]},
-  {group:'Operaciones',items:[{href:'/cajas-aurora',key:'cajas-aurora',icon:'🌅',name:'Cajas'}]},{group:'Transportes',items:[{href:'/entregas',key:'entregas',icon:'🚛',name:'Entregas · Trazabilidad'}]},{group:'Gestión',items:[{href:'/finanzas',key:'finanzas',icon:'💰',name:'Finanzas'},{href:'/finanzas/bancos',key:'bancos',icon:'🏦',name:'Bancos'},{href:'/pagos',key:'pagos',icon:'💸',name:'Coordinación de pagos'},{href:'/tareas',key:'tareas',icon:'✅',name:'Tareas'},{href:'/tareas-equipo',key:'tareas-equipo',icon:'📋',name:'Tareas Equipo'},{href:'/social',key:'social',icon:'📱',name:'Redes Sociales'},{href:'/kommo-proveedores',key:'kommo-proveedores',icon:'📲',name:'WhatsApp Proveedores'}]},
+  {group:'Inventario',items:[{href:'/inventario',key:'inventario',icon:'📦',name:'Compras'},{href:'/trazabilidad',key:'trazabilidad',icon:'🔴',name:'Trazabilidad'},{href:'/kronos',key:'kronos',icon:'📈',name:'Proyección de inventario'},{href:'/reportes',key:'reportes',icon:'📊',name:'Carga de reportes'}]},
+  {group:'Comercial',items:[{href:'/comercial',key:'comercial',icon:'💼',name:'Ventas · Equipo'}]},
+  {group:'Importaciones',items:[{href:'/cif',key:'cif',icon:'🧮',name:'Calculadora CIF'},{href:'/contenedores',key:'contenedores',icon:'🚢',name:'Cargas en tránsito'},{href:'/mercado',key:'mercado',icon:'⚡',name:'Mercado'}]},
+  {group:'Operaciones',items:[{href:'/cajas-aurora',key:'cajas-aurora',icon:'🌅',name:'Cajas'},{href:'/entregas',key:'entregas',icon:'🚛',name:'Entregas'}]},
+  {group:'Finanzas',items:[{href:'/finanzas',key:'finanzas',icon:'💰',name:'Finanzas'},{href:'/finanzas/bancos',key:'bancos',icon:'🏦',name:'Bancos'},{href:'/pagos',key:'pagos',icon:'💸',name:'Coordinación de pagos'}]},
+  {group:'Gestión',items:[{href:'/tareas',key:'tareas',icon:'✅',name:'Tareas'},{href:'/tareas-equipo',key:'tareas-equipo',icon:'📋',name:'Tareas Equipo'},{href:'/social',key:'social',icon:'📱',name:'Redes Sociales'},{href:'/kommo-proveedores',key:'kommo-proveedores',icon:'📲',name:'WhatsApp Proveedores'}]},
   {group:'Herramientas',items:[{href:'/ponderacion',key:'ponderacion',icon:'⚖️',name:'Promedios ponderados'},{href:'/materiales',key:'materiales',icon:'🧱',name:'Cálculo de materiales'},{href:'/fichas-tecnicas',key:'fichas-tecnicas',icon:'📋',name:'Fichas Técnicas'},{href:'/garantias',key:'garantias',icon:'🔄',name:'Devoluciones y Garantías'},{href:'/encomiendas',key:'encomiendas',icon:'📦',name:'Encomiendas'}]},
   {group:'Recursos Humanos',items:[{href:'/rrhh',key:'rrhh',icon:'👔',name:'Permisos y Vacaciones'}]},
   {group:'Admin',items:[{href:'/admin',key:'admin',icon:'👥',name:'Usuarios',adminOnly:true}]},
@@ -20,11 +22,11 @@ const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8
 function NavItem({href,icon,name,collapsed,isActive}){
   return(
     <Link href={href} style={{textDecoration:'none',display:'block'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',cursor:'pointer',borderRadius:10,margin:'1px 8px',borderLeft:isActive?'3px solid #c8a84b':'3px solid transparent',background:isActive?'rgba(200,168,75,0.15)':'transparent',transition:'all 0.15s ease'}}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',cursor:'pointer',borderRadius:10,margin:'1px 8px',borderLeft:isActive?'3px solid #c8a84b':'3px solid transparent',background:isActive?'rgba(200,168,75,0.15)':'transparent',transition:'all 0.15s ease'}}
         onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.06)';}}
         onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
         <span style={{fontSize:'1rem',flexShrink:0,width:20,textAlign:'center'}}>{icon}</span>
-        {!collapsed&&<div style={{fontSize:'0.83rem',fontWeight:isActive?600:400,color:isActive?'#c8a84b':'rgba(255,255,255,0.75)',lineHeight:1.3,fontFamily:"'Rubik',sans-serif",overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>}
+        {!collapsed&&<div style={{fontSize:'0.82rem',fontWeight:isActive?600:400,color:isActive?'#c8a84b':'rgba(255,255,255,0.75)',lineHeight:1.3,fontFamily:"'Rubik',sans-serif",overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>}
       </div>
     </Link>
   );
@@ -35,6 +37,25 @@ export default function Sidebar(){
   const {perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
   const navVisible=ALL_NAV.map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))})).filter(g=>g.items.length>0);
+
+  // Grupos colapsables: solo abre el grupo que contiene la página activa
+  const [openGroups, setOpenGroups] = useState({});
+
+  useEffect(() => {
+    const active = {};
+    navVisible.forEach(g => {
+      const hasActive = g.items.some(i => pathname === i.href || (i.href !== '/' && pathname?.startsWith(i.href)));
+      if (hasActive) active[g.group] = true;
+    });
+    // Dashboard siempre visible
+    active['Principal'] = true;
+    setOpenGroups(active);
+  }, [pathname]);
+
+  const toggleGroup = (group) => {
+    setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
   return(
     <>
       <style>{nunitoStyle}</style>
@@ -57,13 +78,49 @@ export default function Sidebar(){
             <span style={{display:'inline-block',marginTop:4,background:(ROL_COLOR[perfil.rol]||'#666')+'33',color:ROL_COLOR[perfil.rol]||'#ccc',border:'1px solid '+(ROL_COLOR[perfil.rol]||'#666')+'55',borderRadius:20,padding:'1px 8px',fontSize:'0.68rem',fontWeight:600}}>{perfil.rol}</span>
           </div>
         )}
-        <nav style={{flex:1,padding:'10px 0',overflowY:'auto'}}>
-          {navVisible.map(g=>(
-            <div key={g.group} style={{marginBottom:4}}>
-              {!collapsed&&<div style={{padding:'8px 20px 4px',fontSize:'0.60rem',fontWeight:700,color:'rgba(255,255,255,0.25)',textTransform:'uppercase',letterSpacing:'0.12em',fontFamily:"'Rubik',sans-serif"}}>{g.group}</div>}
-              {g.items.map(item=><NavItem key={item.href} {...item} collapsed={collapsed} isActive={pathname===item.href||(item.href!=='/'&&pathname?.startsWith(item.href))}/>)}
-            </div>
-          ))}
+        <nav style={{flex:1,padding:'6px 0',overflowY:'auto'}}>
+          {navVisible.map(g=>{
+            const isOpen = openGroups[g.group];
+            const hasActive = g.items.some(i => pathname === i.href || (i.href !== '/' && pathname?.startsWith(i.href)));
+            // Grupos con 1 solo ítem se muestran directamente sin header colapsable
+            if (g.items.length === 1 && g.group === 'Principal') {
+              return <div key={g.group} style={{marginBottom:2}}>{g.items.map(item=><NavItem key={item.href} {...item} collapsed={collapsed} isActive={pathname===item.href||(item.href!=='/'&&pathname?.startsWith(item.href))}/>)}</div>;
+            }
+            return (
+              <div key={g.group} style={{marginBottom:2}}>
+                {!collapsed ? (
+                  <div
+                    onClick={() => toggleGroup(g.group)}
+                    style={{
+                      padding:'7px 20px 4px',
+                      fontSize:'0.62rem',
+                      fontWeight:700,
+                      color: hasActive ? 'rgba(200,168,75,0.7)' : 'rgba(255,255,255,0.3)',
+                      textTransform:'uppercase',
+                      letterSpacing:'0.10em',
+                      fontFamily:"'Rubik',sans-serif",
+                      cursor:'pointer',
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'space-between',
+                      userSelect:'none',
+                      transition:'color 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = hasActive ? 'rgba(200,168,75,0.9)' : 'rgba(255,255,255,0.5)'}
+                    onMouseLeave={e => e.currentTarget.style.color = hasActive ? 'rgba(200,168,75,0.7)' : 'rgba(255,255,255,0.3)'}
+                  >
+                    <span>{g.group}</span>
+                    <span style={{fontSize:'0.55rem',transition:'transform 0.2s',transform:isOpen?'rotate(0deg)':'rotate(-90deg)'}}>{isOpen ? '▾' : '▾'}</span>
+                  </div>
+                ) : (
+                  <div style={{padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.06)'}} />
+                )}
+                {(isOpen || collapsed) && g.items.map(item=>
+                  <NavItem key={item.href} {...item} collapsed={collapsed} isActive={pathname===item.href||(item.href!=='/'&&pathname?.startsWith(item.href))}/>
+                )}
+              </div>
+            );
+          })}
         </nav>
         <div style={{padding:'12px 8px',borderTop:'1px solid rgba(255,255,255,0.08)',flexShrink:0}}>
           {!collapsed&&<button onClick={logout} style={{width:'100%',padding:'8px 12px',background:'rgba(200,168,75,0.12)',border:'1px solid rgba(200,168,75,0.25)',borderRadius:10,color:'rgba(200,168,75,0.8)',cursor:'pointer',fontSize:'0.78rem',fontFamily:"'Rubik',sans-serif",display:'flex',alignItems:'center',gap:8,marginBottom:8}} onMouseEnter={e=>e.currentTarget.style.background='rgba(200,168,75,0.20)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(200,168,75,0.12)'}><span>→</span><span>Cerrar sesión</span></button>}
