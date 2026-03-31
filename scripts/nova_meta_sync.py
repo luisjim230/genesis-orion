@@ -126,15 +126,16 @@ def sync_campaigns(token):
 
 # ─── Sync adsets ─────────────────────────────────────────────────────
 def sync_adsets(token):
-    """Sync adset metadata."""
+    """Sync adset metadata. Skips adsets with orphaned campaign_ids."""
     log.info("Sincronizando conjuntos de anuncios...")
     fields = "id,campaign_id,name,status,targeting,daily_budget,lifetime_budget"
-    data = meta_get(f"{AD_ACCOUNT_ID}/adsets", {"fields": fields, "limit": 200}, token)
+    data = meta_get(f"{AD_ACCOUNT_ID}/adsets", {"fields": fields, "limit": 500}, token)
     if not data or "data" not in data:
         log.error("No se pudieron obtener adsets")
         return 0
 
     count = 0
+    skipped = 0
     for a in data["data"]:
         row = {
             "id": a["id"],
@@ -145,10 +146,15 @@ def sync_adsets(token):
             "daily_budget": float(a["daily_budget"]) / 100 if a.get("daily_budget") else None,
             "lifetime_budget": float(a["lifetime_budget"]) / 100 if a.get("lifetime_budget") else None,
         }
-        sb.table("meta_adsets").upsert(row, on_conflict="id").execute()
-        count += 1
+        try:
+            sb.table("meta_adsets").upsert(row, on_conflict="id").execute()
+            count += 1
+        except Exception as e:
+            # Skip adsets with orphaned campaign_ids (deleted campaigns)
+            skipped += 1
+            log.debug(f"  Adset {a['id']} ignorado: {e}")
 
-    log.info(f"  {count} adsets sincronizados")
+    log.info(f"  {count} adsets sincronizados, {skipped} ignorados (campañas borradas)")
     return count
 
 
@@ -174,12 +180,8 @@ def extract_action_value(action_values, action_type):
 
 
 # ─── Sync insights ──────────────────────────────────────────────────
-def sync_insights(token, days_back=3):
-    """Sync daily insights from Meta to Supabase."""
-    since = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-    until = datetime.now().strftime("%Y-%m-%d")
-    log.info(f"Sincronizando insights: {since} → {until} ({days_back} días)...")
-
+def sync_insights_range(token, since, until):
+    """Sync insights for a specific date range. Returns number of records synced."""
     fields = (
         "campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,"
         "actions,cost_per_action_type,action_values"
@@ -194,6 +196,8 @@ def sync_insights(token, days_back=3):
 
     total = 0
     data = meta_get(f"{AD_ACCOUNT_ID}/insights", params, token)
+    if not data:
+        return 0
 
     while data and "data" in data:
         for row in data["data"]:
@@ -247,7 +251,46 @@ def sync_insights(token, days_back=3):
         else:
             data = None
 
-    log.info(f"  {total} registros de insights sincronizados")
+    return total
+
+
+def sync_insights(token, days_back=3):
+    """Sync daily insights from Meta to Supabase.
+    For backfills > 30 days, splits into monthly batches to avoid Meta API limits.
+    """
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days_back)
+    log.info(f"Sincronizando insights: {start_date} → {end_date} ({days_back} días)...")
+
+    total = 0
+
+    if days_back <= 30:
+        # Single request for short ranges
+        total = sync_insights_range(
+            token,
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+        )
+    else:
+        # Batch into 28-day chunks to stay within Meta API limits
+        batch_size = 28
+        current = start_date
+        while current < end_date:
+            batch_end = min(current + timedelta(days=batch_size - 1), end_date)
+            log.info(f"  Batch: {current} → {batch_end}")
+            n = sync_insights_range(
+                token,
+                current.strftime("%Y-%m-%d"),
+                batch_end.strftime("%Y-%m-%d"),
+            )
+            total += n
+            log.info(f"    {n} registros en este batch")
+            current = batch_end + timedelta(days=1)
+            # Small pause between batches to respect rate limits
+            if current < end_date:
+                time.sleep(2)
+
+    log.info(f"  {total} registros de insights sincronizados en total")
     return total
 
 
@@ -275,7 +318,11 @@ def sync_pixel(token):
                 "event_count": int(event.get("count", event.get("value", 0))),
                 "date": today,
             }
-            sb.table("meta_pixel_events").upsert(row).execute()
+            # Use upsert with the existing unique constraint (pixel_id, event_name, date)
+            sb.table("meta_pixel_events").upsert(
+                row,
+                on_conflict="pixel_id,event_name,date",
+            ).execute()
             total += 1
 
     log.info(f"  {total} eventos de pixel sincronizados")
@@ -284,9 +331,11 @@ def sync_pixel(token):
 
 # ─── Sync audiences ─────────────────────────────────────────────────
 def sync_audiences(token):
-    """Sync custom audiences."""
+    """Sync custom audiences. Uses approximate_count_lower_bound since
+    approximate_count was deprecated in Meta API v21+."""
     log.info("Sincronizando audiencias...")
-    fields = "id,name,subtype,approximate_count,data_source"
+    # approximate_count was deprecated; use lower/upper bound fields instead
+    fields = "id,name,subtype,approximate_count_lower_bound,data_source"
     data = meta_get(f"{AD_ACCOUNT_ID}/customaudiences", {"fields": fields, "limit": 100}, token)
     if not data or "data" not in data:
         log.warning("No se pudieron obtener audiencias (puede que no haya ninguna)")
@@ -298,11 +347,14 @@ def sync_audiences(token):
             "id": a["id"],
             "name": a["name"],
             "subtype": a.get("subtype"),
-            "approximate_count": a.get("approximate_count"),
+            "approximate_count": a.get("approximate_count_lower_bound"),
             "data_source": a.get("data_source"),
         }
-        sb.table("meta_audiences").upsert(row, on_conflict="id").execute()
-        count += 1
+        try:
+            sb.table("meta_audiences").upsert(row, on_conflict="id").execute()
+            count += 1
+        except Exception as e:
+            log.warning(f"  Audiencia {a['id']} ignorada: {e}")
 
     log.info(f"  {count} audiencias sincronizadas")
     return count
