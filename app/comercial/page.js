@@ -433,11 +433,21 @@ export default function ComercialV2() {
   const [productoAnio, setProductoAnio] = useState('todos');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null); // codigo_interno
 
-  // ── Load vendedores (desde datos reales de facturación) ─────────────────────
+  // ── Load vendedores (desde informe de ventas + facturación) ─────────────────
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() });
-      const vends = (data || []).map(d => ({ id: d.vendedor, nombre: d.vendedor }));
+      // Primero intentar desde el informe de ventas (nombres oficiales)
+      const { data: informe } = await supabase
+        .from('neo_informe_ventas_vendedor')
+        .select('vendedor')
+        .eq('mes', currentMonth());
+      const nombresInforme = (informe || []).map(r => r.vendedor).filter(Boolean);
+      // Fallback: desde facturación
+      const { data: facturacion } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() });
+      const nombresFacturacion = (facturacion || []).map(d => d.vendedor).filter(Boolean);
+      // Combinar sin duplicados
+      const todosNombres = [...new Set([...nombresInforme, ...nombresFacturacion])].sort();
+      const vends = todosNombres.map(n => ({ id: n, nombre: n }));
       setVendedores(vends);
       // Si no es admin, auto-llenar con su propio nombre
       if (perfil?.rol !== 'admin' && perfil?.nombre) {
