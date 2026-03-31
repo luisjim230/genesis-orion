@@ -34,9 +34,14 @@ function NavItem({href,icon,name,collapsed,isActive}){
 
 export default function Sidebar(){
   const [collapsed,setCollapsed]=useState(false);
+  const [search, setSearch] = useState('');
   const {perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
-  const navVisible=ALL_NAV.map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))})).filter(g=>g.items.length>0);
+  const navAll=ALL_NAV.map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))})).filter(g=>g.items.length>0);
+  // Filtrar por búsqueda
+  const navVisible = search.trim()
+    ? navAll.map(g => ({ ...g, items: g.items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || g.group.toLowerCase().includes(search.toLowerCase())) })).filter(g => g.items.length > 0)
+    : navAll;
 
   // Grupos colapsables: solo abre el grupo que contiene la página activa
   const [openGroups, setOpenGroups] = useState({});
@@ -78,9 +83,38 @@ export default function Sidebar(){
             <span style={{display:'inline-block',marginTop:4,background:(ROL_COLOR[perfil.rol]||'#666')+'33',color:ROL_COLOR[perfil.rol]||'#ccc',border:'1px solid '+(ROL_COLOR[perfil.rol]||'#666')+'55',borderRadius:20,padding:'1px 8px',fontSize:'0.68rem',fontWeight:600}}>{perfil.rol}</span>
           </div>
         )}
+        {!collapsed && (
+          <div style={{padding:'8px 12px',flexShrink:0}}>
+            <div style={{position:'relative'}}>
+              <input
+                type="text"
+                placeholder="Buscar módulo..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  width:'100%',
+                  padding:'7px 12px 7px 30px',
+                  background:'rgba(255,255,255,0.08)',
+                  border:'1px solid rgba(255,255,255,0.1)',
+                  borderRadius:8,
+                  color:'rgba(255,255,255,0.85)',
+                  fontSize:'0.8rem',
+                  fontFamily:"'Rubik',sans-serif",
+                  outline:'none',
+                  boxSizing:'border-box',
+                  transition:'border-color 0.15s',
+                }}
+                onFocus={e => e.target.style.borderColor='rgba(200,168,75,0.4)'}
+                onBlur={e => e.target.style.borderColor='rgba(255,255,255,0.1)'}
+              />
+              <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:'0.75rem',color:'rgba(255,255,255,0.35)',pointerEvents:'none'}}>&#128269;</span>
+              {search && <span onClick={() => setSearch('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',fontSize:'0.7rem',color:'rgba(255,255,255,0.4)',cursor:'pointer',padding:'2px 4px'}}>✕</span>}
+            </div>
+          </div>
+        )}
         <nav style={{flex:1,padding:'6px 0',overflowY:'auto'}}>
           {navVisible.map(g=>{
-            const isOpen = openGroups[g.group];
+            const isOpen = search.trim() ? true : openGroups[g.group];
             const hasActive = g.items.some(i => pathname === i.href || (i.href !== '/' && pathname?.startsWith(i.href)));
             // Grupos con 1 solo ítem se muestran directamente sin header colapsable
             if (g.items.length === 1 && g.group === 'Principal') {
