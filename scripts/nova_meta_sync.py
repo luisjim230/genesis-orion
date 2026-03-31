@@ -62,31 +62,33 @@ def get_meta_token():
         sys.exit(1)
 
 
-def meta_get(endpoint, params=None, token=None):
-    """GET request to Meta API with retry logic."""
+def meta_get(endpoint, params=None, token=None, retries=4):
+    """GET request to Meta API with exponential backoff for rate limits."""
     if params is None:
         params = {}
     params["access_token"] = token
     url = f"{META_BASE}/{endpoint}"
 
-    for attempt in range(3):
+    for attempt in range(retries):
         try:
-            r = requests.get(url, params=params, timeout=60)
+            r = requests.get(url, params=params, timeout=90)
             if r.status_code == 200:
                 return r.json()
             data = r.json()
             err = data.get("error", {})
-            # Rate limit — wait and retry
-            if err.get("code") == 17 or err.get("code") == 32:
-                wait = 60 * (attempt + 1)
-                log.warning(f"Rate limit hit, esperando {wait}s...")
+            code = err.get("code")
+            # Rate limit (4) or throttle (17, 32) — exponential backoff
+            if code in (4, 17, 32):
+                wait = 60 * (2 ** attempt)  # 60s, 120s, 240s, 480s
+                log.warning(f"Rate limit (código {code}), esperando {wait}s (intento {attempt+1}/{retries})...")
                 time.sleep(wait)
                 continue
             log.error(f"Meta API error {r.status_code}: {json.dumps(err, ensure_ascii=False)}")
             return None
         except requests.exceptions.Timeout:
-            log.warning(f"Timeout en intento {attempt + 1}, reintentando...")
-            time.sleep(10)
+            wait = 30 * (attempt + 1)
+            log.warning(f"Timeout en intento {attempt + 1}, esperando {wait}s...")
+            time.sleep(wait)
         except Exception as e:
             log.error(f"Error en request: {e}")
             return None
@@ -272,23 +274,28 @@ def sync_insights(token, days_back=3):
             end_date.strftime("%Y-%m-%d"),
         )
     else:
-        # Batch into 28-day chunks to stay within Meta API limits
-        batch_size = 28
+        # Batch into 14-day chunks with 90s pause between batches for backfills
+        # Smaller batches + longer pauses to avoid the Insights API rate limit
+        batch_size = 14
+        batch_pause = 90  # seconds between batches
         current = start_date
+        batch_num = 0
         while current < end_date:
             batch_end = min(current + timedelta(days=batch_size - 1), end_date)
-            log.info(f"  Batch: {current} → {batch_end}")
+            batch_num += 1
+            log.info(f"  Batch {batch_num}: {current} → {batch_end}")
             n = sync_insights_range(
                 token,
                 current.strftime("%Y-%m-%d"),
                 batch_end.strftime("%Y-%m-%d"),
             )
             total += n
-            log.info(f"    {n} registros en este batch")
+            log.info(f"    {n} registros en este batch (acumulado: {total})")
             current = batch_end + timedelta(days=1)
-            # Small pause between batches to respect rate limits
+            # Pause between batches to respect Meta rate limits
             if current < end_date:
-                time.sleep(2)
+                log.info(f"    Pausa de {batch_pause}s antes del siguiente batch...")
+                time.sleep(batch_pause)
 
     log.info(f"  {total} registros de insights sincronizados en total")
     return total
@@ -383,6 +390,26 @@ def main():
     errors = []
 
     try:
+        # ── INSIGHTS PRIMERO — usa la cuota de API más fresca ──────────
+        if mode in ("nightly", "backfill", "insights"):
+            try:
+                days = 180 if mode == "backfill" else 3
+                n = sync_insights(token, days_back=days)
+                total += n
+            except Exception as e:
+                log.error(f"Error sincronizando insights: {e}")
+                errors.append(f"insights: {e}")
+
+        # ── Pixel (pocas llamadas, va segundo) ─────────────────────────
+        if mode in ("nightly", "backfill", "pixel"):
+            try:
+                n = sync_pixel(token)
+                total += n
+            except Exception as e:
+                log.error(f"Error sincronizando pixel: {e}")
+                errors.append(f"pixel: {e}")
+
+        # ── Campañas y adsets (muchas llamadas, van al final) ──────────
         if mode in ("nightly", "backfill", "campaigns"):
             try:
                 n = sync_campaigns(token)
@@ -393,23 +420,7 @@ def main():
                 log.error(f"Error sincronizando campañas: {e}")
                 errors.append(f"campaigns: {e}")
 
-        if mode in ("nightly", "backfill", "insights"):
-            try:
-                days = 180 if mode == "backfill" else 3
-                n = sync_insights(token, days_back=days)
-                total += n
-            except Exception as e:
-                log.error(f"Error sincronizando insights: {e}")
-                errors.append(f"insights: {e}")
-
-        if mode in ("nightly", "backfill", "pixel"):
-            try:
-                n = sync_pixel(token)
-                total += n
-            except Exception as e:
-                log.error(f"Error sincronizando pixel: {e}")
-                errors.append(f"pixel: {e}")
-
+        # ── Audiencias ─────────────────────────────────────────────────
         if mode in ("nightly", "backfill"):
             try:
                 n = sync_audiences(token)
