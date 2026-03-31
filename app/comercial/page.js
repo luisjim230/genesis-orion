@@ -225,12 +225,18 @@ function calcEficiencia(cumplMeta, cumplUtil, convCotiz, cumplSeg, partLlamadas)
   return Math.round(score * 100) / 100;
 }
 
-function calcAllKpis(auto, manual, metaBase, numVendedores) {
+function calcAllKpis(auto, manual, metaBase, numVendedores, ncMonto = 0) {
   const ventasMes = N(auto?.ventas_mes);
-  const mb = N(metaBase);
+  // Meta manual sobreescribe la histórica si existe
+  const metaManual = N(manual?.meta_manual);
+  const mb = metaManual > 0 ? metaManual : N(metaBase);
   const meta5 = mb * 1.05;
   const meta10 = mb * 1.10;
   const cumplMetaBase = mb > 0 ? ventasMes / mb : 0;
+  // Comisión sobre ventas netas
+  const pctComision = N(manual?.pct_comision);
+  const ventasNetas = ventasMes - N(ncMonto);
+  const comision = pctComision > 0 ? ventasNetas * (pctComision / 100) : 0;
   const cumplMeta5 = meta5 > 0 ? ventasMes / meta5 : 0;
   const cumplMeta10 = meta10 > 0 ? ventasMes / meta10 : 0;
   const utilPct = N(auto?.utilidad_pct);
@@ -252,13 +258,14 @@ function calcAllKpis(auto, manual, metaBase, numVendedores) {
   const nota = calcNota(efiFinal);
 
   return {
-    ventasMes, metaBase: mb, meta5, meta10,
+    ventasMes, metaBase: mb, metaManual, meta5, meta10,
     cumplMetaBase, cumplMeta5, cumplMeta10,
     utilPct, cumplUtil, utilColones,
     llamadas, totalLlamadas, tasaContest, partEsperada,
     cotiz, ventasCotiz, convCotiz,
     segProg, segReal, cumplSeg,
     errores, puntaje, efiFinal, nota,
+    pctComision, comision, ventasNetas,
     facturas: N(auto?.facturas_count),
     costoTotal: N(auto?.costo_total),
   };
@@ -391,6 +398,8 @@ export default function ComercialV2() {
   const [informeData, setInformeData] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [statusReportes, setStatusReportes] = useState(null);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('desc');
 
   // Form states (tab 2)
   const [formVendedor, setFormVendedor] = useState('');
@@ -505,6 +514,8 @@ export default function ComercialV2() {
         seguimientos_realizados: data.seguimientos_realizados || '',
         errores_facturacion: data.errores_facturacion || '',
         observaciones: data.observaciones || '',
+        pct_comision: data.pct_comision || '',
+        meta_manual: data.meta_manual || '',
       });
     } else {
       setFormData({
@@ -516,6 +527,8 @@ export default function ComercialV2() {
         seguimientos_realizados: '',
         errores_facturacion: '',
         observaciones: '',
+        pct_comision: '',
+        meta_manual: '',
       });
     }
   }, [formVendedor, formMes]);
@@ -663,13 +676,37 @@ export default function ComercialV2() {
         }))
       : ventasData;
 
-    return baseData.map(v => {
+    const rows = baseData.map(v => {
       const manual = manualesData[v.vendedor] || {};
       const mb = metasData[v.vendedor] || 0;
-      const kpis = calcAllKpis(v, manual, mb, baseData.length);
-      return { vendedor: v.vendedor, kpis, nc_monto: N(v.nc_monto), nc_facturas: N(v.nc_facturas) };
-    }).sort((a, b) => b.kpis.efiFinal - a.kpis.efiFinal);
-  }, [ventasData, informeData, manualesData, metasData]);
+      const ncMonto = N(v.nc_monto);
+      const kpis = calcAllKpis(v, manual, mb, baseData.length, ncMonto);
+      return { vendedor: v.vendedor, kpis, nc_monto: ncMonto, nc_facturas: N(v.nc_facturas) };
+    });
+    // Sorting
+    const colMap = {
+      vendedor: r => r.vendedor,
+      ventas: r => r.kpis.ventasMes,
+      notas: r => r.nc_monto,
+      comision: r => r.kpis.comision,
+      meta: r => r.kpis.metaBase,
+      cumpl: r => r.kpis.cumplMetaBase,
+      util: r => r.kpis.utilPct,
+      llamadas: r => r.kpis.llamadas,
+      conv: r => r.kpis.convCotiz,
+      seg: r => r.kpis.cumplSeg,
+      puntaje: r => r.kpis.efiFinal,
+      nota: r => r.kpis.efiFinal,
+    };
+    const getter = sortCol && colMap[sortCol] ? colMap[sortCol] : (r => r.kpis.efiFinal);
+    const dir = sortCol ? (sortDir === 'asc' ? 1 : -1) : -1;
+    rows.sort((a, b) => {
+      const va = getter(a), vb = getter(b);
+      if (typeof va === 'string') return dir * va.localeCompare(vb);
+      return dir * ((va || 0) - (vb || 0));
+    });
+    return rows;
+  }, [ventasData, informeData, manualesData, metasData, sortCol, sortDir]);
 
   // Date range from actual data
   const dataRange = useMemo(() => {
@@ -726,6 +763,8 @@ export default function ComercialV2() {
         seguimientos_realizados: N(formData.seguimientos_realizados),
         errores_facturacion: N(formData.errores_facturacion),
         observaciones: formData.observaciones || '',
+        pct_comision: N(formData.pct_comision) || null,
+        meta_manual: N(formData.meta_manual) || null,
       };
       const { error } = await supabase
         .from('comercial_kpis_mensual')
@@ -902,8 +941,30 @@ export default function ComercialV2() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Rubik, sans-serif' }}>
                       <thead>
                         <tr>
-                          {['#', 'Vendedor', 'Ventas Mes', 'Notas Créd.', 'Meta Base', 'Cumpl. Meta', 'Utilidad %', 'Llamadas', 'Conv. Cotiz.', 'Seguim.', 'Puntaje Efic.', 'Nota'].map(h => (
-                            <th key={h} style={S.th}>{h}</th>
+                          {[
+                            { label: '#', col: null },
+                            { label: 'Vendedor', col: 'vendedor' },
+                            { label: 'Ventas Mes', col: 'ventas' },
+                            { label: 'Notas Créd.', col: 'notas' },
+                            { label: 'Comisión', col: 'comision' },
+                            { label: 'Meta Base', col: 'meta' },
+                            { label: 'Cumpl. Meta', col: 'cumpl' },
+                            { label: 'Utilidad %', col: 'util' },
+                            { label: 'Llamadas', col: 'llamadas' },
+                            { label: 'Conv. Cotiz.', col: 'conv' },
+                            { label: 'Seguim.', col: 'seg' },
+                            { label: 'Puntaje Efic.', col: 'puntaje' },
+                            { label: 'Nota', col: 'nota' },
+                          ].map(h => (
+                            <th key={h.label} style={{ ...S.th, cursor: h.col ? 'pointer' : 'default', userSelect: 'none' }} onClick={() => {
+                              if (!h.col) return;
+                              if (sortCol === h.col) {
+                                if (sortDir === 'desc') setSortDir('asc');
+                                else { setSortCol(null); setSortDir('desc'); }
+                              } else { setSortCol(h.col); setSortDir('desc'); }
+                            }}>
+                              {h.label}{sortCol === h.col ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                            </th>
                           ))}
                         </tr>
                       </thead>
@@ -925,7 +986,10 @@ export default function ComercialV2() {
                                 <td style={{ ...S.td, fontWeight: 700 }}>{row.vendedor}</td>
                                 <td style={S.td}>{CRC(k.ventasMes)}</td>
                                 <td style={{ ...S.td, color: row.nc_monto > 0 ? C.orange : C.muted }}>{CRC(row.nc_monto)}</td>
-                                <td style={S.td}>{CRC(k.metaBase)}</td>
+                                <td style={{ ...S.td, color: k.comision > 0 ? C.green : C.muted }}>
+                                  {k.comision > 0 ? `${CRC(k.comision)} (${k.pctComision}%)` : '—'}
+                                </td>
+                                <td style={S.td}>{CRC(k.metaBase)}{k.metaManual > 0 ? ' *' : ''}</td>
                                 <td style={S.td}>
                                   <span style={{ color: k.cumplMetaBase >= 1 ? C.green : C.red, fontWeight: 600 }}>
                                     {pctRaw(k.cumplMetaBase)}%
@@ -940,7 +1004,7 @@ export default function ComercialV2() {
                               </tr>
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan={12} style={{ padding: '0 16px 16px', background: 'rgba(200,168,75,0.03)' }}>
+                                  <td colSpan={13} style={{ padding: '0 16px 16px', background: 'rgba(200,168,75,0.03)' }}>
                                     <KpiDetailPanel kpis={k} />
                                   </td>
                                 </tr>
@@ -1008,6 +1072,8 @@ export default function ComercialV2() {
                   { key: 'seguimientos_programados', label: 'Seguimientos Programados' },
                   { key: 'seguimientos_realizados', label: 'Seguimientos Realizados' },
                   { key: 'errores_facturacion', label: 'Errores Facturacion' },
+                  { key: 'pct_comision', label: '% Comisión (sobre ventas netas)' },
+                  { key: 'meta_manual', label: 'Meta de Venta Manual (₡)' },
                 ].map(f => (
                   <div key={f.key}>
                     <label style={S.label}>{f.label}</label>
