@@ -339,23 +339,11 @@ export default function DashboardPage() {
         const ventasAnterior   = infPrev.ventas
         const utilidadAnterior = infPrev.utilidad
 
-        // Valor inventario desde neo_lista_items (solo existencias > 0)
+        // Valor inventario — agregado server-side para evitar límite de 1000 filas
         let valorInventario = 0
         try {
-          const { data: fcInv } = await supabase
-            .from('neo_lista_items')
-            .select('fecha_carga')
-            .order('fecha_carga', { ascending: false })
-            .limit(1)
-          if (fcInv?.[0]?.fecha_carga) {
-            const { data: invRows } = await supabase
-              .from('neo_lista_items')
-              .select('existencias, costo_sin_imp')
-              .eq('fecha_carga', fcInv[0].fecha_carga)
-              .gt('existencias', 0)
-            valorInventario = (invRows || []).reduce((s, r) =>
-              s + (parseFloat(r.existencias) || 0) * (parseFloat(r.costo_sin_imp) || 0), 0)
-          }
+          const { data: invData } = await supabase.rpc('inventario_valor_actual')
+          valorInventario = parseFloat(invData?.[0]?.valor_costo) || 0
         } catch(e) { /* no bloquear si falla */ }
 
         setKpis({
