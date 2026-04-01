@@ -262,12 +262,13 @@ def sync_insights_range(token, since, until):
     return total
 
 
-def sync_insights(token, days_back=3):
+def sync_insights(token, days_back=3, start_override=None):
     """Sync daily insights from Meta to Supabase.
-    For backfills > 30 days, splits into monthly batches to avoid Meta API limits.
+    For backfills > 30 days, splits into 14-day batches to avoid Meta API limits.
+    start_override: date object — if set, ignores days_back and uses this as start.
     """
     end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=days_back)
+    start_date = start_override if start_override else end_date - timedelta(days=days_back)
     log.info(f"Sincronizando insights: {start_date} → {end_date} ({days_back} días)...")
 
     total = 0
@@ -417,17 +418,23 @@ def main():
 
     try:
         # ── INSIGHTS PRIMERO — usa la cuota de API más fresca ──────────
-        if mode in ("nightly", "backfill", "insights"):
+        if mode in ("nightly", "backfill", "insights", "full_history"):
             try:
-                days = 180 if mode == "backfill" else 3
-                n = sync_insights(token, days_back=days)
+                if mode == "full_history":
+                    # Todo 2025 + lo que va de 2026
+                    from datetime import date as _date
+                    n = sync_insights(token, start_override=_date(2025, 1, 1))
+                elif mode == "backfill":
+                    n = sync_insights(token, days_back=180)
+                else:
+                    n = sync_insights(token, days_back=3)
                 total += n
             except Exception as e:
                 log.error(f"Error sincronizando insights: {e}")
                 errors.append(f"insights: {e}")
 
         # ── Pixel (pocas llamadas, va segundo) ─────────────────────────
-        if mode in ("nightly", "backfill", "pixel"):
+        if mode in ("nightly", "backfill", "full_history", "pixel"):
             try:
                 n = sync_pixel(token)
                 total += n
@@ -436,7 +443,7 @@ def main():
                 errors.append(f"pixel: {e}")
 
         # ── Campañas y adsets (muchas llamadas, van al final) ──────────
-        if mode in ("nightly", "backfill", "campaigns"):
+        if mode in ("nightly", "backfill", "full_history", "campaigns"):
             try:
                 n = sync_campaigns(token)
                 total += n
@@ -447,7 +454,7 @@ def main():
                 errors.append(f"campaigns: {e}")
 
         # ── Audiencias ─────────────────────────────────────────────────
-        if mode in ("nightly", "backfill"):
+        if mode in ("nightly", "backfill", "full_history"):
             try:
                 n = sync_audiences(token)
                 total += n
