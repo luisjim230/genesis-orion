@@ -62,8 +62,11 @@ def get_meta_token():
         sys.exit(1)
 
 
-def meta_get(endpoint, params=None, token=None, retries=4):
-    """GET request to Meta API with exponential backoff for rate limits."""
+def meta_get(endpoint, params=None, token=None, retries=3, rate_limit_wait=300):
+    """GET request to Meta API.
+    rate_limit_wait: seconds to wait on rate limit before retrying (default 5 min).
+    Set to 0 to fail fast on rate limit (useful in backfill batch loops).
+    """
     if params is None:
         params = {}
     params["access_token"] = token
@@ -77,18 +80,19 @@ def meta_get(endpoint, params=None, token=None, retries=4):
             data = r.json()
             err = data.get("error", {})
             code = err.get("code")
-            # Rate limit (4) or throttle (17, 32) — exponential backoff
+            # Rate limit (4) or throttle (17, 32)
             if code in (4, 17, 32):
-                wait = 60 * (2 ** attempt)  # 60s, 120s, 240s, 480s
-                log.warning(f"Rate limit (código {code}), esperando {wait}s (intento {attempt+1}/{retries})...")
-                time.sleep(wait)
+                if rate_limit_wait == 0 or attempt == retries - 1:
+                    log.warning(f"Rate limit (código {code}) — sin más reintentos, pasando al siguiente batch")
+                    return None
+                log.warning(f"Rate limit (código {code}), esperando {rate_limit_wait}s (intento {attempt+1}/{retries})...")
+                time.sleep(rate_limit_wait)
                 continue
             log.error(f"Meta API error {r.status_code}: {json.dumps(err, ensure_ascii=False)}")
             return None
         except requests.exceptions.Timeout:
-            wait = 30 * (attempt + 1)
-            log.warning(f"Timeout en intento {attempt + 1}, esperando {wait}s...")
-            time.sleep(wait)
+            log.warning(f"Timeout en intento {attempt + 1}, reintentando en 30s...")
+            time.sleep(30)
         except Exception as e:
             log.error(f"Error en request: {e}")
             return None
@@ -183,7 +187,9 @@ def extract_action_value(action_values, action_type):
 
 # ─── Sync insights ──────────────────────────────────────────────────
 def sync_insights_range(token, since, until):
-    """Sync insights for a specific date range. Returns number of records synced."""
+    """Sync insights for a specific date range. Returns number of records synced.
+    Uses rate_limit_wait=0 so rate limits fail fast (caller handles retry logic).
+    """
     fields = (
         "campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,"
         "actions,cost_per_action_type,action_values"
@@ -197,7 +203,7 @@ def sync_insights_range(token, since, until):
     }
 
     total = 0
-    data = meta_get(f"{AD_ACCOUNT_ID}/insights", params, token)
+    data = meta_get(f"{AD_ACCOUNT_ID}/insights", params, token, rate_limit_wait=0)
     if not data:
         return 0
 
