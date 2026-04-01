@@ -91,6 +91,40 @@ function AlertCard({ icon, text, type }) {
   );
 }
 
+// ─── Sortable table hook ──────────────────────────────────────────
+function useSortable(data, defaultCol, defaultDir = 'desc') {
+  const [col, setCol] = useState(defaultCol);
+  const [dir, setDir] = useState(defaultDir);
+
+  function toggle(c) {
+    if (col === c) setDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setCol(c); setDir('desc'); }
+  }
+
+  const sorted = [...data].sort((a, b) => {
+    const av = a[col] ?? 0;
+    const bv = b[col] ?? 0;
+    if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return dir === 'asc' ? av - bv : bv - av;
+  });
+
+  function Th({ children, field, style }) {
+    const active = col === field;
+    return (
+      <th onClick={() => toggle(field)} style={{
+        padding: '10px 10px', textAlign: 'right', fontWeight: 600,
+        color: active ? 'var(--orange)' : 'var(--text-secondary)',
+        cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+        ...style,
+      }}>
+        {children} {active ? (dir === 'desc' ? ' ↓' : ' ↑') : ' ↕'}
+      </th>
+    );
+  }
+
+  return { sorted, Th, col, dir };
+}
+
 export default function CampanasPage() {
   const [insights, setInsights] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -169,7 +203,7 @@ export default function CampanasPage() {
     c.clicks += r.clicks || 0;
     c.video_views += r.video_views || 0;
   });
-  const campList = Object.values(byCampaign).sort((a, b) => b.spend - a.spend);
+  const campListRaw = Object.values(byCampaign);
 
   // ─── Alerts ────────────────────────────────────────────────────
   const alerts = [];
@@ -223,6 +257,16 @@ export default function CampanasPage() {
   if (alerts.length === 0 && !cargando && insights.length > 0) {
     alerts.push({ icon: '✅', text: 'Todo en orden. Campañas funcionando normalmente.', type: 'success' });
   }
+
+  // ─── Sort for insights table ─────────────────────────────────────
+  const insSort = useSortable(campListRaw, 'spend');
+  const campList = insSort.sorted;
+  const InsThR = insSort.Th; // right-aligned sortable header
+
+  // ─── Sort for all-campaigns table ────────────────────────────────
+  const campSort = useSortable(campaigns, 'name', 'asc');
+  const sortedCampaigns = campSort.sorted;
+  const CampThR = campSort.Th;
 
   return (
     <div style={S.page}>
@@ -306,22 +350,21 @@ export default function CampanasPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ background: '#FAFAFA', borderBottom: '2px solid var(--border-soft)' }}>
-                      <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Campaña</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Gasto</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Msgs WA</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>$/Msg</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Convos</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Compras</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Valor</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Reacciones</th>
-                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>CTR</th>
+                      <InsThR field="campaign_name" style={{ textAlign: 'left', padding: '10px 14px' }}>Campaña</InsThR>
+                      <InsThR field="spend">Gasto</InsThR>
+                      <InsThR field="messaging_connections">Msgs WA</InsThR>
+                      <InsThR field="spend_per_msg">$/Msg</InsThR>
+                      <InsThR field="conversations_started">Convos</InsThR>
+                      <InsThR field="purchases">Compras</InsThR>
+                      <InsThR field="purchase_value">Valor</InsThR>
+                      <InsThR field="post_reactions">Reacciones</InsThR>
+                      <InsThR field="impressions">Impresiones</InsThR>
                       <th style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
                     {campList.map((c, i) => {
                       const costoM = c.messaging_connections > 0 ? c.spend / c.messaging_connections : null;
-                      const ctr = c.impressions > 0 ? (c.clicks / c.impressions * 100) : 0;
                       return (
                         <tr key={c.campaign_id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                           <td style={{ padding: '10px 14px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{c.campaign_name}</td>
@@ -332,7 +375,7 @@ export default function CampanasPage() {
                           <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.purchases)}</td>
                           <td style={{ padding: '10px 10px', textAlign: 'right' }}>{c.purchase_value > 0 ? fmt$(c.purchase_value) : '—'}</td>
                           <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.post_reactions)}</td>
-                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtPct(ctr)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.impressions)}</td>
                           <td style={{ padding: '10px 10px', textAlign: 'center' }}><SemaforoTag status={calcSemaforo(c)} /></td>
                         </tr>
                       );
@@ -351,15 +394,15 @@ export default function CampanasPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '2px solid var(--border-soft)' }}>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Nombre</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Objetivo</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Presupuesto/día</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Creada</th>
+                  <CampThR field="name" style={{ textAlign: 'left', padding: '10px 14px' }}>Nombre</CampThR>
+                  <CampThR field="objective" style={{ textAlign: 'left', padding: '10px 12px' }}>Objetivo</CampThR>
+                  <CampThR field="status" style={{ textAlign: 'center', padding: '10px 12px' }}>Estado</CampThR>
+                  <CampThR field="daily_budget">Presupuesto/día</CampThR>
+                  <CampThR field="created_time" style={{ textAlign: 'left', padding: '10px 12px' }}>Creada</CampThR>
                 </tr>
               </thead>
               <tbody>
-                {campaigns.map((c, i) => (
+                {sortedCampaigns.map((c, i) => (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                     <td style={{ padding: '10px 14px', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{c.name}</td>
                     <td style={{ padding: '10px 12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{c.objective?.replace(/_/g, ' ') || '—'}</td>

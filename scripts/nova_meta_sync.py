@@ -383,17 +383,34 @@ def sync_page_posts(token, full=False):
         log.warning("  page_id no configurado en meta_config — omitiendo sync de posts")
         return 0
 
+    # La nueva experiencia de páginas requiere un page access token (no user token).
+    # Lo obtenemos via /me/accounts usando el user token.
+    page_token = token
+    try:
+        accounts = meta_get("me/accounts", {"fields": "id,access_token"}, token)
+        if accounts and "data" in accounts:
+            match = next((a for a in accounts["data"] if a.get("id") == page_id), None)
+            if match and match.get("access_token"):
+                page_token = match["access_token"]
+                log.info("  Page access token obtenido correctamente")
+            else:
+                log.warning(f"  Página {page_id} no encontrada en /me/accounts — usando user token")
+        else:
+            log.warning("  No se pudo obtener /me/accounts — usando user token")
+    except Exception as e:
+        log.warning(f"  Error obteniendo page token: {e} — usando user token")
+
     from datetime import date as _date
     if full:
         since_ts = int(datetime(_date(2025, 1, 1).year, 1, 1).timestamp())
         log.info("  Modo full: desde 2025-01-01")
     else:
         since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
-    fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type}"
+    fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type},shares,comments.summary(true){id}"
     data = meta_get(
         f"{page_id}/posts",
         {"fields": fields, "since": since_ts, "limit": 100},
-        token,
+        page_token,
     )
     if not data or "data" not in data:
         log.warning("  No se pudieron obtener publicaciones de la página")
@@ -419,7 +436,7 @@ def sync_page_posts(token, full=False):
     except Exception:
         pass
 
-    # Insight metrics to fetch per post
+    # Insight metrics to fetch per post (only confirmed valid page post metrics)
     insight_metrics = ",".join([
         "post_impressions",
         "post_impressions_unique",
@@ -427,7 +444,6 @@ def sync_page_posts(token, full=False):
         "post_reactions_by_type_total",
         "post_clicks_by_type",
         "post_negative_feedback",
-        "post_activity_by_action_type",
         "post_video_views",
         "post_video_views_organic",
     ])
@@ -441,7 +457,7 @@ def sync_page_posts(token, full=False):
         post_type = attachment.get("type", "status")
 
         # Fetch insights for this post
-        ins_data = meta_get(f"{post_id}/insights", {"metric": insight_metrics, "period": "lifetime"}, token)
+        ins_data = meta_get(f"{post_id}/insights", {"metric": insight_metrics, "period": "lifetime"}, page_token)
         metrics = {}
         if ins_data and "data" in ins_data:
             for m in ins_data["data"]:
@@ -455,11 +471,10 @@ def sync_page_posts(token, full=False):
         clicks_raw = metrics.get("post_clicks_by_type", 0)
         clicks = sum(clicks_raw.values()) if isinstance(clicks_raw, dict) else int(clicks_raw or 0)
 
-        # Parse activity (shares, saves, comments)
-        activity_raw = metrics.get("post_activity_by_action_type", {})
-        shares = int(activity_raw.get("share", 0)) if isinstance(activity_raw, dict) else 0
-        saves = int(activity_raw.get("save", 0)) if isinstance(activity_raw, dict) else 0
-        comments = int(activity_raw.get("comment", 0)) if isinstance(activity_raw, dict) else 0
+        # Shares and comments from the post object fields (cheaper than insights)
+        shares = int(post.get("shares", {}).get("count", 0)) if isinstance(post.get("shares"), dict) else 0
+        saves = 0  # not reliably available via insights API
+        comments = int(post.get("comments", {}).get("summary", {}).get("total_count", 0)) if isinstance(post.get("comments"), dict) else 0
 
         impressions = int(metrics.get("post_impressions", 0) or 0)
         reach = int(metrics.get("post_impressions_unique", 0) or 0)
