@@ -386,13 +386,7 @@ export default function ComercialV2() {
   const isAdmin = perfil?.rol === 'admin';
 
   const [tab, setTab] = useState('dashboard');
-  const [mes, setMes] = useState(() => {
-    // Defaultear al mes anterior cuando el mes actual no tiene datos aún
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [mes, setMes] = useState(currentMonth());
   const [loading, setLoading] = useState(false);
 
   // Data states
@@ -420,13 +414,7 @@ export default function ComercialV2() {
   // Ganadores states (tab 4)
   const [ganadoresData, setGanadoresData] = useState([]);
   const [ganadoresLoading, setGanadoresLoading] = useState(false);
-  const [ganadoresMes, setGanadoresMes] = useState(() => {
-    // Defaultear al mes anterior — el actual (abril) aún no tiene datos
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [ganadoresMes, setGanadoresMes] = useState(currentMonth());
   const [ganadoresVendedor, setGanadoresVendedor] = useState('');
   const [ganadoresOrden, setGanadoresOrden] = useState('utilidad');
 

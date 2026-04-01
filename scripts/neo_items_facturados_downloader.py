@@ -288,6 +288,7 @@ def subir_a_supabase(excel_path):
     periodo = f"{hoy.year}-{str(hoy.month).zfill(2)}"
     df["fecha_carga"]     = fecha_carga
     df["periodo_reporte"] = periodo
+    df["mes"]             = periodo  # requerido por mv_items_por_vend_mes y RPCs
 
     registros = json.loads(df.to_json(orient="records", force_ascii=False))
 
