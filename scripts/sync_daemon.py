@@ -14,7 +14,7 @@ Usa ~10MB RAM y duerme la mayor parte del tiempo.
 
 import os, sys, json, time, logging, subprocess, urllib.request, urllib.error
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 BASE = Path(__file__).parent
 
@@ -137,14 +137,78 @@ def procesar_solicitud(req):
     })
 
 
+# ─── SCHEDULER INTEGRADO ──────────────────────────────────────────────────────
+# Lun–Sáb a las 9:00 y 16:00. Reemplaza a los LaunchAgents individuales.
+
+SCHEDULE_HOURS    = [9, 16]            # horas en que corre (hora local)
+SCHEDULE_WEEKDAYS = [0, 1, 2, 3, 4, 5] # 0=Lunes, 5=Sábado
+SCHEDULE_SCRIPTS  = list(SCRIPT_MAP.keys())
+
+_ran_slots: set = set()  # "YYYY-MM-DD_HH" ya ejecutados en este ciclo de daemon
+
+
+def ejecutar_script(script_key):
+    """Corre un script directamente (sin pasar por sync_requests en Supabase)."""
+    script_file = SCRIPT_MAP.get(script_key)
+    if not script_file:
+        log.warning(f"  ⏭ '{script_key}' sin script definido")
+        return
+    script_path = SCRIPTS / script_file
+    if not script_path.exists():
+        log.error(f"  ❌ No existe: {script_path}")
+        return
+
+    log.info(f"  ▶ {script_key}")
+    try:
+        result = subprocess.run(
+            [PYTHON, str(script_path)],
+            cwd=str(SCRIPTS),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        ok = result.returncode == 0
+        log.info(f"  {'✅' if ok else '❌'} {script_key} (rc={result.returncode})")
+        if not ok:
+            log.error(f"    stderr: {result.stderr[-300:]}")
+    except subprocess.TimeoutExpired:
+        log.error(f"  ⏱ Timeout: {script_key}")
+    except Exception as e:
+        log.error(f"  Error {script_key}: {e}")
+
+
+def check_schedule():
+    """Si es hora programada y no ha corrido aún, ejecuta todos los scripts."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    if now.hour not in SCHEDULE_HOURS:
+        return
+    if now.minute > 4:  # ventana de 5 min desde el inicio de la hora
+        return
+
+    slot = now.strftime("%Y-%m-%d_%H")
+    if slot in _ran_slots:
+        return
+
+    _ran_slots.add(slot)
+    log.info(f"⏰ Sync programado {now.strftime('%A %H:%M')} — {len(SCHEDULE_SCRIPTS)} scripts")
+    for key in SCHEDULE_SCRIPTS:
+        ejecutar_script(key)
+    log.info("⏰ Sync programado completado")
+
+
 def main():
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info(f"Revisando solicitudes cada 60 segundos")
+    log.info(f"Sync programado: Lun–Sáb {SCHEDULE_HOURS} h")
     log.info("=" * 50)
 
     while True:
         try:
+            check_schedule()
+
             # Buscar solicitudes pendientes
             pendientes = supa_get(
                 "sync_requests?status=eq.pending&order=requested_at.asc&limit=5"
