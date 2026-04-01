@@ -309,34 +309,54 @@ def sync_insights(token, days_back=3):
 
 # ─── Sync pixel events ──────────────────────────────────────────────
 def sync_pixel(token):
-    """Sync pixel event stats."""
+    """Sync pixel event stats.
+
+    The /stats endpoint returns hourly buckets:
+      { "data": [ { "start_time": "...", "aggregation": "event",
+                    "data": [ {"value": "PageView", "count": 820}, ... ] }, ... ] }
+    We aggregate all buckets into daily totals keyed by event name.
+    """
     log.info("Sincronizando eventos del pixel...")
     total = 0
+    today = datetime.now().strftime("%Y-%m-%d")
+    # Cover the last 3 days to catch any late-arriving events
+    since = int((datetime.now() - timedelta(days=3)).timestamp())
 
     for pixel_id in PIXEL_IDS:
         data = meta_get(
             f"{pixel_id}/stats",
-            {"aggregation": "event", "start_time": int((datetime.now() - timedelta(days=7)).timestamp())},
+            {"aggregation": "event", "start_time": since},
             token,
         )
         if not data or "data" not in data:
             log.warning(f"  No se pudieron obtener stats del pixel {pixel_id}")
             continue
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        for event in data["data"]:
+        # Aggregate counts per event across all hourly buckets
+        event_totals: dict[str, int] = {}
+        for bucket in data["data"]:
+            for item in bucket.get("data", []):
+                name = item.get("value", "unknown")
+                count = int(item.get("count", 0))
+                event_totals[name] = event_totals.get(name, 0) + count
+
+        if not event_totals:
+            log.info(f"  Pixel {pixel_id}: sin eventos en el período")
+            continue
+
+        for event_name, event_count in event_totals.items():
             row = {
                 "pixel_id": pixel_id,
-                "event_name": event.get("event", event.get("event_name", "unknown")),
-                "event_count": int(event.get("count", event.get("value", 0))),
+                "event_name": event_name,
+                "event_count": event_count,
                 "date": today,
             }
-            # Use upsert with the existing unique constraint (pixel_id, event_name, date)
             sb.table("meta_pixel_events").upsert(
                 row,
                 on_conflict="pixel_id,event_name,date",
             ).execute()
             total += 1
+            log.info(f"  {pixel_id} | {event_name}: {event_count}")
 
     log.info(f"  {total} eventos de pixel sincronizados")
     return total
