@@ -514,45 +514,63 @@ def _aggregate_posts_to_social_metricas():
     """Roll up meta_page_posts into social_metricas (daily Facebook row).
 
     Groups all posts by publish date and sums likes, comments, shares,
-    video views and weighted engagement rate. Upserts into social_metricas
-    so the Social module gets automatic Facebook data without manual entry.
+    video views. Also records the best-performing post of each day and
+    the page fan count. Upserts into social_metricas so the Social
+    module Dashboard gets automatic Facebook data without manual entry.
     """
     log.info("  Agregando posts en social_metricas...")
     try:
         rows = sb.table("meta_page_posts").select(
-            "created_time,reactions,comments,shares,video_views,impressions_unique,engaged_users"
+            "created_time,reactions,comments,shares,video_views,"
+            "impressions_unique,engaged_users,message,permalink_url"
         ).execute()
         if not rows.data:
             return
+
+        # Get page fan count from meta_config
+        fan_count = 0
+        try:
+            fc = sb.table("meta_config").select("value").eq("key", "page_fan_count").single().execute()
+            fan_count = int(fc.data["value"]) if fc.data else 0
+        except Exception:
+            pass
 
         daily: dict = {}
         for p in rows.data:
             ct = p.get("created_time", "")
             if not ct:
                 continue
-            day = ct[:10]  # YYYY-MM-DD
+            day = ct[:10]
             if day not in daily:
                 daily[day] = {"likes": 0, "comentarios": 0, "compartidos": 0,
-                               "views": 0, "reach": 0, "engaged": 0, "posts": 0}
+                               "views": 0, "reach": 0, "engaged": 0,
+                               "mejor_reactions": 0, "mejor_post": ""}
             d = daily[day]
-            d["likes"]       += int(p.get("reactions", 0) or 0)
+            likes = int(p.get("reactions", 0) or 0)
+            d["likes"]       += likes
             d["comentarios"] += int(p.get("comments", 0) or 0)
             d["compartidos"] += int(p.get("shares", 0) or 0)
             d["views"]       += int(p.get("video_views", 0) or 0)
             d["reach"]       += int(p.get("impressions_unique", 0) or 0)
             d["engaged"]     += int(p.get("engaged_users", 0) or 0)
-            d["posts"]       += 1
+            # Track best post of the day
+            if likes > d["mejor_reactions"]:
+                d["mejor_reactions"] = likes
+                msg = p.get("message", "") or ""
+                d["mejor_post"] = msg[:120] if msg else (p.get("permalink_url") or "")
 
         for day, d in daily.items():
             eng = round(d["engaged"] / d["reach"], 4) if d["reach"] > 0 else 0
             metricas_row = {
                 "fecha": day,
                 "plataforma": "facebook",
+                "seguidores": fan_count,
                 "likes": d["likes"],
                 "comentarios": d["comentarios"],
                 "compartidos": d["compartidos"],
                 "views": d["views"],
                 "engagement_rate": eng,
+                "mejor_post": d["mejor_post"],
                 "creado_en": datetime.now().isoformat(),
             }
             sb.table("social_metricas").upsert(
