@@ -1,11 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
-
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from '../../lib/supabase';
 
 const S = {
   page: { background: 'var(--cream)', minHeight: '100vh', padding: '28px 32px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text-primary)' },
