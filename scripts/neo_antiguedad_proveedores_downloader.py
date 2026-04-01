@@ -146,7 +146,7 @@ async def descargar():
         try:
             reporte_frame = iframe.locator("#ifReporte").content_frame
             await reporte_frame.wait_for_selector(
-                "button:has-text('Exportar a excel')", timeout=120_000
+                "button:has-text('Exportar a excel')", timeout=300_000
             )
             log.info("  Reporte generado, botón de exportar visible")
         except Exception:
@@ -158,7 +158,7 @@ async def descargar():
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         excel_path = DOWNLOAD_DIR / f"antiguedad_proveedores_{ts}.xlsx"
 
-        async with page.expect_download(timeout=120_000) as dl_info:
+        async with page.expect_download(timeout=300_000) as dl_info:
             await reporte_frame.get_by_role("button", name="Exportar a excel").click()
 
         dl = await dl_info.value
