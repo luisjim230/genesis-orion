@@ -364,12 +364,16 @@ def sync_pixel(token):
 
 
 # ─── Sync page posts (organic) ──────────────────────────────────────
-def sync_page_posts(token):
+def sync_page_posts(token, full=False):
     """Sync organic Facebook page posts and their insights.
 
-    Fetches posts from the last 90 days and pulls per-post insight metrics:
+    full=True  → desde 2025-01-01 (historial completo)
+    full=False → últimos 90 días (nightly/incremental)
+
+    Fetches posts and pulls per-post insight metrics:
     impressions, reach, reactions, comments, shares, saves, video views, clicks.
     Also flags which posts have an associated paid campaign.
+    After saving posts, aggregates daily totals into social_metricas.
     """
     log.info("Sincronizando publicaciones de la página...")
 
@@ -379,8 +383,12 @@ def sync_page_posts(token):
         log.warning("  page_id no configurado en meta_config — omitiendo sync de posts")
         return 0
 
-    # Fetch recent posts (last 90 days)
-    since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
+    from datetime import date as _date
+    if full:
+        since_ts = int(datetime(_date(2025, 1, 1).year, 1, 1).timestamp())
+        log.info("  Modo full: desde 2025-01-01")
+    else:
+        since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
     fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type}"
     data = meta_get(
         f"{page_id}/posts",
@@ -495,7 +503,65 @@ def sync_page_posts(token):
         total += 1
 
     log.info(f"  {total} publicaciones sincronizadas")
+
+    # ── Agregar en social_metricas (diario, plataforma=facebook) ──────
+    _aggregate_posts_to_social_metricas()
+
     return total
+
+
+def _aggregate_posts_to_social_metricas():
+    """Roll up meta_page_posts into social_metricas (daily Facebook row).
+
+    Groups all posts by publish date and sums likes, comments, shares,
+    video views and weighted engagement rate. Upserts into social_metricas
+    so the Social module gets automatic Facebook data without manual entry.
+    """
+    log.info("  Agregando posts en social_metricas...")
+    try:
+        rows = sb.table("meta_page_posts").select(
+            "created_time,reactions,comments,shares,video_views,impressions_unique,engaged_users"
+        ).execute()
+        if not rows.data:
+            return
+
+        daily: dict = {}
+        for p in rows.data:
+            ct = p.get("created_time", "")
+            if not ct:
+                continue
+            day = ct[:10]  # YYYY-MM-DD
+            if day not in daily:
+                daily[day] = {"likes": 0, "comentarios": 0, "compartidos": 0,
+                               "views": 0, "reach": 0, "engaged": 0, "posts": 0}
+            d = daily[day]
+            d["likes"]       += int(p.get("reactions", 0) or 0)
+            d["comentarios"] += int(p.get("comments", 0) or 0)
+            d["compartidos"] += int(p.get("shares", 0) or 0)
+            d["views"]       += int(p.get("video_views", 0) or 0)
+            d["reach"]       += int(p.get("impressions_unique", 0) or 0)
+            d["engaged"]     += int(p.get("engaged_users", 0) or 0)
+            d["posts"]       += 1
+
+        for day, d in daily.items():
+            eng = round(d["engaged"] / d["reach"], 4) if d["reach"] > 0 else 0
+            metricas_row = {
+                "fecha": day,
+                "plataforma": "facebook",
+                "likes": d["likes"],
+                "comentarios": d["comentarios"],
+                "compartidos": d["compartidos"],
+                "views": d["views"],
+                "engagement_rate": eng,
+                "creado_en": datetime.now().isoformat(),
+            }
+            sb.table("social_metricas").upsert(
+                metricas_row, on_conflict="fecha,plataforma"
+            ).execute()
+
+        log.info(f"    {len(daily)} días agregados en social_metricas")
+    except Exception as e:
+        log.warning(f"  Error agregando social_metricas: {e}")
 
 
 # ─── Sync audiences ─────────────────────────────────────────────────
@@ -591,7 +657,8 @@ def main():
         # ── Publicaciones orgánicas de la página ───────────────────────
         if mode in ("nightly", "backfill", "full_history", "posts"):
             try:
-                n = sync_page_posts(token)
+                full_posts = mode in ("full_history", "posts")
+                n = sync_page_posts(token, full=full_posts)
                 total += n
             except Exception as e:
                 log.error(f"Error sincronizando posts: {e}")
