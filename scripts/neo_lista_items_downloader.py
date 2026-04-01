@@ -116,28 +116,38 @@ def subir_a_supabase(excel_path):
         "Ultima venta":                 "ultima_venta",
         "Descripción":                  "descripcion",
         "Descripcion":                  "descripcion",
-        "Costo sin impuesto":           "costo_sin_imp",
-        "Costo sin impuestos":          "costo_sin_imp",
-        "Costo Sin Impuesto":           "costo_sin_imp",
-        "Moneda costo":                 "moneda_costo",
-        "Moneda Costo":                 "moneda_costo",
-        "Precio sin impuesto":          "precio_sin_imp",
-        "Precio sin impuestos":         "precio_sin_imp",
-        "Precio Sin Impuesto":          "precio_sin_imp",
-        "Precio con impuesto":          "precio_con_imp",
-        "Precio con impuestos":         "precio_con_imp",
-        "Precio Con Impuesto":          "precio_con_imp",
-        "Moneda precio":                "moneda_precio",
-        "Moneda Precio":                "moneda_precio",
-        "IVA":                          "iva",
-        "% IVA":                        "iva",
-        "Utilidad":                     "pct_utilidad",
-        "% Utilidad":                   "pct_utilidad",
-        "Existencias":                  "existencias",
-        "Activo":                       "activo",
-        "Descuento máximo":             "descuento_maximo",
-        "Descuento maximo":             "descuento_maximo",
-        "Descuento Máximo":             "descuento_maximo",
+        # Nombres exactos del Excel de NEO (verificados 2026-04-01)
+        "Costo unitario sin impuesto":                      "costo_sin_imp",
+        "Costo sin impuesto":                               "costo_sin_imp",
+        "Costo sin impuestos":                              "costo_sin_imp",
+        "Costo Sin Impuesto":                               "costo_sin_imp",
+        "Moneda del costo unitario sin impuesto":           "moneda_costo",
+        "Moneda costo":                                     "moneda_costo",
+        "Moneda Costo":                                     "moneda_costo",
+        "Precio unitario sin impuesto":                     "precio_sin_imp",
+        "Precio sin impuesto":                              "precio_sin_imp",
+        "Precio sin impuestos":                             "precio_sin_imp",
+        "Precio Sin Impuesto":                              "precio_sin_imp",
+        "Precio unitario con impuesto":                     "precio_con_imp",
+        "Precio con impuesto":                              "precio_con_imp",
+        "Precio con impuestos":                             "precio_con_imp",
+        "Precio Con Impuesto":                              "precio_con_imp",
+        "Moneda del precio unitario sin impuesto":          "moneda_precio",
+        "Moneda precio":                                    "moneda_precio",
+        "Moneda Precio":                                    "moneda_precio",
+        "IVA":                                              "iva",
+        "% IVA":                                            "iva",
+        "% utilidad":                                       "pct_utilidad",
+        "Utilidad":                                         "pct_utilidad",
+        "% Utilidad":                                       "pct_utilidad",
+        "Existencias":                                      "existencias",
+        "Activo":                                           "activo",
+        "Descuento Máximo":                                 "descuento_maximo",
+        "Descuento máximo":                                 "descuento_maximo",
+        "Descuento maximo":                                 "descuento_maximo",
+        "Fecha de registro":                                "fecha_registro",
+        "Fecha registro":                                   "fecha_registro",
+        "Fecha Registro":                                   "fecha_registro",
     }
 
     df = df.rename(columns=col_map)
@@ -294,28 +304,28 @@ async def main():
             except Exception:
                 pass
 
-            # ── 5. INVENTARIO → LISTA DE ÍTEMS ───────────────────────────────
-            log.info("Navegando: Inventario → Lista de ítems...")
-            await page.get_by_role("link", name="Inventario").click()
-            await page.wait_for_timeout(1500)
+            # ── 5. INVENTARIO → ÍTEMS ────────────────────────────────────────
+            log.info("Navegando: Inventario → Ítems...")
+            # Usar JS click para evitar problemas de viewport en headless
+            await page.evaluate("document.querySelector('[id=\"102000\"]')?.click()")
+            await page.wait_for_timeout(2500)
 
             iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
 
-            # Intentar varios selectores posibles para "Lista de ítems"
-            navigated = False
-            for link_text in [" Lista de ítems", "Lista de ítems", " Lista de Items", "Lista de Items"]:
-                try:
-                    link = iframe.get_by_role("link", name=link_text)
-                    if await link.count() > 0:
-                        await link.first.click()
-                        navigated = True
-                        log.info(f"  Navegado con '{link_text}'")
-                        break
-                except Exception:
-                    continue
-
-            if not navigated:
-                log.error("❌ No se encontró el link 'Lista de ítems' en el sidebar")
+            # El reporte "Lista de ítems" se llama "Ítems" en el sidebar de NEO
+            try:
+                items_link = iframe.locator("a").filter(has_text="Ítems").first
+                if await items_link.count() == 0:
+                    items_link = iframe.locator("a").filter(has_text="Items").first
+                await items_link.click()
+                log.info("  Navegado a Ítems ✅")
+            except Exception as e:
+                log.error(f"❌ No se encontró el link 'Ítems': {e}")
+                # Volcar links disponibles para diagnóstico
+                links = await iframe.locator("a").all()
+                for l in links[:30]:
+                    txt = (await l.inner_text()).strip()
+                    if txt: log.info(f"  Link disponible: {repr(txt)}")
                 return
 
             await page.wait_for_timeout(3000)
