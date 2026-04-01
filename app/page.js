@@ -339,6 +339,25 @@ export default function DashboardPage() {
         const ventasAnterior   = infPrev.ventas
         const utilidadAnterior = infPrev.utilidad
 
+        // Valor inventario desde neo_lista_items (solo existencias > 0)
+        let valorInventario = 0
+        try {
+          const { data: fcInv } = await supabase
+            .from('neo_lista_items')
+            .select('fecha_carga')
+            .order('fecha_carga', { ascending: false })
+            .limit(1)
+          if (fcInv?.[0]?.fecha_carga) {
+            const { data: invRows } = await supabase
+              .from('neo_lista_items')
+              .select('existencias, costo_sin_imp')
+              .eq('fecha_carga', fcInv[0].fecha_carga)
+              .gt('existencias', 0)
+            valorInventario = (invRows || []).reduce((s, r) =>
+              s + (parseFloat(r.existencias) || 0) * (parseFloat(r.costo_sin_imp) || 0), 0)
+          }
+        } catch(e) { /* no bloquear si falla */ }
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -354,6 +373,7 @@ export default function DashboardPage() {
           utilidadMes,
           ventasAnterior,
           utilidadAnterior,
+          valorInventario,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -456,6 +476,14 @@ export default function DashboardPage() {
           value={fmt_crc(kpis.ventasAnterior)}
           sub={`Utilidad: ${fmt_crc(kpis.utilidadAnterior)}`}
           color="#718096"
+          loading={loading}
+        />
+        <KpiCard
+          icon="🏪"
+          label="Valor inventario"
+          value={fmt_crc(kpis.valorInventario)}
+          sub="a costo · solo existencias +"
+          color="#8B5E3C"
           loading={loading}
         />
       </div>

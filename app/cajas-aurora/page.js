@@ -65,12 +65,15 @@ export default function CajasAurora() {
   const fetchRegistros = useCallback(async () => {
     setLoading(true)
     const desde = `${filtroAnio}-${String(filtroMes + 1).padStart(2,'0')}-01`
-    const hasta = `${filtroAnio}-${String(filtroMes + 1).padStart(2,'0')}-31`
+    // Primer día del mes siguiente (evita fechas inválidas tipo "2026-04-31")
+    const nextMes  = filtroMes === 11 ? 0 : filtroMes + 1
+    const nextAnio = filtroMes === 11 ? filtroAnio + 1 : filtroAnio
+    const hasta = `${nextAnio}-${String(nextMes + 1).padStart(2,'0')}-01`
     const { data, error } = await supabase
       .from('cajas_aurora')
       .select('*')
       .gte('fecha', desde)
-      .lte('fecha', hasta)
+      .lt('fecha', hasta)
       .order('fecha', { ascending: false })
     if (!error) setRegistros(data || [])
     setLoading(false)
