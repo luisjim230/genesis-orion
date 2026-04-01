@@ -262,26 +262,37 @@ export default function CampanasPage() {
           <div style={{ fontSize: '2rem', marginBottom: 12 }}>⏳</div>
           Cargando datos de campañas...
         </div>
-      ) : insights.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 12 }}>📭</div>
-          No hay datos para este período. Ejecutá el sync (backfill) para cargar datos históricos.
-        </div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <div style={S.kpiGrid}>
-            <KpiCard icon="💰" label="Gasto total" value={fmt$(totalSpend)} accent="orange" />
-            <KpiCard icon="💬" label="Mensajes WA" value={fmtN(totalMsgs)} sub="KPI principal" accent="green" />
-            <KpiCard icon="📊" label="Costo / Mensaje" value={fmt$(costoMsg)} sub={costoMsg < 0.50 ? 'Dentro del objetivo' : 'Sobre objetivo ($0.50)'} accent={costoMsg < 0.50 ? 'teal' : 'red'} />
-            <KpiCard icon="🗣️" label="Conversaciones" value={fmtN(totalConvos)} accent="blue" />
-            <KpiCard icon="🛒" label="Compras web" value={fmtN(totalPurchases)} sub={`${fmt$(totalPurchaseValue)} (accidental)`} accent="purple" />
-            <KpiCard icon="📈" label="ROAS" value={`${roas.toFixed(1)}x`} sub={roas >= 3 ? 'Positivo' : 'Mejorable'} accent={roas >= 3 ? 'green' : 'orange'} />
-          </div>
+          {/* ── KPIs: solo cuando hay insights ─────────────────────── */}
+          {insights.length > 0 && (
+            <>
+              <div style={S.kpiGrid}>
+                <KpiCard icon="💰" label="Gasto total" value={fmt$(totalSpend)} accent="orange" />
+                <KpiCard icon="💬" label="Mensajes WA" value={fmtN(totalMsgs)} sub="KPI principal" accent="green" />
+                <KpiCard icon="📊" label="Costo / Mensaje" value={fmt$(costoMsg)} sub={costoMsg < 0.50 ? 'Dentro del objetivo' : 'Sobre objetivo ($0.50)'} accent={costoMsg < 0.50 ? 'teal' : 'red'} />
+                <KpiCard icon="🗣️" label="Conversaciones" value={fmtN(totalConvos)} accent="blue" />
+                <KpiCard icon="🛒" label="Compras web" value={fmtN(totalPurchases)} sub={`${fmt$(totalPurchaseValue)} (accidental)`} accent="purple" />
+                <KpiCard icon="📈" label="ROAS" value={`${roas.toFixed(1)}x`} sub={roas >= 3 ? 'Positivo' : 'Mejorable'} accent={roas >= 3 ? 'green' : 'orange'} />
+              </div>
+              <hr style={S.divider} />
+            </>
+          )}
 
-          <hr style={S.divider} />
+          {/* ── Banner cuando no hay insights aún ──────────────────── */}
+          {insights.length === 0 && (
+            <div style={{ ...S.card, background: '#FFFBEB', borderColor: '#F6E05E55', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', marginBottom: 20 }}>
+              <span style={{ fontSize: '1.4rem' }}>⏳</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#744210' }}>Sincronización de métricas en progreso</div>
+                <div style={{ fontSize: '0.78rem', color: '#92400E', marginTop: 2 }}>
+                  Los datos de gasto, mensajes y conversiones aparecerán aquí cuando termine el backfill. Las campañas ya están sincronizadas.
+                </div>
+              </div>
+            </div>
+          )}
 
-          {/* Alerts */}
+          {/* ── Alertas — siempre visibles ─────────────────────────── */}
           {alerts.length > 0 && (
             <>
               <h2 style={S.section}>🚨 Alertas y estado</h2>
@@ -291,64 +302,101 @@ export default function CampanasPage() {
             </>
           )}
 
-          {/* Campaigns table */}
-          <h2 style={S.section}>📋 Campañas del período</h2>
-          <p style={S.subCap}>{campList.length} campañas con actividad en los últimos {periodo} días</p>
+          {/* ── Tabla principal: insights agrupados si existen ─────── */}
+          {insights.length > 0 && (
+            <>
+              <h2 style={S.section}>📋 Campañas del período</h2>
+              <p style={S.subCap}>{campList.length} campañas con actividad en los últimos {periodo} días</p>
+              <div style={{ ...S.card, padding: 0, overflow: 'auto', marginBottom: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ background: '#FAFAFA', borderBottom: '2px solid var(--border-soft)' }}>
+                      <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Campaña</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Gasto</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Msgs WA</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>$/Msg</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Convos</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Compras</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Valor</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Reacciones</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>CTR</th>
+                      <th style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campList.map((c, i) => {
+                      const costoM = c.messaging_connections > 0 ? c.spend / c.messaging_connections : null;
+                      const ctr = c.impressions > 0 ? (c.clicks / c.impressions * 100) : 0;
+                      return (
+                        <tr key={c.campaign_id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                          <td style={{ padding: '10px 14px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{c.campaign_name}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmt$(c.spend)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: c.messaging_connections > 0 ? '#38A169' : 'var(--text-muted)' }}>{fmtN(c.messaging_connections)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right', color: costoM != null && costoM < 0.50 ? '#38A169' : costoM != null ? '#E53E3E' : 'var(--text-muted)' }}>{costoM != null ? fmt$(costoM) : '—'}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.conversations_started)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.purchases)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{c.purchase_value > 0 ? fmt$(c.purchase_value) : '—'}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.post_reactions)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtPct(ctr)}</td>
+                          <td style={{ padding: '10px 10px', textAlign: 'center' }}><SemaforoTag status={calcSemaforo(c)} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <hr style={S.divider} />
+            </>
+          )}
 
+          {/* ── Tabla de campañas desde meta_campaigns (siempre) ───── */}
+          <h2 style={S.section}>📂 Todas las campañas</h2>
+          <p style={S.subCap}>{campaigns.length} campañas sincronizadas desde Meta Ads</p>
           <div style={{ ...S.card, padding: 0, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '2px solid var(--border-soft)' }}>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Campaña</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Gasto</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Msgs WA</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>$/Msg</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Convos</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Compras</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Valor</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Reacciones</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Guardados</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>CTR</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Nombre</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Objetivo</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Presupuesto/día</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Creada</th>
                 </tr>
               </thead>
               <tbody>
-                {campList.map((c, i) => {
-                  const costoM = c.messaging_connections > 0 ? c.spend / c.messaging_connections : null;
-                  const ctr = c.impressions > 0 ? (c.clicks / c.impressions * 100) : 0;
-                  return (
-                    <tr key={c.campaign_id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
-                      <td style={{ padding: '10px 14px', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{c.campaign_name}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmt$(c.spend)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 600, color: c.messaging_connections > 0 ? '#38A169' : 'var(--text-muted)' }}>{fmtN(c.messaging_connections)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right', color: costoM != null && costoM < 0.50 ? '#38A169' : costoM != null ? '#E53E3E' : 'var(--text-muted)' }}>{costoM != null ? fmt$(costoM) : '—'}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.conversations_started)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.purchases)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{c.purchase_value > 0 ? fmt$(c.purchase_value) : '—'}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.post_reactions)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtN(c.post_saves)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'right' }}>{fmtPct(ctr)}</td>
-                      <td style={{ padding: '10px 10px', textAlign: 'center' }}><SemaforoTag status={calcSemaforo(c)} /></td>
-                    </tr>
-                  );
-                })}
+                {campaigns.map((c, i) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                    <td style={{ padding: '10px 14px', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{c.name}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{c.objective?.replace(/_/g, ' ') || '—'}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <span style={{ ...S.badge,
+                        background: c.status === 'ACTIVE' ? '#C6F6D5' : c.status === 'PAUSED' ? '#FEFCBF' : '#EDF2F7',
+                        color: c.status === 'ACTIVE' ? '#22543D' : c.status === 'PAUSED' ? '#744210' : '#718096',
+                      }}>{c.status === 'ACTIVE' ? 'Activa' : c.status === 'PAUSED' ? 'Pausada' : c.status || '—'}</span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{c.daily_budget ? fmt$(c.daily_budget) : '—'}</td>
+                    <td style={{ padding: '10px 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {c.created_time ? new Date(c.created_time).toLocaleDateString('es-CR', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {campaigns.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>Sin campañas sincronizadas</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
           <hr style={S.divider} />
 
-          {/* Pixel Status */}
+          {/* ── Pixel — siempre visible ────────────────────────────── */}
           <h2 style={S.section}>🔎 Estado del Pixel</h2>
-          <p style={S.subCap}>Eventos capturados por el pixel principal (2872277373015010)</p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
+          <p style={S.subCap}>Eventos del pixel principal · Luis Jimenez DEPJIM Pixel</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
             {(() => {
               const mainPixel = pixelEvents.filter(e => e.pixel_id === '2872277373015010');
-              const eventNames = ['PageView', 'AddToCart', 'InitiateCheckout', 'Purchase', 'Contact', 'ViewContent', 'Lead'];
-              return eventNames.map(name => {
-                const events = mainPixel.filter(e => e.event_name === name);
-                const total = events.reduce((a, e) => a + (e.event_count || 0), 0);
+              return ['PageView', 'AddToCart', 'InitiateCheckout', 'Purchase', 'Contact', 'ViewContent', 'Lead'].map(name => {
+                const total = mainPixel.filter(e => e.event_name === name).reduce((a, e) => a + (e.event_count || 0), 0);
                 const ok = total > 10;
                 const missing = total === 0;
                 return (
@@ -366,7 +414,7 @@ export default function CampanasPage() {
             })()}
           </div>
 
-          {/* Sync log */}
+          {/* ── Sync log ───────────────────────────────────────────── */}
           <hr style={S.divider} />
           <h2 style={S.section}>🔄 Últimas sincronizaciones</h2>
           <p style={S.subCap}>Registro de las últimas ejecuciones del sync</p>
@@ -378,13 +426,13 @@ export default function CampanasPage() {
                   <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Tipo</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)' }}>Estado</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-secondary)' }}>Registros</th>
-                  <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Error</th>
+                  <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Detalle</th>
                 </tr>
               </thead>
               <tbody>
                 {syncLog.map((s, i) => (
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--border-soft)', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
-                    <td style={{ padding: '8px 14px' }}>{new Date(s.started_at).toLocaleDateString('es-CR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td style={{ padding: '8px 14px' }}>{new Date(s.started_at).toLocaleDateString('es-CR', { day: 'numeric', month: 'short' })} {new Date(s.started_at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ padding: '8px 10px' }}>{s.sync_type}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                       <span style={{ ...S.badge, background: s.status === 'ok' ? '#C6F6D5' : s.status === 'parcial' ? '#FEFCBF' : '#FED7D7', color: s.status === 'ok' ? '#22543D' : s.status === 'parcial' ? '#744210' : '#9B2C2C' }}>
@@ -392,7 +440,7 @@ export default function CampanasPage() {
                       </span>
                     </td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtN(s.records_synced)}</td>
-                    <td style={{ padding: '8px 14px', color: '#E53E3E', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.error_message || '—'}</td>
+                    <td style={{ padding: '8px 14px', color: s.error_message ? '#E53E3E' : 'var(--text-muted)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.error_message || '✓ Sin errores'}</td>
                   </tr>
                 ))}
                 {syncLog.length === 0 && (
