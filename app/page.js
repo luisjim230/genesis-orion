@@ -34,7 +34,13 @@ const GLASS = {
 function fmt_usd(val) {
   const n = parseFloat(val)
   if (isNaN(n)) return '—'
-  return '$' + n.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  // Compact for large amounts to avoid card overflow
+  if (abs >= 1_000_000) return `${sign}$${(abs/1_000_000).toFixed(1)}M`
+  if (abs >= 10_000)    return `${sign}$${Math.round(abs/1_000)}K`
+  if (abs >= 1_000)     return `${sign}$${(abs/1_000).toFixed(1)}K`
+  return `${sign}$${abs.toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function fmt_crc(val) {
@@ -46,6 +52,15 @@ function fmt_crc(val) {
   if (abs >= 1_000_000) return `${sign}₡${(abs/1_000_000).toFixed(1)}M`
   if (abs >= 1_000) return `${sign}₡${(abs/1_000).toFixed(0)}K`
   return `${sign}₡${abs.toFixed(0)}`
+}
+
+function currentMonth() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function prevMonth() {
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function KpiCard({ icon, label, value, sub, color, loading }) {
@@ -295,6 +310,16 @@ export default function DashboardPage() {
           })
         })
 
+        const [{ data: ventasActual }, { data: ventasPrev }] = await Promise.all([
+          supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() }),
+          supabase.rpc('comercial_ventas_vendedor', { p_mes: prevMonth() }),
+        ])
+        const Nv = v => parseFloat(v) || 0
+        const ventasMes      = (ventasActual || []).reduce((s, r) => s + Nv(r.ventas_mes),       0)
+        const utilidadMes    = (ventasActual || []).reduce((s, r) => s + Nv(r.utilidad_colones), 0)
+        const ventasAnterior = (ventasPrev   || []).reduce((s, r) => s + Nv(r.ventas_mes),       0)
+        const utilidadAnterior = (ventasPrev || []).reduce((s, r) => s + Nv(r.utilidad_colones), 0)
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -306,6 +331,10 @@ export default function DashboardPage() {
           totalBancosUSD,
           importTotalUSD,
           importPorPagarUSD,
+          ventasMes,
+          utilidadMes,
+          ventasAnterior,
+          utilidadAnterior,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -348,7 +377,10 @@ export default function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
         <KpiCard icon="🚢" label="Contenedores"   value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"   color="#0284c7" loading={loading} />
-        <KpiCard icon="✨" label="Tareas"         value={kpis.tareasPendientes ?? '—'}    sub="pendientes hoy"        color="#7c3aed" loading={loading} />
+        <KpiCard icon="✨" label="Tareas"
+          value={(kpis.tareasPendientes ?? 0) + recurrentesHoy.length}
+          sub={`${kpis.tareasPendientes ?? 0} activas · ${recurrentesHoy.length} recurrentes hoy`}
+          color="#7c3aed" loading={loading} />
         <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
         <KpiCard icon="📥" label="Por cobrar"     value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"    color="#0d9488" loading={loading} />
         <KpiCard
@@ -389,6 +421,22 @@ export default function DashboardPage() {
           value={fmt_usd(kpis.importPorPagarUSD)}
           sub="pendiente de pago"
           color="#f59e0b"
+          loading={loading}
+        />
+        <KpiCard
+          icon="📈"
+          label="Ventas del mes"
+          value={fmt_crc(kpis.ventasMes)}
+          sub={`Utilidad: ${fmt_crc(kpis.utilidadMes)}`}
+          color="#38A169"
+          loading={loading}
+        />
+        <KpiCard
+          icon="📅"
+          label="Mes anterior"
+          value={fmt_crc(kpis.ventasAnterior)}
+          sub={`Utilidad: ${fmt_crc(kpis.utilidadAnterior)}`}
+          color="#718096"
           loading={loading}
         />
       </div>
