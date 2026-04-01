@@ -206,7 +206,7 @@ export default function DashboardPage() {
           .select('*')
           .eq('archivado', false)
           .order('eta', { ascending: true })
-          .limit(10)
+          .limit(50)
 
         const { data: tareasData } = await supabase
           .from('vega_tareas')
@@ -310,15 +310,34 @@ export default function DashboardPage() {
           })
         })
 
-        const [{ data: ventasActual }, { data: ventasPrev }] = await Promise.all([
-          supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() }),
-          supabase.rpc('comercial_ventas_vendedor', { p_mes: prevMonth() }),
+        // Ventas desde neo_informe_ventas_vendedor (ventas netas reales, última carga por mes)
+        async function sumarInforme(mes) {
+          const { data: fc } = await supabase
+            .from('neo_informe_ventas_vendedor')
+            .select('fecha_carga')
+            .eq('periodo_reporte', mes)
+            .order('fecha_carga', { ascending: false })
+            .limit(1)
+          if (!fc?.length) return { ventas: 0, utilidad: 0 }
+          const { data: rows } = await supabase
+            .from('neo_informe_ventas_vendedor')
+            .select('ventas_netas, utilidad')
+            .eq('periodo_reporte', mes)
+            .eq('fecha_carga', fc[0].fecha_carga)
+          const Nv = v => parseFloat(v) || 0
+          return {
+            ventas:   (rows || []).reduce((s, r) => s + Nv(r.ventas_netas), 0),
+            utilidad: (rows || []).reduce((s, r) => s + Nv(r.utilidad),     0),
+          }
+        }
+        const [infActual, infPrev] = await Promise.all([
+          sumarInforme(currentMonth()),
+          sumarInforme(prevMonth()),
         ])
-        const Nv = v => parseFloat(v) || 0
-        const ventasMes      = (ventasActual || []).reduce((s, r) => s + Nv(r.ventas_mes),       0)
-        const utilidadMes    = (ventasActual || []).reduce((s, r) => s + Nv(r.utilidad_colones), 0)
-        const ventasAnterior = (ventasPrev   || []).reduce((s, r) => s + Nv(r.ventas_mes),       0)
-        const utilidadAnterior = (ventasPrev || []).reduce((s, r) => s + Nv(r.utilidad_colones), 0)
+        const ventasMes        = infActual.ventas
+        const utilidadMes      = infActual.utilidad
+        const ventasAnterior   = infPrev.ventas
+        const utilidadAnterior = infPrev.utilidad
 
         setKpis({
           stockCritico: criticos.length,
