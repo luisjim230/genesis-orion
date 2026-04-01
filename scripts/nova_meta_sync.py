@@ -363,6 +363,141 @@ def sync_pixel(token):
     return total
 
 
+# ─── Sync page posts (organic) ──────────────────────────────────────
+def sync_page_posts(token):
+    """Sync organic Facebook page posts and their insights.
+
+    Fetches posts from the last 90 days and pulls per-post insight metrics:
+    impressions, reach, reactions, comments, shares, saves, video views, clicks.
+    Also flags which posts have an associated paid campaign.
+    """
+    log.info("Sincronizando publicaciones de la página...")
+
+    page_id_res = sb.table("meta_config").select("value").eq("key", "page_id").single().execute()
+    page_id = page_id_res.data["value"] if page_id_res.data else None
+    if not page_id:
+        log.warning("  page_id no configurado en meta_config — omitiendo sync de posts")
+        return 0
+
+    # Fetch recent posts (last 90 days)
+    since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
+    fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type}"
+    data = meta_get(
+        f"{page_id}/posts",
+        {"fields": fields, "since": since_ts, "limit": 100},
+        token,
+    )
+    if not data or "data" not in data:
+        log.warning("  No se pudieron obtener publicaciones de la página")
+        return 0
+
+    posts = data["data"]
+    # Paginate if needed
+    while data.get("paging", {}).get("next"):
+        try:
+            r = requests.get(data["paging"]["next"], timeout=60)
+            data = r.json() if r.status_code == 200 else {}
+            posts.extend(data.get("data", []))
+        except Exception:
+            break
+
+    log.info(f"  {len(posts)} publicaciones encontradas")
+
+    # Get campaign names to flag which posts were pauteadas
+    paid_names = set()
+    try:
+        campaigns = sb.table("meta_campaigns").select("name").execute()
+        paid_names = {c["name"].lower().strip() for c in (campaigns.data or [])}
+    except Exception:
+        pass
+
+    # Insight metrics to fetch per post
+    insight_metrics = ",".join([
+        "post_impressions",
+        "post_impressions_unique",
+        "post_engaged_users",
+        "post_reactions_by_type_total",
+        "post_clicks_by_type",
+        "post_negative_feedback",
+        "post_activity_by_action_type",
+        "post_video_views",
+        "post_video_views_organic",
+    ])
+
+    total = 0
+    for post in posts:
+        post_id = post["id"]
+        created = post.get("created_time")
+        message = post.get("message", post.get("story", ""))
+        attachment = post.get("attachments", {}).get("data", [{}])[0]
+        post_type = attachment.get("type", "status")
+
+        # Fetch insights for this post
+        ins_data = meta_get(f"{post_id}/insights", {"metric": insight_metrics, "period": "lifetime"}, token)
+        metrics = {}
+        if ins_data and "data" in ins_data:
+            for m in ins_data["data"]:
+                metrics[m["name"]] = m.get("values", [{}])[-1].get("value", 0)
+
+        # Parse reactions (comes as dict: {"like": 10, "love": 5, ...})
+        reactions_raw = metrics.get("post_reactions_by_type_total", 0)
+        reactions = sum(reactions_raw.values()) if isinstance(reactions_raw, dict) else int(reactions_raw or 0)
+
+        # Parse clicks (dict: {"link click": 5, "photo view": 3, ...})
+        clicks_raw = metrics.get("post_clicks_by_type", 0)
+        clicks = sum(clicks_raw.values()) if isinstance(clicks_raw, dict) else int(clicks_raw or 0)
+
+        # Parse activity (shares, saves, comments)
+        activity_raw = metrics.get("post_activity_by_action_type", {})
+        shares = int(activity_raw.get("share", 0)) if isinstance(activity_raw, dict) else 0
+        saves = int(activity_raw.get("save", 0)) if isinstance(activity_raw, dict) else 0
+        comments = int(activity_raw.get("comment", 0)) if isinstance(activity_raw, dict) else 0
+
+        impressions = int(metrics.get("post_impressions", 0) or 0)
+        reach = int(metrics.get("post_impressions_unique", 0) or 0)
+        engaged = int(metrics.get("post_engaged_users", 0) or 0)
+        video_views = int(metrics.get("post_video_views", 0) or 0)
+        video_organic = int(metrics.get("post_video_views_organic", 0) or 0)
+        negative = int(metrics.get("post_negative_feedback", 0) or 0)
+
+        # Engagement rate = engaged / reach
+        eng_rate = round(engaged / reach, 4) if reach > 0 else 0
+
+        # Flag if post title matches a campaign name (rough heuristic)
+        has_paid = any(w in message.lower() for w in paid_names) if message else False
+
+        row = {
+            "id": post_id,
+            "page_id": page_id,
+            "message": message[:2000] if message else None,
+            "created_time": created,
+            "post_type": post_type,
+            "permalink_url": post.get("permalink_url"),
+            "full_picture": post.get("full_picture"),
+            "impressions": impressions,
+            "impressions_unique": reach,
+            "engaged_users": engaged,
+            "reactions": reactions,
+            "comments": comments,
+            "shares": shares,
+            "saves": saves,
+            "video_views": video_views,
+            "video_views_organic": video_organic,
+            "clicks": clicks,
+            "negative_feedback": negative,
+            "engagement_rate": eng_rate,
+            "has_paid_campaign": has_paid,
+            "synced_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+
+        sb.table("meta_page_posts").upsert(row, on_conflict="id").execute()
+        total += 1
+
+    log.info(f"  {total} publicaciones sincronizadas")
+    return total
+
+
 # ─── Sync audiences ─────────────────────────────────────────────────
 def sync_audiences(token):
     """Sync custom audiences. Uses approximate_count_lower_bound since
@@ -452,6 +587,15 @@ def main():
             except Exception as e:
                 log.error(f"Error sincronizando campañas: {e}")
                 errors.append(f"campaigns: {e}")
+
+        # ── Publicaciones orgánicas de la página ───────────────────────
+        if mode in ("nightly", "backfill", "full_history", "posts"):
+            try:
+                n = sync_page_posts(token)
+                total += n
+            except Exception as e:
+                log.error(f"Error sincronizando posts: {e}")
+                errors.append(f"posts: {e}")
 
         # ── Audiencias ─────────────────────────────────────────────────
         if mode in ("nightly", "backfill", "full_history"):
