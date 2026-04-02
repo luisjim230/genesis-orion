@@ -8,6 +8,8 @@ Modos:
   campaigns — solo metadata de campañas y adsets
   insights  — solo insights (últimos 3 días)
   pixel     — solo eventos del pixel
+  posts     — publicaciones de Facebook e Instagram (historial completo)
+  instagram — solo publicaciones de Instagram (historial completo)
 
 Uso:
   python nova_meta_sync.py [nightly|backfill|campaigns|insights|pixel]
@@ -495,12 +497,12 @@ def sync_page_posts(token, full=False):
     log.info(f"  {total} publicaciones sincronizadas")
 
     # ── Agregar en social_metricas (diario, plataforma=facebook) ──────
-    _aggregate_posts_to_social_metricas()
+    _aggregate_posts_to_social_metricas(fb_page_id=page_id)
 
     return total
 
 
-def _aggregate_posts_to_social_metricas():
+def _aggregate_posts_to_social_metricas(fb_page_id=None):
     """Roll up meta_page_posts into social_metricas (daily Facebook row).
 
     Groups all posts by publish date and sums likes, comments, shares,
@@ -510,10 +512,13 @@ def _aggregate_posts_to_social_metricas():
     """
     log.info("  Agregando posts en social_metricas...")
     try:
-        rows = sb.table("meta_page_posts").select(
+        q = sb.table("meta_page_posts").select(
             "created_time,reactions,comments,shares,video_views,"
             "impressions_unique,engaged_users,message,permalink_url"
-        ).execute()
+        )
+        if fb_page_id:
+            q = q.eq("page_id", fb_page_id)
+        rows = q.execute()
         if not rows.data:
             return
 
@@ -570,6 +575,190 @@ def _aggregate_posts_to_social_metricas():
         log.info(f"    {len(daily)} días agregados en social_metricas")
     except Exception as e:
         log.warning(f"  Error agregando social_metricas: {e}")
+
+
+# ─── Sync Instagram posts ───────────────────────────────────────────
+def sync_instagram_posts(token, full=False):
+    """Sync Instagram Business account media into meta_page_posts.
+
+    full=True  → desde 2025-01-01 (historial completo)
+    full=False → últimos 90 días (nightly/incremental)
+
+    Campos disponibles con instagram_basic:
+      like_count, comments_count, media_type, permalink, caption, timestamp
+    (instagram_manage_insights no está habilitado → sin impresiones/reach/saved)
+    """
+    log.info("Sincronizando publicaciones de Instagram...")
+
+    # ── Obtener page token y IG account ID ────────────────────────────
+    page_id_res = sb.table("meta_config").select("value").eq("key", "page_id").single().execute()
+    page_id = page_id_res.data["value"] if page_id_res.data else None
+    if not page_id:
+        log.warning("  page_id no configurado — omitiendo sync Instagram")
+        return 0
+
+    page_token = token
+    ig_id = None
+    try:
+        r = requests.get(
+            f"{META_BASE}/{page_id}",
+            params={"fields": "access_token,instagram_business_account", "access_token": token},
+            timeout=30,
+        )
+        data = r.json()
+        page_token = data.get("access_token", token)
+        ig_id = data.get("instagram_business_account", {}).get("id")
+    except Exception as e:
+        log.warning(f"  Error obteniendo page token/IG ID: {e}")
+
+    if not ig_id:
+        log.warning("  No hay Instagram Business Account vinculado a la página")
+        return 0
+
+    # Guardar/actualizar ig_id en meta_config para referencia
+    try:
+        sb.table("meta_config").upsert(
+            {"key": "instagram_business_account_id", "value": ig_id},
+            on_conflict="key"
+        ).execute()
+    except Exception:
+        pass
+
+    # ── Follower count ─────────────────────────────────────────────────
+    followers = 0
+    try:
+        r = requests.get(
+            f"{META_BASE}/{ig_id}",
+            params={"fields": "followers_count,username", "access_token": page_token},
+            timeout=30,
+        )
+        ig_info = r.json()
+        followers = int(ig_info.get("followers_count", 0) or 0)
+        log.info(f"  @{ig_info.get('username')} — {followers:,} seguidores")
+    except Exception as e:
+        log.warning(f"  No se pudo obtener info de IG: {e}")
+
+    # ── Paginar medios ─────────────────────────────────────────────────
+    from datetime import date as _date
+    since_ts = None
+    if full:
+        since_ts = int(datetime(_date(2025, 1, 1).year, 1, 1).timestamp())
+        log.info("  Modo full: desde 2025-01-01")
+    else:
+        since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
+
+    fields = "id,caption,timestamp,media_type,like_count,comments_count,permalink,thumbnail_url,media_url"
+    params = {"fields": fields, "limit": 100, "access_token": page_token}
+    if since_ts:
+        params["since"] = since_ts
+
+    posts = []
+    url = f"{META_BASE}/{ig_id}/media"
+    while url:
+        try:
+            r = requests.get(url, params=params, timeout=90)
+            data = r.json()
+            params = None  # URL siguiente ya tiene todo
+            if "error" in data:
+                log.error(f"  Error IG media: {data['error']}")
+                break
+            posts.extend(data.get("data", []))
+            url = data.get("paging", {}).get("next")
+        except Exception as e:
+            log.error(f"  Error fetching IG media: {e}")
+            break
+
+    log.info(f"  {len(posts)} publicaciones encontradas en Instagram")
+
+    # ── Guardar en meta_page_posts ─────────────────────────────────────
+    total = 0
+    for post in posts:
+        row = {
+            "id": post["id"],
+            "page_id": ig_id,
+            "message": (post.get("caption") or "")[:2000] or None,
+            "created_time": post.get("timestamp"),
+            "post_type": (post.get("media_type") or "IMAGE").lower(),
+            "permalink_url": post.get("permalink"),
+            "full_picture": post.get("thumbnail_url") or post.get("media_url"),
+            "impressions": 0,
+            "impressions_unique": 0,
+            "engaged_users": 0,
+            "reactions": int(post.get("like_count", 0) or 0),
+            "comments": int(post.get("comments_count", 0) or 0),
+            "shares": 0,
+            "saves": 0,
+            "video_views": 0,
+            "video_views_organic": 0,
+            "clicks": 0,
+            "negative_feedback": 0,
+            "engagement_rate": 0,
+            "has_paid_campaign": False,
+            "synced_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+        try:
+            sb.table("meta_page_posts").upsert(row, on_conflict="id").execute()
+            total += 1
+        except Exception as e:
+            log.warning(f"  Post IG {post['id']} ignorado: {e}")
+
+    log.info(f"  {total} publicaciones de Instagram sincronizadas")
+
+    # ── Agregar en social_metricas (plataforma=instagram) ─────────────
+    _aggregate_ig_to_social_metricas(ig_id, followers)
+
+    return total
+
+
+def _aggregate_ig_to_social_metricas(ig_id, followers_count):
+    """Agrega posts de Instagram en social_metricas por día."""
+    log.info("  Agregando Instagram en social_metricas...")
+    try:
+        rows = sb.table("meta_page_posts").select(
+            "created_time,reactions,comments,message,permalink_url"
+        ).eq("page_id", ig_id).execute()
+
+        if not rows.data:
+            log.info("    Sin posts de Instagram para agregar")
+            return
+
+        daily: dict = {}
+        for p in rows.data:
+            ct = p.get("created_time", "")
+            if not ct:
+                continue
+            day = ct[:10]
+            if day not in daily:
+                daily[day] = {"likes": 0, "comentarios": 0,
+                              "mejor_reactions": 0, "mejor_post": ""}
+            d = daily[day]
+            likes = int(p.get("reactions", 0) or 0)
+            d["likes"] += likes
+            d["comentarios"] += int(p.get("comments", 0) or 0)
+            if likes > d["mejor_reactions"]:
+                d["mejor_reactions"] = likes
+                msg = p.get("message", "") or ""
+                d["mejor_post"] = msg[:120] if msg else (p.get("permalink_url") or "")
+
+        for day, d in daily.items():
+            row = {
+                "fecha": day,
+                "plataforma": "instagram",
+                "seguidores": followers_count,
+                "likes": d["likes"],
+                "comentarios": d["comentarios"],
+                "compartidos": 0,
+                "views": 0,
+                "engagement_rate": 0,
+                "mejor_post": d["mejor_post"],
+                "creado_en": datetime.now().isoformat(),
+            }
+            sb.table("social_metricas").upsert(row, on_conflict="fecha,plataforma").execute()
+
+        log.info(f"    {len(daily)} días de Instagram agregados en social_metricas")
+    except Exception as e:
+        log.warning(f"  Error agregando Instagram social_metricas: {e}")
 
 
 # ─── Sync audiences ─────────────────────────────────────────────────
@@ -671,6 +860,16 @@ def main():
             except Exception as e:
                 log.error(f"Error sincronizando posts: {e}")
                 errors.append(f"posts: {e}")
+
+        # ── Publicaciones de Instagram ──────────────────────────────────
+        if mode in ("nightly", "backfill", "full_history", "posts", "instagram"):
+            try:
+                full_ig = mode in ("full_history", "posts", "instagram")
+                n = sync_instagram_posts(token, full=full_ig)
+                total += n
+            except Exception as e:
+                log.error(f"Error sincronizando Instagram: {e}")
+                errors.append(f"instagram: {e}")
 
         # ── Audiencias ─────────────────────────────────────────────────
         if mode in ("nightly", "backfill", "full_history"):
