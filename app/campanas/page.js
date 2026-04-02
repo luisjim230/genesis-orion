@@ -205,6 +205,11 @@ export default function CampanasPage() {
   });
   const campListRaw = Object.values(byCampaign);
 
+  // ─── Sort for insights table ─────────────────────────────────────
+  const insSort = useSortable(campListRaw, 'spend');
+  const campList = insSort.sorted;
+  const InsThR = insSort.Th; // right-aligned sortable header
+
   // ─── Alerts ────────────────────────────────────────────────────
   const alerts = [];
 
@@ -257,11 +262,6 @@ export default function CampanasPage() {
   if (alerts.length === 0 && !cargando && insights.length > 0) {
     alerts.push({ icon: '✅', text: 'Todo en orden. Campañas funcionando normalmente.', type: 'success' });
   }
-
-  // ─── Sort for insights table ─────────────────────────────────────
-  const insSort = useSortable(campListRaw, 'spend');
-  const campList = insSort.sorted;
-  const InsThR = insSort.Th; // right-aligned sortable header
 
   // ─── Sort for all-campaigns table ────────────────────────────────
   const campSort = useSortable(campaigns, 'name', 'asc');

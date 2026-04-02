@@ -577,6 +577,114 @@ def _aggregate_posts_to_social_metricas(fb_page_id=None):
         log.warning(f"  Error agregando social_metricas: {e}")
 
 
+# ─── Sync Facebook page-level insights ─────────────────────────────
+def sync_facebook_page_insights(token, days_back=90):
+    """Sync page-level daily insights into social_metricas (plataforma=facebook).
+
+    Métricas disponibles con read_insights + new pages experience:
+      page_views_total        → views
+      page_video_views        → video views (suma al campo views)
+      page_post_engagements   → engaged_users → engagement_rate
+      page_fan_adds_by_paid_non_paid_unique → nuevos_seguidores
+      page_actions_post_reactions_total     → likes (sum all reaction types)
+
+    Se corre en batches de 90 días (límite de la API).
+    """
+    log.info("Sincronizando insights de página de Facebook...")
+
+    page_id_res = sb.table("meta_config").select("value").eq("key", "page_id").single().execute()
+    page_id = page_id_res.data["value"] if page_id_res.data else None
+    if not page_id:
+        log.warning("  page_id no configurado — omitiendo page insights")
+        return 0
+
+    page_token = token
+    try:
+        r = requests.get(
+            f"{META_BASE}/{page_id}",
+            params={"fields": "access_token,fan_count", "access_token": token},
+            timeout=30,
+        )
+        d = r.json()
+        page_token = d.get("access_token", token)
+        fan_count = int(d.get("fan_count", 0) or 0)
+        # Update fan count in meta_config
+        if fan_count:
+            sb.table("meta_config").upsert({"key": "page_fan_count", "value": str(fan_count)}, on_conflict="key").execute()
+    except Exception as e:
+        log.warning(f"  Error obteniendo page token: {e}")
+        fan_count = 0
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days_back)
+
+    metrics = "page_views_total,page_video_views,page_post_engagements,page_fan_adds_by_paid_non_paid_unique,page_actions_post_reactions_total"
+
+    try:
+        r = requests.get(
+            f"{META_BASE}/{page_id}/insights",
+            params={
+                "metric": metrics,
+                "period": "day",
+                "since": start_date.strftime("%Y-%m-%d"),
+                "until": end_date.strftime("%Y-%m-%d"),
+                "access_token": page_token,
+            },
+            timeout=60,
+        )
+        data = r.json()
+        if "error" in data:
+            log.error(f"  Error page insights: {data['error']}")
+            return 0
+    except Exception as e:
+        log.error(f"  Request error page insights: {e}")
+        return 0
+
+    # Parse into daily dict
+    daily: dict = {}
+    for metric_block in data.get("data", []):
+        name = metric_block["name"]
+        for v in metric_block.get("values", []):
+            day = v["end_time"][:10]
+            if day not in daily:
+                daily[day] = {"views": 0, "engaged": 0, "nuevos_seg": 0, "likes": 0}
+            val = v.get("value", 0)
+            if name == "page_views_total":
+                daily[day]["views"] += int(val or 0)
+            elif name == "page_video_views":
+                daily[day]["views"] += int(val or 0)
+            elif name == "page_post_engagements":
+                daily[day]["engaged"] += int(val or 0)
+            elif name == "page_fan_adds_by_paid_non_paid_unique":
+                if isinstance(val, dict):
+                    daily[day]["nuevos_seg"] += int(val.get("total", 0) or 0)
+                else:
+                    daily[day]["nuevos_seg"] += int(val or 0)
+            elif name == "page_actions_post_reactions_total":
+                if isinstance(val, dict):
+                    daily[day]["likes"] += sum(int(x or 0) for x in val.values())
+                else:
+                    daily[day]["likes"] += int(val or 0)
+
+    total = 0
+    for day, d in daily.items():
+        row = {
+            "fecha": day,
+            "plataforma": "facebook",
+            "seguidores": fan_count,
+            "views": d["views"],
+            "likes": d["likes"],
+            "nuevos_seguidores": d["nuevos_seg"],
+            "engagement_rate": round(d["engaged"] / max(d["views"], 1) * 100, 2) if d["views"] > 0 else 0,
+            "creado_en": datetime.now().isoformat(),
+        }
+        sb.table("social_metricas").upsert(row, on_conflict="fecha,plataforma").execute()
+        total += 1
+
+    log.info(f"  {total} días de page insights de Facebook actualizados")
+    return total
+
+
 # ─── Sync Instagram posts ───────────────────────────────────────────
 def sync_instagram_posts(token, full=False):
     """Sync Instagram Business account media into meta_page_posts.
@@ -870,6 +978,16 @@ def main():
             except Exception as e:
                 log.error(f"Error sincronizando Instagram: {e}")
                 errors.append(f"instagram: {e}")
+
+        # ── Page-level insights de Facebook (views, engagement reales) ──
+        if mode in ("nightly", "backfill", "full_history", "posts", "page_insights"):
+            try:
+                days = 90 if mode in ("backfill", "full_history", "posts", "page_insights") else 7
+                n = sync_facebook_page_insights(token, days_back=days)
+                total += n
+            except Exception as e:
+                log.error(f"Error sincronizando page insights: {e}")
+                errors.append(f"page_insights: {e}")
 
         # ── Audiencias ─────────────────────────────────────────────────
         if mode in ("nightly", "backfill", "full_history"):
