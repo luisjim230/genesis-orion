@@ -850,6 +850,10 @@ def _aggregate_ig_to_social_metricas(ig_id, followers_count):
                 d["mejor_post"] = msg[:120] if msg else (p.get("permalink_url") or "")
 
         for day, d in daily.items():
+            # Sin permiso instagram_manage_insights no hay impressions/reach.
+            # Usamos likes+comentarios como proxy de interacciones (views=likes para la gráfica).
+            interacciones = d["likes"] + d["comentarios"]
+            eng = round(interacciones / followers_count * 100, 2) if followers_count > 0 else 0
             row = {
                 "fecha": day,
                 "plataforma": "instagram",
@@ -857,8 +861,8 @@ def _aggregate_ig_to_social_metricas(ig_id, followers_count):
                 "likes": d["likes"],
                 "comentarios": d["comentarios"],
                 "compartidos": 0,
-                "views": 0,
-                "engagement_rate": 0,
+                "views": interacciones,   # proxy: likes+comentarios para que la gráfica muestre tendencia
+                "engagement_rate": eng,
                 "mejor_post": d["mejor_post"],
                 "creado_en": datetime.now().isoformat(),
             }

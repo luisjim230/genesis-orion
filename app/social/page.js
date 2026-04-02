@@ -968,9 +968,9 @@ function TabDashboard() {
                     </div>
                   </div>
                   <div>
-                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Views</div>
+                    <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>{key==='instagram' ? 'Interacciones' : 'Views'}</div>
                     <div style={{fontSize:'1.15rem', fontWeight:700, color:TEXT}}>
-                      {fmtNum(m.views)}{deltaTag(delta(m.views, prev?.views))}
+                      {key==='instagram' ? fmtNum((m.likes||0)+(m.comentarios||0)) : fmtNum(m.views)}{deltaTag(delta(m.views, prev?.views))}
                     </div>
                   </div>
                   <div>
@@ -987,7 +987,7 @@ function TabDashboard() {
                   </div>
                   <div>
                     <div style={{fontSize:'0.65em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.05em'}}>Tendencia</div>
-                    <MiniChart plat={key} campo="views"/>
+                    <MiniChart plat={key} campo={key==='instagram' ? 'likes' : 'views'}/>
                   </div>
                 </div>
               )}
