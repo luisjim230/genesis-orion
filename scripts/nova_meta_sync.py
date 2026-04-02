@@ -406,7 +406,7 @@ def sync_page_posts(token, full=False):
         log.info("  Modo full: desde 2025-01-01")
     else:
         since_ts = int((datetime.now() - timedelta(days=90)).timestamp())
-    fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type},shares,comments.summary(true){id}"
+    fields = "id,message,story,created_time,full_picture,permalink_url,attachments{type},shares,comments.summary(true){id},reactions.summary(true){id}"
     data = meta_get(
         f"{page_id}/posts",
         {"fields": fields, "since": since_ts, "limit": 100},
@@ -436,18 +436,8 @@ def sync_page_posts(token, full=False):
     except Exception:
         pass
 
-    # Insight metrics to fetch per post (only confirmed valid page post metrics)
-    insight_metrics = ",".join([
-        "post_impressions",
-        "post_impressions_unique",
-        "post_engaged_users",
-        "post_reactions_by_type_total",
-        "post_clicks_by_type",
-        "post_negative_feedback",
-        "post_video_views",
-        "post_video_views_organic",
-    ])
-
+    # La API de insights por post no está disponible en la nueva experiencia de páginas de Meta.
+    # Todos los datos se obtienen directamente de los campos del post.
     total = 0
     for post in posts:
         post_id = post["id"]
@@ -456,32 +446,17 @@ def sync_page_posts(token, full=False):
         attachment = post.get("attachments", {}).get("data", [{}])[0]
         post_type = attachment.get("type", "status")
 
-        # Fetch insights for this post
-        ins_data = meta_get(f"{post_id}/insights", {"metric": insight_metrics, "period": "lifetime"}, page_token)
-        metrics = {}
-        if ins_data and "data" in ins_data:
-            for m in ins_data["data"]:
-                metrics[m["name"]] = m.get("values", [{}])[-1].get("value", 0)
-
-        # Parse reactions (comes as dict: {"like": 10, "love": 5, ...})
-        reactions_raw = metrics.get("post_reactions_by_type_total", 0)
-        reactions = sum(reactions_raw.values()) if isinstance(reactions_raw, dict) else int(reactions_raw or 0)
-
-        # Parse clicks (dict: {"link click": 5, "photo view": 3, ...})
-        clicks_raw = metrics.get("post_clicks_by_type", 0)
-        clicks = sum(clicks_raw.values()) if isinstance(clicks_raw, dict) else int(clicks_raw or 0)
-
-        # Shares and comments from the post object fields (cheaper than insights)
-        shares = int(post.get("shares", {}).get("count", 0)) if isinstance(post.get("shares"), dict) else 0
-        saves = 0  # not reliably available via insights API
-        comments = int(post.get("comments", {}).get("summary", {}).get("total_count", 0)) if isinstance(post.get("comments"), dict) else 0
-
-        impressions = int(metrics.get("post_impressions", 0) or 0)
-        reach = int(metrics.get("post_impressions_unique", 0) or 0)
-        engaged = int(metrics.get("post_engaged_users", 0) or 0)
-        video_views = int(metrics.get("post_video_views", 0) or 0)
-        video_organic = int(metrics.get("post_video_views_organic", 0) or 0)
-        negative = int(metrics.get("post_negative_feedback", 0) or 0)
+        reactions = int(post.get("reactions", {}).get("summary", {}).get("total_count", 0) or 0)
+        comments  = int(post.get("comments", {}).get("summary", {}).get("total_count", 0) or 0)
+        shares    = int(post.get("shares", {}).get("count", 0)) if isinstance(post.get("shares"), dict) else 0
+        saves     = 0
+        clicks    = 0
+        impressions = 0
+        reach       = 0
+        engaged     = 0
+        video_views = 0
+        video_organic = 0
+        negative    = 0
 
         # Engagement rate = engaged / reach
         eng_rate = round(engaged / reach, 4) if reach > 0 else 0
