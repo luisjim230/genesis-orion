@@ -117,6 +117,7 @@ export default function Inventario() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroAlerta, setFiltroAlerta] = useState('Todos');
   const [fechaCarga, setFechaCarga] = useState(null);
+  const [valorInventario, setValorInventario] = useState(null);
   const [msg, setMsg] = useState(null);
   const [ordenItems, setOrdenItems] = useState([]);
   const [seleccionados, setSeleccionados] = useState(new Set());
@@ -229,6 +230,9 @@ export default function Inventario() {
     if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
     setDatos(todos);
+    supabase.rpc('inventario_valor_actual').then(({ data }) => {
+      if (data?.[0]?.valor_costo) setValorInventario(parseFloat(data[0].valor_costo))
+    });
     const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};
     (tData || []).forEach(i => {
@@ -601,24 +605,17 @@ export default function Inventario() {
             </div>
           )}
 
-          {(() => {
-            const valorTotal = datos.reduce((s, r) => {
-              const ex = parseFloat(r.existencias) || 0
-              const co = parseFloat(r.ultimo_costo) || 0
-              return ex > 0 && co > 0 ? s + ex * co : s
-            }, 0)
-            return valorTotal > 0 ? (
-              <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(139,94,60,0.08)', border:'1px solid rgba(139,94,60,0.2)', borderRadius:12, padding:'8px 16px', marginBottom:10, fontSize:'0.84rem', color:'rgba(0,0,0,0.7)' }}>
-                <span>📦</span>
-                <span><strong>Valor inventario (a costo):</strong>{' '}
-                  <strong style={{ color:'#8B5E3C' }}>
-                    ₡{Math.round(valorTotal).toLocaleString('es-CR')}
-                  </strong>
-                  <span style={{ fontSize:'0.75rem', color:'rgba(0,0,0,0.4)', marginLeft:6 }}>solo existencias positivas · {datos.filter(r => (parseFloat(r.existencias)||0) > 0 && (parseFloat(r.ultimo_costo)||0) > 0).length} ítems</span>
-                </span>
-              </div>
-            ) : null
-          })()}
+          {valorInventario > 0 && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(139,94,60,0.08)', border:'1px solid rgba(139,94,60,0.2)', borderRadius:12, padding:'8px 16px', marginBottom:10, fontSize:'0.84rem', color:'rgba(0,0,0,0.7)' }}>
+              <span>📦</span>
+              <span><strong>Valor inventario (a costo):</strong>{' '}
+                <strong style={{ color:'#8B5E3C' }}>
+                  ₡{Math.round(valorInventario).toLocaleString('es-CR')}
+                </strong>
+                <span style={{ fontSize:'0.75rem', color:'rgba(0,0,0,0.4)', marginLeft:6 }}>solo existencias positivas</span>
+              </span>
+            </div>
+          )}
 
           {totalTCods > 0 && <div className="info-banner">🚢 <strong>{totalTCods} productos en tránsito</strong> ({totalTUnids.toLocaleString()} unidades). La columna <strong>🚢 En tránsito</strong> ya descuenta automáticamente de <strong>Cantidad a comprar</strong>.</div>}
           {proveedoresPausados.size > 0 && <div className="warn-banner">⚠️ Tenés <strong>{proveedoresPausados.size} proveedores pausados</strong>.</div>}
