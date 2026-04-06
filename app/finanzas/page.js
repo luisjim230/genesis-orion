@@ -379,12 +379,15 @@ function TabCobrar({ tcC }) {
 }
 
 // ── Tab: Flujo de Caja ─────────────────────────────────────────────────────
+const TC_IMP = 515; // ₡ por USD para pagos de importaciones (ajustable)
+
 function TabFlujo({ tcC }) {
   const [bancos,     setBancos]    = useState([]);
   const [cobrar,     setCobrar]    = useState([]);
   const [pagar,      setPagar]     = useState([]);
   const [gastos,     setGastos]    = useState([]);
   const [ventasHist, setVentasHist]= useState([]);
+  const [envios,     setEnvios]    = useState([]);
   const [loading,    setLoad]      = useState(true);
 
   useEffect(() => {
@@ -473,7 +476,6 @@ function TabFlujo({ tcC }) {
           if (data.length < 1000) break;
           vOff += 1000;
         }
-        // Agrupa por periodo (YYYY-MM)
         const vMap = {};
         vAll.forEach(r => {
           const p   = String(r.periodo_reporte || '').slice(0, 7);
@@ -485,6 +487,16 @@ function TabFlujo({ tcC }) {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([periodo, total]) => ({ periodo, total }))
         );
+
+        // 6. Envíos de importaciones pendientes
+        const { data: eData } = await sb.from('neptuno_envios')
+          .select('nombre,proveedor,eta,final_monto,estado')
+          .not('archivado', 'is', true)
+          .eq('final_pago', false)
+          .gt('final_monto', 0)
+          .not('eta', 'is', null)
+          .order('eta');
+        setEnvios(eData || []);
       } catch (e) { console.error('TabFlujo:', e); }
       setLoad(false);
     })();
@@ -498,16 +510,36 @@ function TabFlujo({ tcC }) {
   const totCobrar = cobrar.reduce((s, r) => s + N(r.saldo_actual), 0);
   const totPagar  = pagar.reduce((s, r) => s + N(r.saldo_actual), 0);
 
-  // ── Ventas proyectadas — promedio últimos 6 meses completos ─────────────
+  // ── Ventas proyectadas (promedio 6 meses, -30% pesimista) ───────────────
   const now = new Date();
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const periodosCompletos = ventasHist
     .filter(v => v.periodo < currentPeriod && v.total > 0)
     .slice(-6);
-  const promedioMensual = periodosCompletos.length > 0
+  const promedioMensualReal = periodosCompletos.length > 0
     ? periodosCompletos.reduce((s, v) => s + v.total, 0) / periodosCompletos.length
     : 0;
+  const promedioMensual = promedioMensualReal * 0.70; // escenario pesimista -30%
   const ventaW = promedioMensual / 4;
+
+  // ── Pagos de importaciones por semana ────────────────────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const envisConFecha = envios.map(e => {
+    const eta = new Date(e.eta);
+    const fechaPago = new Date(eta);
+    fechaPago.setDate(fechaPago.getDate() - 25);
+    const diffDays = Math.floor((fechaPago - today) / (1000 * 60 * 60 * 24));
+    const weekIdx  = Math.floor(diffDays / 7);
+    const montoUSD = N(e.final_monto);
+    const montoCRC = montoUSD * TC_IMP;
+    return { ...e, eta, fechaPago, diffDays, weekIdx, montoUSD, montoCRC };
+  });
+  const pagosImpSem = Array(8).fill(0);
+  envisConFecha.forEach(e => {
+    if (e.weekIdx >= 0 && e.weekIdx < 8) pagosImpSem[e.weekIdx] += e.montoCRC;
+  });
+  const totalImpUSD = envisConFecha.reduce((s, e) => s + e.montoUSD, 0);
+  const totalImpCRC = envisConFecha.reduce((s, e) => s + e.montoCRC, 0);
 
   // ── Distribución semanal ─────────────────────────────────────────────────
   // sin_vencer → sem 1-2 · dias_1_30 → sem 3-6 · dias_31_60 → sem 7-8
@@ -527,8 +559,8 @@ function TabFlujo({ tcC }) {
     for (let i = 0; i < 8; i++) {
       const d = new Date(); d.setDate(d.getDate() + i * 7);
       const sInicial = sAcum;
-      sAcum = sAcum + cobrosSem[i] + ventaW - pagosSem[i] - gastoW;
-      arr.push({ label: `S${i+1} ${d.getDate()}/${d.getMonth()+1}`, sInicial, cobro: cobrosSem[i], ventaProy: ventaW, pago: pagosSem[i], gasto: gastoW, sFinal: sAcum });
+      sAcum = sAcum + cobrosSem[i] + ventaW - pagosSem[i] - gastoW - pagosImpSem[i];
+      arr.push({ label: `S${i+1} ${d.getDate()}/${d.getMonth()+1}`, sInicial, cobro: cobrosSem[i], ventaProy: ventaW, pago: pagosSem[i], gasto: gastoW, pagoImp: pagosImpSem[i], sFinal: sAcum });
     }
     return arr;
   })();
@@ -544,7 +576,7 @@ function TabFlujo({ tcC }) {
 
   const CW = 800, CH = 310, padL = 74, padR = 16, padT = 42, padB = 46;
   const pW = CW - padL - padR, pH = CH - padT - padB;
-  const allBars = [...cobrosSem.map((c,i) => c + ventaW), ...pagosSem.map(p => p + gastoW)];
+  const allBars = [...cobrosSem.map(c => c + ventaW), ...pagosSem.map((p, i) => p + gastoW + pagosImpSem[i])];
   const rawMax  = Math.max(...allBars, saldoCRC, 1);
   const rawMin  = Math.min(...semanas.map(s => s.sFinal), 0);
   const yMax    = rawMax * 1.18;
@@ -584,7 +616,7 @@ function TabFlujo({ tcC }) {
         const yBase = yS(0);
         const hC = yBase - yS(s.cobro);
         const hV = yBase - yS(s.ventaProy);
-        const hP = yBase - yS(s.pago + s.gasto);
+        const hP = yBase - yS(s.pago + s.gasto + s.pagoImp);
         return (
           <g key={i}>
             {/* Cobros reales — verde sólido */}
@@ -593,9 +625,9 @@ function TabFlujo({ tcC }) {
             {/* Ventas proyectadas — patrón rayado */}
             {hV > 0 && <rect x={xV} y={yS(s.ventaProy)} width={bW} height={hV} fill="url(#hatchVentas)" rx="3" stroke="#48BB78" strokeWidth="0.8" />}
             {hV > 14 && <text x={xV + bW/2} y={yS(s.ventaProy) - 3} textAnchor="middle" fontSize="7" fill="#276749">{fM(s.ventaProy)}</text>}
-            {/* Pagos + gastos — rojo */}
-            {hP > 0 && <rect x={xP} y={yS(s.pago + s.gasto)} width={bW} height={hP} fill="#FC8181" rx="3" opacity="0.85" />}
-            {hP > 14 && <text x={xP + bW/2} y={yS(s.pago + s.gasto) - 3} textAnchor="middle" fontSize="7" fill="#C53030">{fM(s.pago + s.gasto)}</text>}
+            {/* Pagos + gastos + importaciones — rojo */}
+            {hP > 0 && <rect x={xP} y={yS(s.pago + s.gasto + s.pagoImp)} width={bW} height={hP} fill="#FC8181" rx="3" opacity="0.85" />}
+            {hP > 14 && <text x={xP + bW/2} y={yS(s.pago + s.gasto + s.pagoImp) - 3} textAnchor="middle" fontSize="7" fill="#C53030">{fM(s.pago + s.gasto + s.pagoImp)}</text>}
             <text x={xBase + wk/2} y={CH - padB + 14} textAnchor="middle" fontSize="9" fill="#4A5568">{s.label}</text>
           </g>
         );
@@ -623,20 +655,26 @@ function TabFlujo({ tcC }) {
       <rect x={padL}       y={8} width="10" height="10" fill="#48BB78" rx="2" />
       <text x={padL + 14}  y={17} fontSize="9" fill="#4A5568">Cobros CxC</text>
       <rect x={padL + 100} y={8} width="10" height="10" fill="url(#hatchVentas)" stroke="#48BB78" strokeWidth="0.8" rx="2" />
-      <text x={padL + 114} y={17} fontSize="9" fill="#4A5568">Ventas proyectadas</text>
-      <rect x={padL + 250} y={8} width="10" height="10" fill="#FC8181" rx="2" />
-      <text x={padL + 264} y={17} fontSize="9" fill="#4A5568">Pagos + Gastos fijos</text>
-      <line x1={padL + 400} y1={13} x2={padL + 414} y2={13} stroke="#3182CE" strokeWidth="2.5" />
-      <circle cx={padL + 407} cy={13} r="3" fill="#3182CE" stroke="#fff" strokeWidth="1" />
-      <text x={padL + 418} y={17} fontSize="9" fill="#4A5568">Saldo proyectado</text>
+      <text x={padL + 114} y={17} fontSize="9" fill="#4A5568">Ventas proy. (-30%)</text>
+      <rect x={padL + 258} y={8} width="10" height="10" fill="#FC8181" rx="2" />
+      <text x={padL + 272} y={17} fontSize="9" fill="#4A5568">Pagos + Gastos + Imp.</text>
+      <line x1={padL + 418} y1={13} x2={padL + 432} y2={13} stroke="#3182CE" strokeWidth="2.5" />
+      <circle cx={padL + 425} cy={13} r="3" fill="#3182CE" stroke="#fff" strokeWidth="1" />
+      <text x={padL + 436} y={17} fontSize="9" fill="#4A5568">Saldo proyectado</text>
     </svg>
   );
 
-  // ── Semáforo ──────────────────────────────────────────────────────────────
+  // ── Semáforos ─────────────────────────────────────────────────────────────
   const smf = sf =>
     sf < 0         ? { icon: '🔴', color: '#C53030', bg: '#FFF5F5' }
     : sf < 5000000 ? { icon: '🟡', color: '#B7791F', bg: '#FFFBEB' }
                    : { icon: '🟢', color: '#276749', bg: '#F0FFF4' };
+
+  const smfImp = days =>
+    days < 0    ? { icon: '🔴', label: 'Vencido',    color: '#C53030' }
+    : days < 14 ? { icon: '🔴', label: `${days}d`,   color: '#C53030' }
+    : days < 28 ? { icon: '🟡', label: `${days}d`,   color: '#B7791F' }
+                : { icon: '🟢', label: `${days}d`,   color: '#276749' };
 
   const secH = { marginBottom: '6px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' };
 
@@ -679,20 +717,27 @@ function TabFlujo({ tcC }) {
       <hr style={S.divider}/>
 
       {/* ── Ventas Proyectadas — banner de advertencia ────────── */}
-      {promedioMensual > 0 && (
+      {promedioMensualReal > 0 && (
         <div style={{ background:'#FFFBEB', border:'2px solid #F6AD55', borderRadius:'12px', padding:'16px 20px', marginBottom:'16px' }}>
           <div style={{ display:'flex', alignItems:'flex-start', gap:'12px' }}>
             <span style={{ fontSize:'1.6rem', lineHeight:1 }}>⚠️</span>
-            <div>
-              <div style={{ fontSize:'1rem', fontWeight:800, color:'#7B341E', letterSpacing:'0.01em', marginBottom:'4px' }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:'1rem', fontWeight:800, color:'#7B341E', letterSpacing:'0.01em', marginBottom:'6px' }}>
                 PROYECCIÓN ESTIMADA — No son datos reales
               </div>
-              <div style={{ fontSize:'0.88rem', color:'#744210', lineHeight:1.5 }}>
+              <div style={{ fontSize:'0.88rem', color:'#744210', lineHeight:1.6 }}>
                 Los ingresos por <strong>ventas proyectadas</strong> se calculan con base en el promedio de ventas
                 de los últimos <strong>{periodosCompletos.length} meses</strong> completos
-                ({periodosCompletos.map(p => p.periodo).join(', ')}).{' '}
-                Promedio: <strong>{fC(promedioMensual)}/mes · {fC(ventaW)}/sem</strong>.{' '}
-                No son cobros confirmados — son una estimación de ventas futuras esperadas.
+                ({periodosCompletos.map(p => p.periodo).join(', ')}).
+                No son cobros confirmados.
+              </div>
+              <div style={{ marginTop:'10px', padding:'10px 14px', background:'#FED7AA', borderRadius:'8px', border:'1px solid #F6AD55' }}>
+                <span style={{ fontWeight:800, color:'#C05621', fontSize:'0.92rem' }}>⚠️ ESCENARIO PESIMISTA -30%: Se aplicó -30% al promedio histórico para ser conservadores.</span>
+                <div style={{ marginTop:'4px', fontSize:'0.86rem', color:'#7B341E' }}>
+                  Promedio real: <strong>{fC(promedioMensualReal)}/mes</strong>
+                  {' · '}
+                  <span style={{ color:'#C05621', fontWeight:700 }}>Con -30%: {fC(promedioMensual)}/mes · {fC(ventaW)}/sem</span>
+                </div>
               </div>
             </div>
           </div>
@@ -721,8 +766,8 @@ function TabFlujo({ tcC }) {
         {svgChart}
         <div style={{ display:'flex', gap:'12px', marginTop:'4px', fontSize:'0.75rem', color:'var(--text-muted)', justifyContent:'center', flexWrap:'wrap' }}>
           <span>📌 Línea azul/roja = saldo bancario CRC proyectado</span>
-          <span>📌 Barras rayadas = ventas estimadas (no confirmadas)</span>
-          <span>📌 Barras rojas incluyen gastos recurrentes</span>
+          <span>📌 Barras rayadas = ventas estimadas -30% (no confirmadas)</span>
+          <span>📌 Barras rojas = pagos CxP + gastos recurrentes + importaciones</span>
         </div>
       </div>
 
@@ -759,13 +804,87 @@ function TabFlujo({ tcC }) {
 
       <hr style={S.divider}/>
 
-      {/* ── Sección 4: Tabla Detalle ──────────────────────────── */}
+      {/* ── Sección 4: Pagos de Importaciones ────────────────── */}
+      <div style={secH}>🚢 Pagos de Importaciones Proyectados</div>
+
+      {envisConFecha.length === 0 ? (
+        <div style={{ ...S.info, marginBottom:'16px' }}>✅ Sin importaciones pendientes de pago.</div>
+      ) : (
+        <div style={{ background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'12px', padding:'16px', marginBottom:'16px' }}>
+          <div style={{ fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'10px' }}>
+            TC importaciones: <strong style={{ color:'var(--text-primary)' }}>₡{TC_IMP}/USD</strong> ·{' '}
+            Fecha pago estimada = ETA − 25 días ·{' '}
+            {envisConFecha.filter(e => e.weekIdx >= 0 && e.weekIdx < 8).length > 0 && (
+              <span style={{ color:'#C53030', fontWeight:600 }}>
+                {envisConFecha.filter(e => e.weekIdx >= 0 && e.weekIdx < 8).length} pago(s) caen dentro de las próximas 8 semanas
+              </span>
+            )}
+          </div>
+          <div style={{ overflowX:'auto' }}>
+            <table style={S.tbl}>
+              <thead>
+                <tr>
+                  <th style={S.th}>🚦</th>
+                  <th style={S.th}>Contenedor</th>
+                  <th style={S.th}>Proveedor</th>
+                  <th style={S.th}>ETA</th>
+                  <th style={S.th}>Fecha pago est.</th>
+                  <th style={{ ...S.th, textAlign:'right' }}>USD</th>
+                  <th style={{ ...S.th, textAlign:'right' }}>CRC (₡{TC_IMP}/USD)</th>
+                  <th style={S.th}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {envisConFecha.map((e, i) => {
+                  const sm = smfImp(e.diffDays);
+                  const enRango = e.weekIdx >= 0 && e.weekIdx < 8;
+                  const etaStr = e.eta instanceof Date ? e.eta.toLocaleDateString('es-CR') : String(e.eta||'').slice(0,10);
+                  return (
+                    <tr key={i} style={enRango ? { background:'#FFF5F5' } : {}}>
+                      <td style={S.td(i)} title={sm.label}>{sm.icon}</td>
+                      <td style={{ ...S.td(i), fontWeight:600 }}>{e.nombre||'—'}</td>
+                      <td style={S.td(i)}>{e.proveedor||'—'}</td>
+                      <td style={S.td(i)}>{etaStr}</td>
+                      <td style={{ ...S.td(i), color:sm.color, fontWeight:e.diffDays < 14 ? 700 : 400 }}>
+                        {e.fechaPago.toLocaleDateString('es-CR')}
+                        <span style={{ fontSize:'0.74rem', color:'var(--text-muted)', marginLeft:'4px' }}>({sm.label})</span>
+                      </td>
+                      <td style={{ ...S.td(i), textAlign:'right', fontWeight:600 }}>
+                        ${e.montoUSD.toLocaleString('es-CR',{minimumFractionDigits:2})}
+                      </td>
+                      <td style={{ ...S.td(i), textAlign:'right', fontWeight:600, color:enRango?'#C53030':undefined }}>
+                        {fC(e.montoCRC)}
+                        {enRango && <span style={{ fontSize:'0.7rem', display:'block', color:'#C53030' }}>→ S{e.weekIdx+1}</span>}
+                      </td>
+                      <td style={{ ...S.td(i), fontSize:'0.78rem', color:'var(--text-muted)' }}>{e.estado||'—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={5} style={{ ...S.td(0), fontWeight:700, borderTop:'2px solid var(--border-soft)' }}>TOTAL PENDIENTE</td>
+                  <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#C53030', borderTop:'2px solid var(--border-soft)' }}>
+                    ${totalImpUSD.toLocaleString('es-CR',{minimumFractionDigits:2})}
+                  </td>
+                  <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#C53030', borderTop:'2px solid var(--border-soft)' }}>{fC(totalImpCRC)}</td>
+                  <td style={{ ...S.td(0), borderTop:'2px solid var(--border-soft)' }}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <hr style={S.divider}/>
+
+      {/* ── Sección 5: Tabla Detalle ──────────────────────────── */}
       <div style={secH}>Tabla Detalle por Semana</div>
       <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'16px' }}>
         <table style={S.tbl}>
           <thead>
             <tr>
-              <th style={{ ...S.th, minWidth:'160px' }}>Concepto</th>
+              <th style={{ ...S.th, minWidth:'195px' }}>Concepto</th>
               {semanas.map((s, i) => {
                 const sm = smf(s.sFinal);
                 return <th key={i} style={{ ...S.th, textAlign:'right', background:sm.bg, minWidth:'100px' }}>{s.label} {sm.icon}</th>;
@@ -774,25 +893,25 @@ function TabFlujo({ tcC }) {
           </thead>
           <tbody>
             {[
-              { label:'💰 Saldo inicial',       key:'sInicial',  color:'#3182CE', bold:false, nota:'' },
-              { label:'📥 (+) Cobros CxC',      key:'cobro',     color:'#276749', bold:false, nota:'' },
-              { label:'📊 (+) Ventas proy. ⚠️', key:'ventaProy', color:'#B7791F', bold:false, nota:'estimado' },
-              { label:'💸 (−) Pagos',           key:'pago',      color:'#C53030', bold:false, nota:'' },
-              { label:'🔧 (−) Gastos rec.',     key:'gasto',     color:'#7B341E', bold:false, nota:'' },
-              { label:'🏦 = Saldo final',       key:'sFinal',    color:null,      bold:true,  nota:'' },
+              { label:'💰 Saldo inicial',             key:'sInicial', color:'#3182CE', bold:false, est:false },
+              { label:'📥 (+) Cobros CxC',             key:'cobro',    color:'#276749', bold:false, est:false },
+              { label:'📊 (+) Ventas proy. (-30%) ⚠️', key:'ventaProy',color:'#B7791F', bold:false, est:true  },
+              { label:'💸 (−) Pagos CxP',              key:'pago',     color:'#C53030', bold:false, est:false },
+              { label:'🔧 (−) Gastos rec.',            key:'gasto',    color:'#7B341E', bold:false, est:false },
+              { label:'🚢 (−) Pagos importaciones',    key:'pagoImp',  color:'#744210', bold:false, est:false },
+              { label:'🏦 = Saldo final',              key:'sFinal',   color:null,      bold:true,  est:false },
             ].map((row, ri) => (
               <tr key={ri}>
-                <td style={{ ...S.td(ri), fontWeight:row.bold?700:400, borderTop:row.bold?'2px solid var(--border-soft)':undefined, background:row.nota?'#FFFBEB':undefined }}>
+                <td style={{ ...S.td(ri), fontWeight:row.bold?700:400, borderTop:row.bold?'2px solid var(--border-soft)':undefined, background:row.est?'#FFFBEB':undefined }}>
                   {row.label}
-                  {row.nota && <span style={{ fontSize:'0.7rem', color:'#B7791F', marginLeft:'4px' }}>(estimado)</span>}
                 </td>
                 {semanas.map((s, ci) => {
                   const v  = s[row.key];
                   const sm = smf(s.sFinal);
-                  const isEstimado = row.nota === 'estimado';
+                  const bg = row.bold ? sm.bg : row.est ? '#FFFBEB' : row.key==='pagoImp' && v > 0 ? '#FFF5F5' : ci%2===0?'#fff':'#fdf8f8';
                   return (
-                    <td key={ci} style={{ ...S.td(ci), textAlign:'right', fontWeight:row.bold?700:400, color:row.bold?sm.color:(row.color||'var(--text-primary)'), background:row.bold?sm.bg:isEstimado?'#FFFBEB':(ci%2===0?'#fff':'#fdf8f8'), borderTop:row.bold?'2px solid var(--border-soft)':undefined }}>
-                      {fC(v)}
+                    <td key={ci} style={{ ...S.td(ci), textAlign:'right', fontWeight:row.bold?700:400, color:row.bold?sm.color:(row.color||'var(--text-primary)'), background:bg, borderTop:row.bold?'2px solid var(--border-soft)':undefined }}>
+                      {v > 0 || row.bold || row.key==='sInicial' ? fC(v) : '—'}
                     </td>
                   );
                 })}
@@ -806,7 +925,7 @@ function TabFlujo({ tcC }) {
         <span style={{ padding:'4px 10px', background:'#F0FFF4', border:'1px solid #9AE6B4', borderRadius:'6px', color:'#276749' }}>🟢 Saldo &gt; ₡5M — sin problema</span>
         <span style={{ padding:'4px 10px', background:'#FFFBEB', border:'1px solid #FAD776', borderRadius:'6px', color:'#B7791F' }}>🟡 Saldo ₡0–₡5M — atención</span>
         <span style={{ padding:'4px 10px', background:'#FFF5F5', border:'1px solid #FEB2B2', borderRadius:'6px', color:'#C53030' }}>🔴 Saldo negativo — alerta</span>
-        <span style={{ padding:'4px 10px', background:'#FFFBEB', border:'1px solid #F6AD55', borderRadius:'6px', color:'#7B341E' }}>⚠️ Fila con fondo amarillo = dato estimado, no confirmado</span>
+        <span style={{ padding:'4px 10px', background:'#FFFBEB', border:'1px solid #F6AD55', borderRadius:'6px', color:'#7B341E' }}>⚠️ Fondo amarillo = estimado (-30%)</span>
       </div>
     </div>
   );
