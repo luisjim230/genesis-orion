@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase as sb } from '../../lib/supabase';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
@@ -482,6 +483,7 @@ export default function FinanzasPage() {
   }, []);
 
   const TABS = ['💸 Cuentas por Pagar', '📥 Cuentas por Cobrar', '🌊 Flujo de Caja'];
+  const MODULOS = [{ href: '/finanzas/movimientos', label: '📒 Movimientos Contables', desc: 'Desglose por categoría y comparativo mensual' }];
 
   return (
     <div style={S.page}>
@@ -494,6 +496,17 @@ export default function FinanzasPage() {
         </div>
       </div>
       <hr style={S.divider} />
+      {/* Accesos rápidos a sub-módulos */}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+        {MODULOS.map(m => (
+          <Link key={m.href} href={m.href} style={{ background: '#fff', border: '1px solid var(--border-soft)', borderRadius: '10px', padding: '10px 16px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{m.label}</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{m.desc}</span>
+            <span style={{ color: 'var(--orange)', fontSize: '0.8rem' }}>→</span>
+          </Link>
+        ))}
+      </div>
+
       <div style={S.tabs}>
         {TABS.map((t,i) => <button key={t} style={S.tab(tab===i)} onClick={() => setTab(i)}>{t}</button>)}
       </div>
