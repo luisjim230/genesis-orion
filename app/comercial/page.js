@@ -1042,7 +1042,6 @@ export default function ComercialV2() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
             <div>
               <label style={S.label}>Vendedor</label>
-              {isAdmin ? (
               <select
                 style={{ ...S.select, width: '100%' }}
                 value={formVendedor}
@@ -1053,9 +1052,6 @@ export default function ComercialV2() {
                   <option key={v.id} value={v.nombre}>{v.nombre}</option>
                 ))}
               </select>
-              ) : (
-              <div style={{ ...S.select, width: '100%', background: '#f0f0f0', cursor: 'default' }}>{perfil?.nombre || '—'}</div>
-              )}
             </div>
             <div>
               <label style={S.label}>Mes</label>
