@@ -85,7 +85,7 @@ export async function POST(request) {
     console.log(`[API subir-inventario] ${records.length} records, ${conProv} con proveedor`);
 
     // Limpiar datos anteriores (por fecha_carga una por una para respetar RLS)
-    const { data: fechasExistentes } = await supabase
+    const { data: fechasExistentes } = await getDb()
       .from('neo_minimos_maximos')
       .select('fecha_carga')
       .order('fecha_carga', { ascending: false })
