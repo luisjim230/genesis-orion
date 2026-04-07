@@ -74,7 +74,8 @@ function isGasto(cta)   { const c = getCode(cta); return c.startsWith('70') || c
 async function fetchByMonth(yearMonth) {
   const [y, m] = yearMonth.split('-').map(Number);
   const from = `${yearMonth}-01`;
-  const to   = `${yearMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  // fecha es text con timestamps ("2025-10-31 13:27:45") — incluir hora final para no perder el último día
+  const to   = `${yearMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')} 23:59:59`;
   let all = [], off = 0;
   while (true) {
     const { data, error } = await sb
