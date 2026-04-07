@@ -143,14 +143,15 @@ async def descargar():
         log.info("Generando reporte (NEO es lento)...")
 
         # Esperar que el iframe del reporte cargue el botón de exportar
+        # Timeout alto porque NEO puede tardar varios minutos en generar este reporte
         try:
             reporte_frame = iframe.locator("#ifReporte").content_frame
             await reporte_frame.wait_for_selector(
-                "button:has-text('Exportar a excel')", timeout=300_000
+                "button:has-text('Exportar a excel')", timeout=600_000
             )
             log.info("  Reporte generado, botón de exportar visible")
         except Exception:
-            log.warning("Timeout 120s — intentando exportar igual")
+            log.warning("Timeout esperando botón — intentando exportar igual")
             reporte_frame = iframe.locator("#ifReporte").content_frame
 
         # ── Exportar Excel (botón en iframe anidado #ifReporte) ───────────────
@@ -158,7 +159,7 @@ async def descargar():
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         excel_path = DOWNLOAD_DIR / f"antiguedad_proveedores_{ts}.xlsx"
 
-        async with page.expect_download(timeout=300_000) as dl_info:
+        async with page.expect_download(timeout=600_000) as dl_info:
             await reporte_frame.get_by_role("button", name="Exportar a excel").click()
 
         dl = await dl_info.value

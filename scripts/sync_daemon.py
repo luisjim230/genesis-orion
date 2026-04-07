@@ -112,13 +112,15 @@ def procesar_solicitud(req):
     # Marcar como en progreso
     supa_patch(f"sync_requests?id=eq.{req_id}", {"status": "running"})
 
+    # Antigüedad proveedores tarda más porque NEO genera un reporte muy largo
+    script_timeout = 900 if script_key == "antiguedad_proveedores" else 600
     try:
         result = subprocess.run(
             [PYTHON, str(script_path)],
             cwd=str(SCRIPTS),
             capture_output=True,
             text=True,
-            timeout=600,  # 10 minutos máximo
+            timeout=script_timeout,
         )
         exito = result.returncode == 0
         status = "completed" if exito else "error"
