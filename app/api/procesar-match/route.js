@@ -36,13 +36,14 @@ export async function POST(request) {
     if (!fecha_carga) return NextResponse.json({ error: 'fecha_carga requerida' }, { status: 400 });
 
     // 1. Revertir matchs inválidos (recepción anterior o igual a la fecha de orden)
-    const { data: itemsConFecha } = await supabase
+    const { data: itemsConFecha } = await getDb()
       .from('ordenes_compra_items')
       .select('id, fecha_recepcion, orden_id, ordenes_compra(fecha_orden)')
       .in('estado_item', ['parcial', 'completo']);
 
     let revertidos = 0;
     if (itemsConFecha?.length) {
+      const aRevertir = [];
       for (const item of itemsConFecha) {
         if (!item.fecha_recepcion) continue;
         const fechaOrden = item.ordenes_compra?.fecha_orden;
@@ -51,11 +52,12 @@ export async function POST(request) {
         const fOrden = parseFecha(fechaOrden);
         if (!fRecep || !fOrden) continue;
         if (fRecep <= fOrden) {
-          await getDb().from('ordenes_compra_items').update({
-            cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null,
-          }).eq('id', item.id);
+          aRevertir.push({ id: item.id, cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null });
           revertidos++;
         }
+      }
+      if (aRevertir.length > 0) {
+        await getDb().from('ordenes_compra_items').upsert(aRevertir, { onConflict: 'id' });
       }
     }
 
@@ -64,7 +66,7 @@ export async function POST(request) {
     let todos = [];
     let offset = 0;
     while (true) {
-      const { data } = await supabase
+      const { data } = await getDb()
         .from('neo_items_comprados')
         .select('codigo_interno, cantidad_comprada, fecha')
         .eq('fecha_carga', fecha_carga)
@@ -80,7 +82,7 @@ export async function POST(request) {
     }
 
     // 3. Ítems pendientes/parciales
-    const { data: itemsPend } = await supabase
+    const { data: itemsPend } = await getDb()
       .from('ordenes_compra_items')
       .select('*, ordenes_compra(fecha_orden)')
       .in('estado_item', ['pendiente', 'parcial'])
@@ -112,6 +114,7 @@ export async function POST(request) {
     }
 
     // 5. Match — SOLO compras ESTRICTAMENTE POSTERIORES a la fecha de la orden
+    const actualizaciones = [];
     for (const item of itemsPend) {
       const cod = String(item.codigo || '').trim();
       const compras = comprasPorCodigo[cod];
@@ -140,11 +143,18 @@ export async function POST(request) {
       const nuevoEstado  = cantRecibida >= cantOrdenada ? 'completo' : 'parcial';
       res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++;
 
-      await getDb().from('ordenes_compra_items').update({
+      actualizaciones.push({
+        id:               item.id,
         cantidad_recibida: cantRecibida,
         estado_item:       nuevoEstado,
         fecha_recepcion:   fechaRecep ? fechaRecep.toISOString() : null,
-      }).eq('id', item.id);
+      });
+    }
+
+    // Bulk upsert en lotes de 500 para no exceder límites
+    const BATCH = 500;
+    for (let i = 0; i < actualizaciones.length; i += BATCH) {
+      await getDb().from('ordenes_compra_items').upsert(actualizaciones.slice(i, i + BATCH), { onConflict: 'id' });
     }
 
     console.log('[procesar-match] Resultado:', res);

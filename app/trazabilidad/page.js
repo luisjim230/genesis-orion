@@ -422,122 +422,35 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
     }
   }, [fechaCarga])
 
-  async function revertirMatchsInvalidos() {
-    const { data } = await supabase
-      .from('ordenes_compra_items')
-      .select('id, fecha_recepcion, orden_id')
-      .in('estado_item', ['parcial', 'completo'])
-    if (!data || data.length === 0) return 0
-    let revertidos = 0
-    for (const item of data) {
-      if (!item.fecha_recepcion) continue
-      const orden = ordenes.find(o => o.id === item.orden_id)
-      if (!orden?.fecha_orden) continue
-      const fechaRecep = new Date(item.fecha_recepcion)
-      const fechaOrden = new Date(orden.fecha_orden)
-      if (fechaRecep <= fechaOrden) {
-        await supabase.from('ordenes_compra_items').update({
-          cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null,
-        }).eq('id', item.id)
-        revertidos++
-      }
-    }
-    return revertidos
-  }
-
   async function ejecutarMatch() {
     if (!fechaCarga) return
     setEstado('procesando')
     setInfoMsg(null)
 
     try {
-      const revertidos = await revertirMatchsInvalidos()
-      if (revertidos > 0) {
-        setInfoMsg(`↩️ ${revertidos} ítem(s) revertidos a pendiente por ser anteriores a la orden.`)
-      }
+      const resp = await fetch('/api/procesar-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha_carga: fechaCarga }),
+      })
+      const data = await resp.json()
 
-      // Traer compras NEO con paginación
-      const PAGE_SIZE = 1000
-      let todos = []
-      let offset = 0
-      while (true) {
-        const { data } = await supabase
-          .from('neo_items_comprados')
-          .select('codigo_interno, cantidad_comprada, fecha')
-          .eq('fecha_carga', fechaCarga)
-          .range(offset, offset + PAGE_SIZE - 1)
-        if (!data || data.length === 0) break
-        todos = todos.concat(data)
-        if (data.length < PAGE_SIZE) break
-        offset += PAGE_SIZE
-      }
-
-      if (todos.length === 0) {
+      if (!resp.ok || data.error) {
         setEstado('error')
-        setInfoMsg('No se encontraron datos en la última carga.')
+        setInfoMsg(`Error: ${data.error || resp.statusText}`)
         return
       }
 
-      // Obtener pendientes frescos
-      const { data: itemsPend } = await supabase
-        .from('ordenes_compra_items')
-        .select('*, ordenes_compra(fecha_orden, nombre_lote, dias_tribucion)')
-        .in('estado_item', ['pendiente', 'parcial'])
-        .order('creado_en', { ascending: false })
-
-      if (!itemsPend || itemsPend.length === 0) {
-        setResumen({ completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0 })
-        setFechaProcesada(fechaCarga)
-        setEstado('done')
-        recargar()
-        return
+      if (data.revertidos > 0) {
+        setInfoMsg(`↩️ ${data.revertidos} ítem(s) revertidos a pendiente por ser anteriores a la orden.`)
       }
 
-      // Agrupar compras por código
-      const comprasPorCodigo = {}
-      for (const c of todos) {
-        const cod = String(c.codigo_interno || '').trim()
-        if (!cod) continue
-        if (!comprasPorCodigo[cod]) comprasPorCodigo[cod] = []
-        comprasPorCodigo[cod].push({
-          cantidad: parseFloat(c.cantidad_comprada) || 0,
-          fecha: c.fecha ? new Date(c.fecha) : null,
-        })
-      }
-
-      const res = { completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0 }
-
-      for (const item of itemsPend) {
-        const cod = String(item.codigo || '').trim()
-        const compras = comprasPorCodigo[cod]
-        if (!compras || compras.length === 0) { res.sin_match++; continue }
-
-        let fechaOrden = null
-        try {
-          const fo = item.ordenes_compra?.fecha_orden || item.fecha_orden
-          if (fo) fechaOrden = new Date(fo)
-        } catch { /* */ }
-
-        const validas = fechaOrden
-          ? compras.filter(c => c.fecha && c.fecha > fechaOrden)
-          : compras
-
-        if (validas.length === 0) { res.ignorados_por_fecha++; continue }
-
-        const cantRecibida = validas.reduce((s, c) => s + c.cantidad, 0)
-        const fechaRecep   = validas.reduce((mx, c) => (!mx || (c.fecha && c.fecha > mx) ? c.fecha : mx), null)
-        const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0
-        const nuevoEstado  = cantRecibida >= cantOrdenada ? 'completo' : 'parcial'
-        res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++
-
-        await supabase.from('ordenes_compra_items').update({
-          cantidad_recibida: cantRecibida,
-          estado_item:       nuevoEstado,
-          fecha_recepcion:   fechaRecep ? fechaRecep.toISOString() : null,
-        }).eq('id', item.id)
-      }
-
-      setResumen(res)
+      setResumen({
+        completados:        data.completados        ?? 0,
+        parciales:          data.parciales          ?? 0,
+        sin_match:          data.sin_match          ?? 0,
+        ignorados_por_fecha: data.ignorados_por_fecha ?? 0,
+      })
       setFechaProcesada(fechaCarga)
       setEstado('done')
       recargar()
