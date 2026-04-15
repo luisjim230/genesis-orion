@@ -35,9 +35,11 @@ const fmt = (n) => {
 const fmtNum = (n) => Math.round(Number(n || 0)).toLocaleString('es-CR')
 const today = () => new Date().toISOString().split('T')[0]
 
+const TURNOS = ['Turno 1', 'Turno 2', 'Turno 3']
+
 const EMPTY_FORM = {
   fecha: today(),
-  turno: 'mañana',
+  turno: 'Turno 1',
   numero_caja: '',
   efectivo: '',
   tarjeta: '',
@@ -79,7 +81,7 @@ export default function CajasAurora() {
       .lt('fecha', hasta)
       .eq('cajera', cajera)
       .order('fecha', { ascending: false })
-      .order('turno', { ascending: false })
+      .order('turno', { ascending: true })
     if (!error) setRegistros(data || [])
     setLoading(false)
   }, [filtroMes, filtroAnio, cajera])
@@ -100,7 +102,7 @@ export default function CajasAurora() {
     setSaving(true)
     const payload = {
       fecha: form.fecha,
-      turno: form.turno || 'mañana',
+      turno: form.turno || 'Turno 1',
       cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
@@ -133,7 +135,7 @@ export default function CajasAurora() {
   const handleEdit = (r) => {
     setForm({
       fecha: r.fecha,
-      turno: r.turno || 'mañana',
+      turno: r.turno || 'Turno 1',
       numero_caja: r.numero_caja || '',
       efectivo: r.efectivo || '',
       tarjeta: r.tarjeta || '',
@@ -241,8 +243,8 @@ export default function CajasAurora() {
                 <div key={r.id} style={s.card}>
                   <div style={s.cardTop}>
                     <div style={s.cardFecha}>{new Date(r.fecha + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long' })}</div>
-                    <div style={{ ...s.cajaBadge, background: r.turno === 'noche' ? 'rgba(91,75,200,0.12)' : 'rgba(200,168,75,0.12)', color: r.turno === 'noche' ? '#5b4bc8' : '#c8a84b' }}>
-                      {r.turno === 'noche' ? 'Turno noche' : 'Turno mañana'}
+                    <div style={{ ...s.cajaBadge, background:'rgba(91,75,200,0.1)', color:'#5b4bc8' }}>
+                      {r.turno || 'Turno 1'}
                     </div>
                     {r.numero_caja && <div style={s.cajaBadge}>Caja #{r.numero_caja}</div>}
                     <div style={{ ...s.difBadge, background: difR === 0 ? 'rgba(76,175,125,0.12)' : difR > 0 ? 'rgba(91,155,213,0.12)' : 'rgba(224,82,82,0.12)', color: difR === 0 ? '#4caf7d' : difR > 0 ? '#5b9bd5' : '#e05252' }}>
@@ -290,14 +292,14 @@ export default function CajasAurora() {
             <div style={s.field}>
               <label style={s.label}>Turno *</label>
               <div style={{ display:'flex', gap:8 }}>
-                {['mañana','noche'].map(t => (
+                {TURNOS.map(t => (
                   <button key={t} type="button" onClick={() => setForm(f=>({...f, turno:t}))} style={{
                     flex:1, padding:'9px 12px', borderRadius:8, border: form.turno===t ? 'none' : '1px solid rgba(0,0,0,0.12)',
                     background: form.turno===t ? 'linear-gradient(135deg, #c8a84b, #a08930)' : 'rgba(255,255,255,0.5)',
                     color: form.turno===t ? '#fff' : 'rgba(0,0,0,0.55)', cursor:'pointer',
-                    fontWeight: form.turno===t ? 700 : 400, fontSize:13, textTransform:'capitalize',
+                    fontWeight: form.turno===t ? 700 : 400, fontSize:13,
                     boxShadow: form.turno===t ? '0 4px 12px rgba(200,168,75,0.3)' : 'none', transition:'all 0.15s',
-                  }}>{t === 'mañana' ? 'Mañana' : 'Noche'}</button>
+                  }}>{t}</button>
                 ))}
               </div>
             </div>

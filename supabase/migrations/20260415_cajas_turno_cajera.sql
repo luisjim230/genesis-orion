@@ -6,9 +6,9 @@
 -- ============================================================
 
 -- 1. Agregar columna 'turno' a cajas_aurora
---    Valores permitidos: 'mañana' | 'noche'
+--    Valores: 'Turno 1' | 'Turno 2' | 'Turno 3' (configurable en el código)
 ALTER TABLE cajas_aurora
-  ADD COLUMN IF NOT EXISTS turno TEXT NOT NULL DEFAULT 'mañana';
+  ADD COLUMN IF NOT EXISTS turno TEXT NOT NULL DEFAULT 'Turno 1';
 
 -- 2. Agregar columna 'cajera' a cajas_aurora
 --    Guarda el nombre/username de quien registra el cierre
