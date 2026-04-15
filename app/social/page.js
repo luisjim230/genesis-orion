@@ -11,6 +11,8 @@ const BORDER = 'rgba(0,0,0,0.08)'
 const TEXT   = 'rgba(0,0,0,0.8)'
 const MUTED  = 'rgba(0,0,0,0.4)'
 
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
 const PLAT = {
   tiktok:    { label:'TikTok',    color:'#69C9D0', icon:'🎵' },
   instagram: { label:'Instagram', color:'#E1306C', icon:'📸' },
@@ -838,17 +840,48 @@ function TabDashboard() {
   }
 
   // Form
-  const EMPTY_FORM = { fecha: new Date().toISOString().slice(0,10), plataforma:'tiktok', seguidores:0, views:0, likes:0, comentarios:0, compartidos:0, nuevos_seguidores:0, engagement_rate:0, mejor_post:'', notas:'' }
-  function abrirForm(data) { setFormData(data||{...EMPTY_FORM}); setFormOpen(true) }
+  const EMPTY_FORM = {
+    mes: new Date().getMonth() + 1, anio: new Date().getFullYear(),
+    plataforma: 'tiktok',
+    // Métricas automáticas (plataforma)
+    seguidores: 0, views: 0, likes: 0, comentarios: 0, compartidos: 0,
+    // Métricas manuales (editoriales)
+    nuevos_seguidores: 0, engagement_rate: 0, mejor_post: '', notas: ''
+  }
+
+  function abrirForm(data) {
+    if (data) {
+      const d = new Date((data.fecha || new Date().toISOString().slice(0,10)) + 'T12:00:00')
+      setFormData({ ...data, mes: d.getMonth() + 1, anio: d.getFullYear() })
+    } else {
+      setFormData({ ...EMPTY_FORM })
+    }
+    setFormOpen(true)
+  }
+
+  // Auto-calcula engagement cuando cambian métricas automáticas
+  function handleAutoMetrica(key, val) {
+    const updated = { ...formData, [key]: parseInt(val) || 0 }
+    const seg = updated.seguidores || 0
+    if (seg > 0) {
+      updated.engagement_rate = parseFloat(
+        ((updated.likes + updated.comentarios + updated.compartidos) / seg * 100).toFixed(2)
+      )
+    }
+    setFormData(updated)
+  }
+
   async function guardarForm() {
-    if (!formData.fecha||!formData.plataforma) return showMsg('Fecha y plataforma requeridos.',false)
+    if (!formData.mes || !formData.anio || !formData.plataforma) return showMsg('Mes, año y plataforma requeridos.', false)
     setSaving(true)
-    const payload = {...formData}
+    const payload = { ...formData }
+    payload.fecha = `${formData.anio}-${String(formData.mes).padStart(2,'0')}-01`
+    delete payload.mes; delete payload.anio
     delete payload.id; delete payload.creado_en
     if (formData.id) {
       await supabase.from('social_metricas').update(payload).eq('id', formData.id)
     } else {
-      await supabase.from('social_metricas').upsert(payload, {onConflict:'fecha,plataforma'})
+      await supabase.from('social_metricas').upsert(payload, { onConflict: 'fecha,plataforma' })
     }
     setSaving(false); setFormOpen(false); showMsg('Métricas guardadas.'); cargar()
   }
@@ -882,41 +915,74 @@ function TabDashboard() {
     <div>
       <button style={{...S.btnSm(), marginBottom:16}} onClick={()=>setFormOpen(false)}>← Volver</button>
       <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>
-        📊 {formData.id ? 'Editar métricas' : 'Registrar métricas del día'}
+        📊 {formData.id ? 'Editar métricas' : 'Registrar métricas del mes'}
       </h2>
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:12}}>
+
+      {/* Período + plataforma */}
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:20}}>
         <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>FECHA *</label>
-          <input type="date" style={S.input} value={formData.fecha} onChange={e=>setFormData({...formData,fecha:e.target.value})}/>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MES *</label>
+          <select style={S.input} value={formData.mes} onChange={e=>setFormData({...formData, mes:parseInt(e.target.value)})}>
+            {MESES.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>AÑO *</label>
+          <select style={S.input} value={formData.anio} onChange={e=>setFormData({...formData, anio:parseInt(e.target.value)})}>
+            {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
         <div>
           <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PLATAFORMA *</label>
           <Sel value={formData.plataforma} onChange={v=>setFormData({...formData,plataforma:v})}
             options={Object.entries(PLAT).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
         </div>
-        <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>SEGUIDORES TOTALES</label>
-          <input type="number" style={S.input} value={formData.seguidores} onChange={e=>setFormData({...formData,seguidores:parseInt(e.target.value)||0})}/>
+      </div>
+
+      {/* Métricas automáticas */}
+      <div style={{background:'rgba(99,179,237,0.07)', border:'1px solid rgba(99,179,237,0.2)', borderRadius:12, padding:'14px 16px', marginBottom:16}}>
+        <div style={{fontSize:'0.72em', fontWeight:700, color:'#63b3ed', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12}}>
+          Métricas de la plataforma · automáticas
         </div>
-        {[['views','VIEWS / ALCANCE'],['likes','LIKES'],['comentarios','COMENTARIOS'],['compartidos','COMPARTIDOS'],['nuevos_seguidores','NUEVOS SEGUIDORES']].map(([k,l])=>(
-          <div key={k}>
-            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>{l}</label>
-            <input type="number" style={S.input} value={formData[k]} onChange={e=>setFormData({...formData,[k]:parseInt(e.target.value)||0})}/>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12}}>
+          <div>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>SEGUIDORES TOTALES</label>
+            <input type="number" style={S.input} value={formData.seguidores} onChange={e=>handleAutoMetrica('seguidores', e.target.value)}/>
           </div>
-        ))}
-        <div>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ENGAGEMENT RATE %</label>
-          <input type="number" step="0.01" style={S.input} value={formData.engagement_rate} onChange={e=>setFormData({...formData,engagement_rate:parseFloat(e.target.value)||0})}/>
-        </div>
-        <div style={{gridColumn:'1/-1'}}>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MEJOR POST DEL DÍA</label>
-          <input style={S.input} value={formData.mejor_post} onChange={e=>setFormData({...formData,mejor_post:e.target.value})} placeholder="Link o descripción"/>
-        </div>
-        <div style={{gridColumn:'1/-1'}}>
-          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NOTAS</label>
-          <textarea style={{...S.textarea, minHeight:56}} value={formData.notas} onChange={e=>setFormData({...formData,notas:e.target.value})}/>
+          {[['views','VIEWS / ALCANCE'],['likes','LIKES'],['comentarios','COMENTARIOS'],['compartidos','COMPARTIDOS']].map(([k,l])=>(
+            <div key={k}>
+              <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>{l}</label>
+              <input type="number" style={S.input} value={formData[k]} onChange={e=>handleAutoMetrica(k, e.target.value)}/>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Métricas manuales */}
+      <div style={{background:'rgba(200,168,75,0.07)', border:'1px solid rgba(200,168,75,0.2)', borderRadius:12, padding:'14px 16px', marginBottom:16}}>
+        <div style={{fontSize:'0.72em', fontWeight:700, color:GOLD, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12}}>
+          Métricas editoriales · manuales
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12}}>
+          <div>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NUEVOS SEGUIDORES</label>
+            <input type="number" style={S.input} value={formData.nuevos_seguidores} onChange={e=>setFormData({...formData,nuevos_seguidores:parseInt(e.target.value)||0})}/>
+          </div>
+          <div>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ENGAGEMENT RATE % <span style={{color:'rgba(0,0,0,0.3)', fontWeight:400}}>(auto)</span></label>
+            <input type="number" step="0.01" style={S.input} value={formData.engagement_rate} onChange={e=>setFormData({...formData,engagement_rate:parseFloat(e.target.value)||0})}/>
+          </div>
+          <div style={{gridColumn:'1/-1'}}>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>MEJOR POST DEL MES</label>
+            <input style={S.input} value={formData.mejor_post} onChange={e=>setFormData({...formData,mejor_post:e.target.value})} placeholder="Link o descripción"/>
+          </div>
+          <div style={{gridColumn:'1/-1'}}>
+            <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>NOTAS</label>
+            <textarea style={{...S.textarea, minHeight:56}} value={formData.notas} onChange={e=>setFormData({...formData,notas:e.target.value})}/>
+          </div>
+        </div>
+      </div>
+
       <Msg msg={msg}/>
       <div style={{display:'flex', gap:10}}>
         <button style={S.btn()} onClick={guardarForm} disabled={saving}>{saving?'Guardando...':'💾 Guardar métricas'}</button>
@@ -955,10 +1021,10 @@ function TabDashboard() {
                   <span style={{fontSize:'1.3rem'}}>{p.icon}</span>
                   <span style={{fontWeight:700, color:TEXT, fontSize:'1rem'}}>{p.label}</span>
                 </div>
-                {m && <span style={{fontSize:'0.68em', color:MUTED}}>{m.fecha}</span>}
+                {m && <span style={{fontSize:'0.68em', color:MUTED}}>{m.fecha ? `${MESES[parseInt(m.fecha.slice(5,7))-1]} ${m.fecha.slice(0,4)}` : ''}</span>}
               </div>
               {!m ? (
-                <div style={{color:MUTED, fontSize:'0.84em', padding:'12px 0'}}>Sin datos aún. Registrá las métricas del día.</div>
+                <div style={{color:MUTED, fontSize:'0.84em', padding:'12px 0'}}>Sin datos aún. Registrá las métricas del mes.</div>
               ) : (
                 <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10}}>
                   <div>
@@ -1013,11 +1079,11 @@ function TabDashboard() {
       : (
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%', borderCollapse:'collapse'}}>
-            <thead><tr>{['Fecha','Plataforma','Seguidores','Views','Likes','Comentarios','Compartidos','Eng.%',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{['Período','Plataforma','Seguidores','Views','Likes','Comentarios','Compartidos','Eng.%',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
               {histFiltrado.slice(0,50).map(r=>(
                 <tr key={r.id}>
-                  <td style={{...S.td, fontWeight:600}}>{r.fecha}</td>
+                  <td style={{...S.td, fontWeight:600}}>{r.fecha ? `${MESES[parseInt(r.fecha.slice(5,7))-1]} ${r.fecha.slice(0,4)}` : '—'}</td>
                   <td style={S.td}><PlatBadge plat={r.plataforma}/></td>
                   <td style={{...S.td, textAlign:'right', fontWeight:600, color:PLAT[r.plataforma]?.color||TEXT}}>{(r.seguidores||0).toLocaleString()}</td>
                   <td style={{...S.td, textAlign:'right'}}>{(r.views||0).toLocaleString()}</td>
