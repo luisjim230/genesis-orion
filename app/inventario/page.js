@@ -226,6 +226,14 @@ export default function Inventario() {
     if (todos.length) {
       const maxFecha = todos.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
       todos = todos.filter(r => r.fecha_carga === maxFecha);
+      // Deduplicar por código — evita que un código importado dos veces aparezca doble
+      const seen = new Set();
+      todos = todos.filter(r => {
+        const key = (r.codigo || '').trim().toUpperCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
     if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
@@ -304,6 +312,14 @@ export default function Inventario() {
       if (typeof va === 'string') return colSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
       return colSort.dir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
     });
+    // Deduplicar por código — segunda línea de defensa
+    const seenCodes = new Set();
+    result = result.filter(item => {
+      const key = (item.codigo || '').trim().toUpperCase();
+      if (seenCodes.has(key)) return false;
+      seenCodes.add(key);
+      return true;
+    });
     return result;
   }, [calc, busqueda, filtroAlerta, colFilters, colSort]);
 
@@ -319,7 +335,15 @@ export default function Inventario() {
   const stats = calc.reduce((a, i) => { a[i._alerta] = (a[i._alerta] || 0) + 1; return a; }, {});
   const totalTCods = Object.keys(transitoMap).length;
   const totalTUnids = Object.values(transitoMap).reduce((s, v) => s + v, 0);
-  const calcAComprar = calc.filter(i => i._cantComprar > 0 || i._alerta === '🟡 Prestar atención');
+  const calcAComprar = (() => {
+    const seen = new Set();
+    return calc.filter(i => {
+      const key = (i.codigo || '').trim().toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return i._cantComprar > 0 || i._alerta === '🟡 Prestar atención';
+    });
+  })();
 
   const porProveedor = {};
   let totalOcultosCount = 0;
