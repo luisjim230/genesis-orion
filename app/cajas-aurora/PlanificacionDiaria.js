@@ -25,11 +25,13 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
 
   const fetchDia = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    let q = supabase
       .from('planificacion_diaria')
       .select('*')
-      .eq('fecha', fecha)
-      .order('created_at', { ascending: true });
+      .eq('fecha', fecha);
+    if (usuario) q = q.eq('created_by', usuario);
+    q = q.order('created_at', { ascending: true });
+    const { data } = await q;
     setMovimientos(data || []);
     if (data?.length > 0 && data[0].apertura_siguiente) {
       setApertura(String(data[0].apertura_siguiente));
@@ -37,7 +39,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
       setApertura('');
     }
     setLoading(false);
-  }, [fecha]);
+  }, [fecha, usuario]);
 
   useEffect(() => { fetchDia(); }, [fetchDia]);
 
@@ -46,12 +48,13 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
     (async () => {
       const hace30 = new Date();
       hace30.setDate(hace30.getDate() - 30);
-      const { data } = await supabase
+      let q = supabase
         .from('planificacion_diaria')
         .select('*')
-        .gte('fecha', hace30.toISOString().split('T')[0])
-        .order('fecha', { ascending: false })
-        .order('created_at', { ascending: true });
+        .gte('fecha', hace30.toISOString().split('T')[0]);
+      if (usuario) q = q.eq('created_by', usuario);
+      q = q.order('fecha', { ascending: false }).order('created_at', { ascending: true });
+      const { data } = await q;
       if (data) {
         // Agrupar por fecha
         const grouped = {};
@@ -62,7 +65,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
         setHistorial(Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])));
       }
     })();
-  }, [movimientos]);
+  }, [movimientos, usuario]);
 
   const agregar = async () => {
     if (!concepto.trim()) return;

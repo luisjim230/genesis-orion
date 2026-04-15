@@ -37,6 +37,7 @@ const today = () => new Date().toISOString().split('T')[0]
 
 const EMPTY_FORM = {
   fecha: today(),
+  turno: 'mañana',
   numero_caja: '',
   efectivo: '',
   tarjeta: '',
@@ -50,6 +51,7 @@ const EMPTY_FORM = {
 
 export default function CajasAurora() {
   const { perfil } = useAuth()
+  const cajera = perfil?.nombre || perfil?.username || null
   const [registros, setRegistros] = useState([])
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState(null)
@@ -63,6 +65,7 @@ export default function CajasAurora() {
   const [seccion, setSeccion] = useState('caja') // 'caja' | 'planificacion'
 
   const fetchRegistros = useCallback(async () => {
+    if (!cajera) return
     setLoading(true)
     const desde = `${filtroAnio}-${String(filtroMes + 1).padStart(2,'0')}-01`
     // Primer día del mes siguiente (evita fechas inválidas tipo "2026-04-31")
@@ -74,10 +77,12 @@ export default function CajasAurora() {
       .select('*')
       .gte('fecha', desde)
       .lt('fecha', hasta)
+      .eq('cajera', cajera)
       .order('fecha', { ascending: false })
+      .order('turno', { ascending: false })
     if (!error) setRegistros(data || [])
     setLoading(false)
-  }, [filtroMes, filtroAnio])
+  }, [filtroMes, filtroAnio, cajera])
 
   useEffect(() => { fetchRegistros() }, [fetchRegistros])
 
@@ -91,9 +96,12 @@ export default function CajasAurora() {
 
   const handleSave = async () => {
     if (!form.fecha) { setMsg({ tipo: 'error', texto: 'La fecha es requerida.' }); return }
+    if (!cajera) { setMsg({ tipo: 'error', texto: 'No se pudo identificar la cajera. Recargá la página.' }); return }
     setSaving(true)
     const payload = {
       fecha: form.fecha,
+      turno: form.turno || 'mañana',
+      cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
       tarjeta: parseMontoCR(form.tarjeta),
@@ -125,6 +133,7 @@ export default function CajasAurora() {
   const handleEdit = (r) => {
     setForm({
       fecha: r.fecha,
+      turno: r.turno || 'mañana',
       numero_caja: r.numero_caja || '',
       efectivo: r.efectivo || '',
       tarjeta: r.tarjeta || '',
@@ -166,7 +175,7 @@ export default function CajasAurora() {
         ))}
       </div>
 
-      {seccion === 'planificacion' && <PlanificacionDiaria usuario={perfil?.nombre || perfil?.username} esAdmin={perfil?.rol === 'admin'} />}
+      {seccion === 'planificacion' && <PlanificacionDiaria usuario={cajera} esAdmin={perfil?.rol === 'admin'} />}
 
       {seccion === 'caja' && <>
       {/* HEADER */}
@@ -232,6 +241,9 @@ export default function CajasAurora() {
                 <div key={r.id} style={s.card}>
                   <div style={s.cardTop}>
                     <div style={s.cardFecha}>{new Date(r.fecha + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long' })}</div>
+                    <div style={{ ...s.cajaBadge, background: r.turno === 'noche' ? 'rgba(91,75,200,0.12)' : 'rgba(200,168,75,0.12)', color: r.turno === 'noche' ? '#5b4bc8' : '#c8a84b' }}>
+                      {r.turno === 'noche' ? 'Turno noche' : 'Turno mañana'}
+                    </div>
                     {r.numero_caja && <div style={s.cajaBadge}>Caja #{r.numero_caja}</div>}
                     <div style={{ ...s.difBadge, background: difR === 0 ? 'rgba(76,175,125,0.12)' : difR > 0 ? 'rgba(91,155,213,0.12)' : 'rgba(224,82,82,0.12)', color: difR === 0 ? '#4caf7d' : difR > 0 ? '#5b9bd5' : '#e05252' }}>
                       {difR === 0 ? 'Cuadrado ✓' : difR > 0 ? `+${fmt(difR)}` : fmt(difR)}
@@ -275,6 +287,22 @@ export default function CajasAurora() {
               <label style={s.label}>Fecha *</label>
               <input style={s.input} type="date" value={form.fecha} onChange={e => setForm(f=>({...f, fecha:e.target.value}))} />
             </div>
+            <div style={s.field}>
+              <label style={s.label}>Turno *</label>
+              <div style={{ display:'flex', gap:8 }}>
+                {['mañana','noche'].map(t => (
+                  <button key={t} type="button" onClick={() => setForm(f=>({...f, turno:t}))} style={{
+                    flex:1, padding:'9px 12px', borderRadius:8, border: form.turno===t ? 'none' : '1px solid rgba(0,0,0,0.12)',
+                    background: form.turno===t ? 'linear-gradient(135deg, #c8a84b, #a08930)' : 'rgba(255,255,255,0.5)',
+                    color: form.turno===t ? '#fff' : 'rgba(0,0,0,0.55)', cursor:'pointer',
+                    fontWeight: form.turno===t ? 700 : 400, fontSize:13, textTransform:'capitalize',
+                    boxShadow: form.turno===t ? '0 4px 12px rgba(200,168,75,0.3)' : 'none', transition:'all 0.15s',
+                  }}>{t === 'mañana' ? 'Mañana' : 'Noche'}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={s.formGrid2}>
             <div style={s.field}>
               <label style={s.label}>Número de caja</label>
               <input style={s.input} type="text" placeholder="Ej: 2964" value={form.numero_caja} onChange={e => setForm(f=>({...f, numero_caja:e.target.value}))} />
