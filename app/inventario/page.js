@@ -226,6 +226,14 @@ export default function Inventario() {
     if (todos.length) {
       const maxFecha = todos.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
       todos = todos.filter(r => r.fecha_carga === maxFecha);
+      // Deduplicar por código — evita que un código importado dos veces aparezca doble
+      const seen = new Set();
+      todos = todos.filter(r => {
+        const key = (r.codigo || '').trim().toUpperCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
     if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
