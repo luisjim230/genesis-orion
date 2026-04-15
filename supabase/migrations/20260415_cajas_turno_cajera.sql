@@ -5,6 +5,33 @@
 -- INSTRUCCIONES: Ejecutar en Supabase SQL Editor (Settings > SQL Editor)
 -- ============================================================
 
+-- ============================================================
+-- PARTE A: LIMPIAR DUPLICADOS EN neo_minimos_maximos (URGENTE)
+-- Elimina filas duplicadas conservando el registro con el ID más bajo
+-- ============================================================
+
+-- Verificar duplicados antes de borrar:
+-- SELECT codigo, fecha_carga, COUNT(*) AS cnt
+-- FROM neo_minimos_maximos
+-- GROUP BY codigo, fecha_carga
+-- HAVING COUNT(*) > 1
+-- ORDER BY cnt DESC;
+
+DELETE FROM neo_minimos_maximos
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM neo_minimos_maximos
+  GROUP BY codigo, fecha_carga
+);
+
+-- Opcional: agregar constraint para evitar futuros duplicados
+-- ALTER TABLE neo_minimos_maximos
+--   ADD CONSTRAINT neo_minimos_maximos_codigo_fecha_key UNIQUE (codigo, fecha_carga);
+
+-- ============================================================
+-- PARTE B: CAJAS AURORA — Cierres por turno + aislamiento
+-- ============================================================
+
 -- 1. Agregar columna 'turno' a cajas_aurora
 --    Valores: 'Turno 1' | 'Turno 2' | 'Turno 3' (configurable en el código)
 ALTER TABLE cajas_aurora
