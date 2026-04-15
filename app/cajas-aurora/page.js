@@ -37,6 +37,16 @@ const today = () => new Date().toISOString().split('T')[0]
 
 const TURNOS = ['Turno 1', 'Turno 2', 'Turno 3']
 
+// Encode turno + cajera into the observaciones field (no new DB columns needed)
+const META_RE = /^META:t=([^;]+);c=([^\n]*)\n?/
+const withMeta = (turno, cajera, obs) => `META:t=${turno};c=${cajera || ''}\n${obs || ''}`
+const parseMeta = (raw) => {
+  if (!raw) return { turno: 'Turno 1', cajera: null, obs: '' }
+  const m = raw.match(META_RE)
+  if (!m) return { turno: 'Turno 1', cajera: null, obs: raw }
+  return { turno: m[1], cajera: m[2] || null, obs: raw.slice(m[0].length) }
+}
+
 const EMPTY_FORM = {
   fecha: today(),
   turno: 'Turno 1',
@@ -79,10 +89,27 @@ export default function CajasAurora() {
       .select('*')
       .gte('fecha', desde)
       .lt('fecha', hasta)
-      .eq('cajera', cajera)
       .order('fecha', { ascending: false })
-      .order('turno', { ascending: true })
-    if (!error) setRegistros(data || [])
+    if (!error) {
+      // Parse meta prefix from each record, then filter by cajera client-side
+      const processed = (data || [])
+        .map(r => {
+          const meta = parseMeta(r.observaciones)
+          // Legacy records (no META prefix) have cajera=null → belong to Laura
+          return { ...r, _turno: meta.turno, _cajera: meta.cajera, _obs: meta.obs }
+        })
+        .filter(r => {
+          if (r._cajera === cajera) return true        // own new record
+          if (!r._cajera && cajera === 'Laura') return true  // legacy record → Laura
+          return false
+        })
+      // Sort: fecha DESC, then turno ASC
+      processed.sort((a, b) => {
+        if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha)
+        return a._turno.localeCompare(b._turno)
+      })
+      setRegistros(processed)
+    }
     setLoading(false)
   }, [filtroMes, filtroAnio, cajera])
 
@@ -102,8 +129,6 @@ export default function CajasAurora() {
     setSaving(true)
     const payload = {
       fecha: form.fecha,
-      turno: form.turno || 'Turno 1',
-      cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
       tarjeta: parseMontoCR(form.tarjeta),
@@ -112,7 +137,8 @@ export default function CajasAurora() {
       otros: parseMontoCR(form.otros),
       total_sistema: parseMontoCR(form.total_sistema),
       diferencia: calcDiferencia(form),
-      observaciones: form.observaciones || null,
+      // turno and cajera are stored as a metadata prefix inside observaciones
+      observaciones: withMeta(form.turno || 'Turno 1', cajera, form.observaciones),
       incidencias: form.incidencias || null,
       updated_at: new Date().toISOString(),
     }
@@ -135,7 +161,7 @@ export default function CajasAurora() {
   const handleEdit = (r) => {
     setForm({
       fecha: r.fecha,
-      turno: r.turno || 'Turno 1',
+      turno: r._turno || 'Turno 1',
       numero_caja: r.numero_caja || '',
       efectivo: r.efectivo || '',
       tarjeta: r.tarjeta || '',
@@ -143,7 +169,7 @@ export default function CajasAurora() {
       credito: r.credito || '',
       otros: r.otros || '',
       total_sistema: r.total_sistema || '',
-      observaciones: r.observaciones || '',
+      observaciones: r._obs || '', // use pre-parsed obs (without META prefix)
       incidencias: r.incidencias || '',
     })
     setEditId(r.id)
@@ -244,7 +270,7 @@ export default function CajasAurora() {
                   <div style={s.cardTop}>
                     <div style={s.cardFecha}>{new Date(r.fecha + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long' })}</div>
                     <div style={{ ...s.cajaBadge, background:'rgba(91,75,200,0.1)', color:'#5b4bc8' }}>
-                      {r.turno || 'Turno 1'}
+                      {r._turno || 'Turno 1'}
                     </div>
                     {r.numero_caja && <div style={s.cajaBadge}>Caja #{r.numero_caja}</div>}
                     <div style={{ ...s.difBadge, background: difR === 0 ? 'rgba(76,175,125,0.12)' : difR > 0 ? 'rgba(91,155,213,0.12)' : 'rgba(224,82,82,0.12)', color: difR === 0 ? '#4caf7d' : difR > 0 ? '#5b9bd5' : '#e05252' }}>
@@ -262,9 +288,9 @@ export default function CajasAurora() {
                       <span style={s.montoVal}>{fmt(r.total_sistema)}</span>
                     </div>
                   </div>
-                  {(r.observaciones || r.incidencias) && (
+                  {(r._obs || r.incidencias) && (
                     <div style={s.cardObs}>
-                      {r.observaciones && <div style={s.obsItem}><span style={s.obsLabel}>Obs:</span> {r.observaciones}</div>}
+                      {r._obs && <div style={s.obsItem}><span style={s.obsLabel}>Obs:</span> {r._obs}</div>}
                       {r.incidencias && <div style={{ ...s.obsItem, color:'#e8a030' }}><span style={s.obsLabel}>⚠ Incidencias:</span> {r.incidencias}</div>}
                     </div>
                   )}
