@@ -108,9 +108,12 @@ export default function EntregasTrazabilidad() {
     }
     setSaving(false)
     if (error) { setMsg({tipo:'error',texto:'Error: '+error.message}); return }
+    // Cambiar el filtro al mes/año de la entrega guardada para que siempre aparezca
+    const fechaGuardada = new Date(form.fecha + 'T12:00:00')
+    setFiltroMes(fechaGuardada.getMonth())
+    setFiltroAnio(fechaGuardada.getFullYear())
     setMsg({tipo:'ok',texto: editId ? 'Entrega actualizada.' : 'Entrega registrada.'})
     setForm(EMPTY_FORM); setEditId(null); setVista('lista')
-    fetchRegistros()
     setTimeout(() => setMsg(null), 3000)
   }
 
