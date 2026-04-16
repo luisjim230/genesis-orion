@@ -241,22 +241,32 @@ export default function Inventario() {
     supabase.rpc('inventario_valor_actual').then(({ data }) => {
       if (data?.[0]?.valor_costo) setValorInventario(parseFloat(data[0].valor_costo))
     });
-    const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item,ordenes_compra(fecha_orden)').in('estado_item', ['pendiente', 'parcial']);
+    const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item,orden_id').in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};
-    const diasMap = {};
-    const ahora = new Date();
+    const ordenIds = new Set();
     (tData || []).forEach(i => {
       const c = (i.codigo || '').trim();
       const p = Math.max((parseFloat(i.cantidad_ordenada) || 0) - (parseFloat(i.cantidad_recibida) || 0), 0);
       if (c && p > 0) tMap[c] = (tMap[c] || 0) + p;
-      const fo = i.ordenes_compra?.fecha_orden;
-      if (fo && c) {
+      if (i.orden_id) ordenIds.add(i.orden_id);
+    });
+    setTransitoMap(tMap);
+    const diasMap = {};
+    if (ordenIds.size > 0) {
+      const { data: ordFechas } = await supabase.from('ordenes_compra').select('id,fecha_orden').in('id', [...ordenIds]);
+      const ordenFechaMap = {};
+      (ordFechas || []).forEach(o => { if (o.fecha_orden) ordenFechaMap[o.id] = o.fecha_orden; });
+      const ahora = new Date();
+      (tData || []).forEach(i => {
+        const c = (i.codigo || '').trim();
+        if (!c || !i.orden_id) return;
+        const fo = ordenFechaMap[i.orden_id];
+        if (!fo) return;
         const dias = Math.floor((ahora - new Date(fo)) / 86400000);
         const cod = c.toUpperCase();
         if (diasMap[cod] === undefined || dias < diasMap[cod]) diasMap[cod] = dias;
-      }
-    });
-    setTransitoMap(tMap);
+      });
+    }
     setTransitoDiasMap(diasMap);
     try {
       const { data: pd } = await supabase.from('proveedores_pausados').select('proveedor');
