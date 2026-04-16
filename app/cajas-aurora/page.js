@@ -203,7 +203,7 @@ export default function CajasAurora() {
         ))}
       </div>
 
-      {seccion === 'planificacion' && <PlanificacionDiaria usuario={cajera} esAdmin={perfil?.rol === 'admin'} />}
+      {seccion === 'planificacion' && <PlanificacionDiaria usuario={cajera} esAdmin={perfil?.rol === 'admin'} esLegacy={perfil?.rol === 'laura'} />}
 
       {seccion === 'caja' && <>
       {/* HEADER */}

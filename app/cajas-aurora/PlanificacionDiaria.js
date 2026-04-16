@@ -8,7 +8,7 @@ const SUGERENCIAS = ['N. Crédito', 'Transferencia', 'Chofer', 'Peajes', 'Gasoli
 const fmt = (n) => Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function PlanificacionDiaria({ usuario, esAdmin }) {
+export default function PlanificacionDiaria({ usuario, esAdmin, esLegacy }) {
   const [fecha, setFecha] = useState(today());
   const [movimientos, setMovimientos] = useState([]);
   const [apertura, setApertura] = useState('');
@@ -23,12 +23,16 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   const [monto, setMonto] = useState('');
   const [responsable, setResponsable] = useState('');
 
-  // Helper: legacy records have created_by='cajera' or null → belong to Laura
+  // Helper: filter records by owner
+  // - esLegacy=true (rol 'laura') → también ve registros históricos (created_by='cajera'/null)
+  // - esAdmin=true → ve todo
+  // - Mientras usuario no carga → no muestra nada (evita flash de datos ajenos)
   const perteneceAlUsuario = (m) => {
+    if (esAdmin) return true
+    if (!usuario) return false // auth todavía cargando → no mostrar nada
     if (m.created_by === usuario) return true
-    if (!usuario) return true // sin usuario prop → mostrar todo (admin)
-    const esLegacy = !m.created_by || m.created_by === 'cajera'
-    return esLegacy && usuario === 'Laura'
+    const esRegistroLegacy = !m.created_by || m.created_by === 'cajera'
+    return esRegistroLegacy && esLegacy
   }
 
   const fetchDia = useCallback(async () => {
@@ -47,7 +51,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
     }
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fecha, usuario]);
+  }, [fecha, usuario, esLegacy, esAdmin]);
 
   useEffect(() => { fetchDia(); }, [fetchDia]);
 
@@ -73,7 +77,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movimientos, usuario]);
+  }, [movimientos, usuario, esLegacy, esAdmin]);
 
   const agregar = async () => {
     if (!concepto.trim()) return;
