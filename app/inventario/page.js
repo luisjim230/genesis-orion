@@ -556,9 +556,12 @@ export default function Inventario() {
       lotes.push({ nombre: loteName, items: loteItems });
     }
 
-    // ── Guardar cada lote en Supabase ──
+    // ── Guardar cada lote en Supabase (con protección contra duplicados) ──
     try {
       for (const lote of lotes) {
+        const hace10min = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { data: existente } = await supabase.from('ordenes_compra').select('id').eq('nombre_lote', lote.nombre).gte('creado_en', hace10min).limit(1);
+        if (existente?.length) continue;
         const { data: cab } = await supabase.from('ordenes_compra').insert([{ fecha_orden: ahora, nombre_lote: lote.nombre, dias_tribucion: dias, total_productos: lote.items.length, creado_en: ahora }]).select();
         if (cab?.length) {
           const oid = cab[0].id;
