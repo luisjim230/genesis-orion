@@ -41,7 +41,7 @@ function badgeDias(d, limA, limR) {
 }
 
 // ─── TAB 1: ALERTAS ──────────────────────────────────────────────────────────
-function TabAlertas({ ordenes, items, loading }) {
+function TabAlertas({ ordenes, items, setItems, loading }) {
   const [limA, setLimA] = useState(5)
   const [limR, setLimR] = useState(10)
   const [filtroProv, setFiltroProv] = useState('')
@@ -626,7 +626,7 @@ export default function TrazabilidadPage() {
           </button>
         ))}
       </div>
-      {tab === 0 && <TabAlertas   ordenes={ordenes} items={items} loading={loading} />}
+      {tab === 0 && <TabAlertas   ordenes={ordenes} items={items} setItems={setItems} loading={loading} />}
       {tab === 1 && <TabHistorial ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
       {tab === 2 && <TabProcesar  ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
       <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#3a4150', textAlign: 'right' }}>
