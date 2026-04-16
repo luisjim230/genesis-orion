@@ -51,7 +51,7 @@ export async function POST(request) {
         const fRecep = parseFecha(item.fecha_recepcion);
         const fOrden = parseFecha(fechaOrden);
         if (!fRecep || !fOrden) continue;
-        if (fRecep <= fOrden) {
+        if (fRecep < fOrden) {
           aRevertir.push({ id: item.id, cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null });
           revertidos++;
         }
@@ -129,8 +129,8 @@ export async function POST(request) {
         continue;
       }
 
-      // Solo compras que ocurrieron DESPUÉS de la orden (no el mismo día, no antes)
-      const validas = compras.filter(c => c.fecha > fechaOrden);
+      // Solo compras que ocurrieron a partir de la fecha de la orden (mismo día o después)
+      const validas = compras.filter(c => c.fecha >= fechaOrden);
 
       if (validas.length === 0) {
         res.ignorados_por_fecha++;
