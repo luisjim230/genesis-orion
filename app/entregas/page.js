@@ -114,6 +114,7 @@ export default function EntregasTrazabilidad() {
     setFiltroAnio(fechaGuardada.getFullYear())
     setMsg({tipo:'ok',texto: editId ? 'Entrega actualizada.' : 'Entrega registrada.'})
     setForm(EMPTY_FORM); setEditId(null); setVista('lista')
+    fetchRegistros() // fuerza refresh aunque el mes no cambie (misma fecha → useEffect no dispara)
     setTimeout(() => setMsg(null), 3000)
   }
 
