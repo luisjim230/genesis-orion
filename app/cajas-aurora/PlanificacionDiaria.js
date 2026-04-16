@@ -8,7 +8,7 @@ const SUGERENCIAS = ['N. Crédito', 'Transferencia', 'Chofer', 'Peajes', 'Gasoli
 const fmt = (n) => Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function PlanificacionDiaria({ usuario, esAdmin, esLegacy }) {
+export default function PlanificacionDiaria({ usuario, esAdmin }) {
   const [fecha, setFecha] = useState(today());
   const [movimientos, setMovimientos] = useState([]);
   const [apertura, setApertura] = useState('');
@@ -23,69 +23,69 @@ export default function PlanificacionDiaria({ usuario, esAdmin, esLegacy }) {
   const [monto, setMonto] = useState('');
   const [responsable, setResponsable] = useState('');
 
-  // Helper: filter records by owner
-  // esLegacy=true (rol 'laura') → ve registros propios + históricos (created_by='cajera'/null)
-  //   También hace match parcial por primer nombre, por si el nombre cambió con el tiempo
-  // esAdmin=true → ve todo
-  // usuario=null (auth cargando) → no muestra nada (evita flash de datos ajenos)
-  const perteneceAlUsuario = (m) => {
-    if (esAdmin) return true
-    if (!usuario) return false
-    if (m.created_by === usuario) return true
-    // Legacy: null o literal 'cajera' → solo para usuarios con rol laura
-    if (!m.created_by || m.created_by === 'cajera') return esLegacy
-    // Para usuarios legacy: también hacer match por primer nombre (case-insensitive)
-    // cubre casos como created_by='Laura' cuando usuario='Laura García'
-    if (esLegacy) {
-      const primerNombre = usuario.split(/\s+/)[0].toLowerCase()
-      if (m.created_by.toLowerCase().startsWith(primerNombre)) return true
-    }
-    return false
-  }
-
   const fetchDia = useCallback(async () => {
+    // No cargar nada si el usuario no está identificado todavía
+    if (!usuario && !esAdmin) {
+      setMovimientos([]);
+      setApertura('');
+      return;
+    }
     setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from('planificacion_diaria')
       .select('*')
-      .eq('fecha', fecha)
-      .order('created_at', { ascending: true });
-    const filtrado = (data || []).filter(perteneceAlUsuario);
-    setMovimientos(filtrado);
-    if (filtrado.length > 0 && filtrado[0].apertura_siguiente) {
-      setApertura(String(filtrado[0].apertura_siguiente));
+      .eq('fecha', fecha);
+    // Filtro server-side: solo registros del usuario actual (admin ve todo)
+    if (!esAdmin) {
+      query = query.eq('created_by', usuario);
+    }
+    query = query.order('created_at', { ascending: true });
+    const { data } = await query;
+    const movs = data || [];
+    setMovimientos(movs);
+    if (movs.length > 0 && movs[0].apertura_siguiente) {
+      setApertura(String(movs[0].apertura_siguiente));
     } else {
       setApertura('');
     }
     setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fecha, usuario, esLegacy, esAdmin]);
+  }, [fecha, usuario, esAdmin]);
 
   useEffect(() => { fetchDia(); }, [fetchDia]);
 
   // Cargar historial de los últimos 30 días
   useEffect(() => {
+    if (!usuario && !esAdmin) {
+      setHistorial([]);
+      return;
+    }
+    let cancelled = false;
     (async () => {
       const hace30 = new Date();
       hace30.setDate(hace30.getDate() - 30);
-      const { data } = await supabase
+      let query = supabase
         .from('planificacion_diaria')
         .select('*')
         .gte('fecha', hace30.toISOString().split('T')[0])
         .order('fecha', { ascending: false })
         .order('created_at', { ascending: true });
+      // Filtro server-side
+      if (!esAdmin) {
+        query = query.eq('created_by', usuario);
+      }
+      const { data } = await query;
+      if (cancelled) return;
       if (data) {
-        // Filtrar por usuario y agrupar por fecha
         const grouped = {};
-        data.filter(perteneceAlUsuario).forEach(m => {
+        data.forEach(m => {
           if (!grouped[m.fecha]) grouped[m.fecha] = [];
           grouped[m.fecha].push(m);
         });
         setHistorial(Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])));
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movimientos, usuario, esLegacy, esAdmin]);
+    return () => { cancelled = true; };
+  }, [movimientos, usuario, esAdmin]);
 
   const agregar = async () => {
     if (!concepto.trim()) return;
