@@ -49,6 +49,9 @@ function TabAlertas({ ordenes, items, setItems, loading }) {
   const [busqueda, setBusqueda] = useState('')
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(null)
   const [cancelando, setCancelando] = useState(false)
+  const [confirmandoRecibir, setConfirmandoRecibir] = useState(null)
+  const [cantRecibir, setCantRecibir] = useState('')
+  const [marcandoRecibido, setMarcandoRecibido] = useState(false)
 
   const proveedores = useMemo(() => [...new Set(items.map(it => it.proveedor).filter(Boolean))].sort(), [items])
 
@@ -66,6 +69,30 @@ function TabAlertas({ ordenes, items, setItems, loading }) {
     } finally {
       setConfirmandoCancelar(null)
       setCancelando(false)
+    }
+  }
+
+  async function marcarRecibido(item, cantRecibida) {
+    setMarcandoRecibido(true)
+    try {
+      const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0
+      const cantRec = parseFloat(cantRecibida) || 0
+      const nuevoEstado = cantRec >= cantOrdenada ? 'completo' : 'parcial'
+      const { error } = await supabase
+        .from('ordenes_compra_items')
+        .update({ cantidad_recibida: cantRec, estado_item: nuevoEstado, fecha_recepcion: new Date().toISOString() })
+        .eq('id', item.id)
+      if (!error) {
+        setItems(prev => prev.map(i => i.id === item.id ? { ...i, cantidad_recibida: cantRec, estado_item: nuevoEstado } : i))
+      } else {
+        console.error('Error marcando recibido:', error)
+      }
+    } catch(e) {
+      console.error(e)
+    } finally {
+      setConfirmandoRecibir(null)
+      setCantRecibir('')
+      setMarcandoRecibido(false)
     }
   }
 
@@ -173,13 +200,46 @@ function TabAlertas({ ordenes, items, setItems, loading }) {
                     <td style={{ ...S.td, textAlign: 'right' }}>{it.cantidad_ordenada || 0}</td>
                     <td style={{ ...S.td, textAlign: 'right', color: '#68d391' }}>{it.cantidad_recibida || 0}</td>
                     <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: '#f6ad55' }}>{it.pendiente}</td>
-                    <td style={S.td}><button onClick={() => setConfirmandoCancelar(it)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fc818166', borderRadius: 6, color: '#fc8181', cursor: 'pointer', fontSize: '0.78em', whiteSpace: 'nowrap' }}>✕ Cancelar</button></td>
+                    <td style={S.td}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => { setConfirmandoRecibir(it); setCantRecibir(String(it.pendiente)) }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #68d39166', borderRadius: 6, color: '#68d391', cursor: 'pointer', fontSize: '0.78em', whiteSpace: 'nowrap' }}>✓ Recibido</button>
+                        <button onClick={() => setConfirmandoCancelar(it)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fc818166', borderRadius: 6, color: '#fc8181', cursor: 'pointer', fontSize: '0.78em', whiteSpace: 'nowrap' }}>✕ Cancelar</button>
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
           <div style={{ fontSize: '0.75em', color: MUTED, marginTop: 8, textAlign: 'right' }}>{pendientes.length} ítem(s) pendientes</div>
+        </div>
+      )}
+
+      {confirmandoRecibir && (
+        <div style={{ position: 'fixed', inset: 0, background: '#00000066', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', border: '1px solid #68d39155', borderRadius: 12, padding: 24, maxWidth: 420, width: '90%', boxShadow: '0 8px 32px #0003' }}>
+            <div style={{ fontSize: '1.1em', fontWeight: 700, color: '#68d391', marginBottom: 10 }}>✅ Marcar como recibido</div>
+            <div style={{ background: '#f7f9fc', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.85em' }}>
+              <div style={{ fontWeight: 600, color: '#2a3a50' }}>{confirmandoRecibir.nombre}</div>
+              <div style={{ color: '#888', marginTop: 2 }}>{confirmandoRecibir.proveedor}</div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: '0.82em', color: '#555', display: 'block', marginBottom: 6 }}>Cantidad recibida</label>
+              <input
+                type="number"
+                min="0"
+                value={cantRecibir}
+                onChange={e => setCantRecibir(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: '0.9em', boxSizing: 'border-box' }}
+              />
+              <div style={{ fontSize: '0.76em', color: '#aaa', marginTop: 4 }}>Ordenado: {confirmandoRecibir.cantidad_ordenada} · Pendiente: {confirmandoRecibir.pendiente}</div>
+            </div>
+            <p style={{ color: '#aaa', fontSize: '0.78em', marginBottom: 16 }}>Se registrará la recepción con fecha de hoy. Si la cantidad es menor a lo ordenado, quedará como <strong style={{ color: '#f6ad55' }}>parcial</strong>.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setConfirmandoRecibir(null); setCantRecibir('') }} style={{ ...S.btnSm(), padding: '8px 16px' }}>Volver</button>
+              <button onClick={() => marcarRecibido(confirmandoRecibir, cantRecibir)} disabled={marcandoRecibido || !cantRecibir} style={{ ...S.btn('#68d391'), opacity: (marcandoRecibido || !cantRecibir) ? 0.6 : 1 }}>{marcandoRecibido ? 'Guardando...' : 'Confirmar recepción'}</button>
+            </div>
+          </div>
         </div>
       )}
 
