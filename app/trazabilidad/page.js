@@ -641,12 +641,14 @@ export default function TrazabilidadPage() {
       await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids)
     }
     const itsPendFiltrados = (itsPend||[]).filter(it => !vencidos.some(v => v.id === it.id))
-    // Deduplicar por (orden_id, codigo) — si el mismo ítem fue insertado dos veces en la misma orden, conservar el más reciente
-    const vistoPendiente = new Set()
+    // Deduplicar: misma orden (orden_id) O mismo lote (nombre_lote) + mismo código → conservar solo uno
+    const ordMap = {}; (ords||[]).forEach(o => { ordMap[o.id] = o })
+    const vistoDedup = new Set()
     const itsPendDedup = itsPendFiltrados.filter(it => {
-      const key = `${it.orden_id}__${(it.codigo||'').trim()}`
-      if (vistoPendiente.has(key)) return false
-      vistoPendiente.add(key)
+      const nombreLote = ordMap[it.orden_id]?.nombre_lote || it.orden_id || ''
+      const key = `${nombreLote}__${(it.codigo||'').trim()}`
+      if (vistoDedup.has(key)) return false
+      vistoDedup.add(key)
       return true
     })
     const its = [...itsPendDedup, ...(itsComp||[])]
