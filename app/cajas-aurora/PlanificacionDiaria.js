@@ -23,6 +23,14 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   const [monto, setMonto] = useState('');
   const [responsable, setResponsable] = useState('');
 
+  // Helper: legacy records have created_by='cajera' or null → belong to Laura
+  const perteneceAlUsuario = (m) => {
+    if (m.created_by === usuario) return true
+    if (!usuario) return true // sin usuario prop → mostrar todo (admin)
+    const esLegacy = !m.created_by || m.created_by === 'cajera'
+    return esLegacy && usuario === 'Laura'
+  }
+
   const fetchDia = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
@@ -30,14 +38,16 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
       .select('*')
       .eq('fecha', fecha)
       .order('created_at', { ascending: true });
-    setMovimientos(data || []);
-    if (data?.length > 0 && data[0].apertura_siguiente) {
-      setApertura(String(data[0].apertura_siguiente));
+    const filtrado = (data || []).filter(perteneceAlUsuario);
+    setMovimientos(filtrado);
+    if (filtrado.length > 0 && filtrado[0].apertura_siguiente) {
+      setApertura(String(filtrado[0].apertura_siguiente));
     } else {
       setApertura('');
     }
     setLoading(false);
-  }, [fecha]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fecha, usuario]);
 
   useEffect(() => { fetchDia(); }, [fetchDia]);
 
@@ -53,16 +63,17 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
         .order('fecha', { ascending: false })
         .order('created_at', { ascending: true });
       if (data) {
-        // Agrupar por fecha
+        // Filtrar por usuario y agrupar por fecha
         const grouped = {};
-        data.forEach(m => {
+        data.filter(perteneceAlUsuario).forEach(m => {
           if (!grouped[m.fecha]) grouped[m.fecha] = [];
           grouped[m.fecha].push(m);
         });
         setHistorial(Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])));
       }
     })();
-  }, [movimientos]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movimientos, usuario]);
 
   const agregar = async () => {
     if (!concepto.trim()) return;
