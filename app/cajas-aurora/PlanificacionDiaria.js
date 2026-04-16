@@ -24,15 +24,23 @@ export default function PlanificacionDiaria({ usuario, esAdmin, esLegacy }) {
   const [responsable, setResponsable] = useState('');
 
   // Helper: filter records by owner
-  // - esLegacy=true (rol 'laura') → también ve registros históricos (created_by='cajera'/null)
-  // - esAdmin=true → ve todo
-  // - Mientras usuario no carga → no muestra nada (evita flash de datos ajenos)
+  // esLegacy=true (rol 'laura') → ve registros propios + históricos (created_by='cajera'/null)
+  //   También hace match parcial por primer nombre, por si el nombre cambió con el tiempo
+  // esAdmin=true → ve todo
+  // usuario=null (auth cargando) → no muestra nada (evita flash de datos ajenos)
   const perteneceAlUsuario = (m) => {
     if (esAdmin) return true
-    if (!usuario) return false // auth todavía cargando → no mostrar nada
+    if (!usuario) return false
     if (m.created_by === usuario) return true
-    const esRegistroLegacy = !m.created_by || m.created_by === 'cajera'
-    return esRegistroLegacy && esLegacy
+    // Legacy: null o literal 'cajera' → solo para usuarios con rol laura
+    if (!m.created_by || m.created_by === 'cajera') return esLegacy
+    // Para usuarios legacy: también hacer match por primer nombre (case-insensitive)
+    // cubre casos como created_by='Laura' cuando usuario='Laura García'
+    if (esLegacy) {
+      const primerNombre = usuario.split(/\s+/)[0].toLowerCase()
+      if (m.created_by.toLowerCase().startsWith(primerNombre)) return true
+    }
+    return false
   }
 
   const fetchDia = useCallback(async () => {
