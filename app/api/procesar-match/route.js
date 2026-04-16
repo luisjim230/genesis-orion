@@ -32,10 +32,9 @@ function parseFecha(val) {
 
 export async function POST(request) {
   try {
-    const { fecha_carga } = await request.json();
-    if (!fecha_carga) return NextResponse.json({ error: 'fecha_carga requerida' }, { status: 400 });
+    await request.json().catch(() => ({})); // fecha_carga ya no se usa como filtro
 
-    // 1. Revertir matchs inválidos (recepción anterior o igual a la fecha de orden)
+    // 1. Revertir matchs inválidos (recepción anterior a la fecha de orden)
     const { data: itemsConFecha } = await getDb()
       .from('ordenes_compra_items')
       .select('id, fecha_recepcion, orden_id, ordenes_compra(fecha_orden)')
@@ -61,7 +60,7 @@ export async function POST(request) {
       }
     }
 
-    // 2. Traer compras NEO con paginación
+    // 2. Traer TODAS las compras históricas de NEO (sin filtrar por fecha_carga)
     const PAGE_SIZE = 1000;
     let todos = [];
     let offset = 0;
@@ -69,7 +68,6 @@ export async function POST(request) {
       const { data } = await getDb()
         .from('neo_items_comprados')
         .select('codigo_interno, cantidad_comprada, fecha')
-        .eq('fecha_carga', fecha_carga)
         .range(offset, offset + PAGE_SIZE - 1);
       if (!data || data.length === 0) break;
       todos = todos.concat(data);
@@ -78,7 +76,7 @@ export async function POST(request) {
     }
 
     if (todos.length === 0) {
-      return NextResponse.json({ ok: false, error: 'Sin datos en neo_items_comprados para esta carga' });
+      return NextResponse.json({ ok: false, error: 'Sin datos en neo_items_comprados' });
     }
 
     // 3. Ítems pendientes/parciales
