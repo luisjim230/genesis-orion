@@ -129,8 +129,9 @@ export async function POST(request) {
         continue;
       }
 
-      // Solo compras que ocurrieron a partir de la fecha de la orden (mismo día o después)
-      const validas = compras.filter(c => c.fecha >= fechaOrden);
+      // Comparar solo por fecha calendario (ignorar hora), para que compras del mismo día siempre matcheen
+      const fechaOrdenDia = new Date(fechaOrden); fechaOrdenDia.setUTCHours(0, 0, 0, 0);
+      const validas = compras.filter(c => c.fecha >= fechaOrdenDia);
 
       if (validas.length === 0) {
         res.ignorados_por_fecha++;

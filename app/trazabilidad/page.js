@@ -641,7 +641,15 @@ export default function TrazabilidadPage() {
       await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids)
     }
     const itsPendFiltrados = (itsPend||[]).filter(it => !vencidos.some(v => v.id === it.id))
-    const its = [...itsPendFiltrados, ...(itsComp||[])]
+    // Deduplicar por (orden_id, codigo) — si el mismo ítem fue insertado dos veces en la misma orden, conservar el más reciente
+    const vistoPendiente = new Set()
+    const itsPendDedup = itsPendFiltrados.filter(it => {
+      const key = `${it.orden_id}__${(it.codigo||'').trim()}`
+      if (vistoPendiente.has(key)) return false
+      vistoPendiente.add(key)
+      return true
+    })
+    const its = [...itsPendDedup, ...(itsComp||[])]
     // Enriquecer ordenes con pdf_url de cola
     const colaMap = {}
     ;(cola||[]).forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
