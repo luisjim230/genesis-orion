@@ -241,33 +241,23 @@ export default function Inventario() {
     supabase.rpc('inventario_valor_actual').then(({ data }) => {
       if (data?.[0]?.valor_costo) setValorInventario(parseFloat(data[0].valor_costo))
     });
-    const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item', ['pendiente', 'parcial']);
+    const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item,ordenes_compra(fecha_orden)').in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};
+    const diasMap = {};
+    const ahora = new Date();
     (tData || []).forEach(i => {
       const c = (i.codigo || '').trim();
       const p = Math.max((parseFloat(i.cantidad_ordenada) || 0) - (parseFloat(i.cantidad_recibida) || 0), 0);
       if (c && p > 0) tMap[c] = (tMap[c] || 0) + p;
+      const fo = i.ordenes_compra?.fecha_orden;
+      if (fo && c) {
+        const dias = Math.floor((ahora - new Date(fo)) / 86400000);
+        const cod = c.toUpperCase();
+        if (diasMap[cod] === undefined || dias < diasMap[cod]) diasMap[cod] = dias;
+      }
     });
     setTransitoMap(tMap);
-    try {
-      const codsEnTransito = Object.keys(tMap);
-      if (codsEnTransito.length > 0) {
-        const { data: ordenesItems } = await supabase
-          .from('ordenes_compra_items')
-          .select('codigo, ordenes_compra(fecha_orden)')
-          .in('codigo', codsEnTransito.slice(0, 100))
-          .in('estado_item', ['pendiente', 'parcial'])
-          .order('creado_en', { ascending: false });
-        const diasMap = {};
-        for (const item of (ordenesItems || [])) {
-          const cod = (item.codigo || '').trim().toUpperCase();
-          if (diasMap[cod] !== undefined) continue;
-          const fo = item.ordenes_compra?.fecha_orden;
-          if (fo) diasMap[cod] = Math.floor((new Date() - new Date(fo)) / 86400000);
-        }
-        setTransitoDiasMap(diasMap);
-      }
-    } catch(e) { console.warn('[transitoDiasMap]', e.message); }
+    setTransitoDiasMap(diasMap);
     try {
       const { data: pd } = await supabase.from('proveedores_pausados').select('proveedor');
       setProveedoresPausados(new Set((pd || []).map(r => r.proveedor)));
