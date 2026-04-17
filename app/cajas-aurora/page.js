@@ -91,16 +91,15 @@ export default function CajasAurora() {
       .lt('fecha', hasta)
       .order('fecha', { ascending: false })
     if (!error) {
-      // Parse meta prefix from each record, then filter by cajera client-side
       const processed = (data || [])
         .map(r => {
           const meta = parseMeta(r.observaciones)
-          // Legacy records (no META prefix) have cajera=null → belong to Laura
-          return { ...r, _turno: meta.turno, _cajera: meta.cajera, _obs: meta.obs }
+          return { ...r, _turno: r.turno || meta.turno, _cajera: r.cajera || meta.cajera, _obs: meta.obs }
         })
         .filter(r => {
-          if (r._cajera === cajera) return true        // own new record
-          if (!r._cajera && cajera === 'Laura') return true  // legacy record → Laura
+          // r.cajera: columna real (si migración aplicada); r._cajera: fallback desde META prefix
+          if (r._cajera === cajera) return true
+          if (!r._cajera && cajera === 'Laura') return true  // registros legacy sin cajera
           return false
         })
       // Sort: fecha DESC, then turno ASC
@@ -129,6 +128,8 @@ export default function CajasAurora() {
     setSaving(true)
     const payload = {
       fecha: form.fecha,
+      turno: form.turno || 'Turno 1',
+      cajera: cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
       tarjeta: parseMontoCR(form.tarjeta),
@@ -137,7 +138,6 @@ export default function CajasAurora() {
       otros: parseMontoCR(form.otros),
       total_sistema: parseMontoCR(form.total_sistema),
       diferencia: calcDiferencia(form),
-      // turno and cajera are stored as a metadata prefix inside observaciones
       observaciones: withMeta(form.turno || 'Turno 1', cajera, form.observaciones),
       incidencias: form.incidencias || null,
       updated_at: new Date().toISOString(),
