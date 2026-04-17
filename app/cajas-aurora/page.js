@@ -94,10 +94,9 @@ export default function CajasAurora() {
       const processed = (data || [])
         .map(r => {
           const meta = parseMeta(r.observaciones)
-          return { ...r, _turno: r.turno || meta.turno, _cajera: r.cajera || meta.cajera, _obs: meta.obs }
+          return { ...r, _turno: meta.turno, _cajera: meta.cajera, _obs: meta.obs }
         })
         .filter(r => {
-          // r.cajera: columna real (si migración aplicada); r._cajera: fallback desde META prefix
           if (r._cajera === cajera) return true
           if (!r._cajera && cajera === 'Laura') return true  // registros legacy sin cajera
           return false
@@ -128,8 +127,6 @@ export default function CajasAurora() {
     setSaving(true)
     const payload = {
       fecha: form.fecha,
-      turno: form.turno || 'Turno 1',
-      cajera: cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
       tarjeta: parseMontoCR(form.tarjeta),
