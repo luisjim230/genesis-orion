@@ -6,8 +6,9 @@ import { useAuth } from '../../lib/useAuth'
 const CATS_DEFAULT = ['Panel Sandwich','Gypsum','PVC','Ferretería','Pintura','Eléctricos','Plomería','General']
 
 export default function FichasTecnicas() {
-  const { perfil } = useAuth()
+  const { perfil, puedeVer } = useAuth()
   const isAdmin = perfil?.rol === 'admin'
+  const puedeSubir = isAdmin || puedeVer('fichas-tecnicas')
   const [fichas, setFichas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState('Todos')
@@ -17,15 +18,20 @@ export default function FichasTecnicas() {
   const [msg, setMsg] = useState('')
   const [editId, setEditId] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [toast, setToast] = useState(null)
 
   useEffect(() => { cargar() }, [])
+
+  function mostrarToast(texto, tipo = 'exito') {
+    setToast({ texto, tipo })
+    setTimeout(() => setToast(null), 4500)
+  }
 
   async function cargar() {
     const { data } = await supabase.from('fichas_tecnicas').select('*').order('creado_en', { ascending: false })
     if (data) setFichas(data)
   }
 
-  // Categorías dinámicas: las default + las que ya existen en BD
   const todasCategorias = useMemo(() => {
     const fromDB = fichas.map(f => f.categoria).filter(Boolean)
     return [...new Set([...CATS_DEFAULT, ...fromDB])].sort()
@@ -61,14 +67,14 @@ export default function FichasTecnicas() {
       if (archivo_url) { update.archivo_url = archivo_url; update.archivo_nombre = archivo_nombre }
       const { error } = await supabase.from('fichas_tecnicas').update(update).eq('id', editId)
       if (error) { setSubiendo(false); return setMsg('Error: ' + error.message) }
-      setMsg('Ficha actualizada')
+      mostrarToast('Ficha actualizada correctamente')
     } else {
       const { error } = await supabase.from('fichas_tecnicas').insert([{
         nombre: form.nombre.trim(), categoria: catFinal, descripcion: form.descripcion.trim() || null,
-        archivo_url, archivo_nombre, subido_por: perfil?.nombre || 'admin', creado_en: new Date().toISOString()
+        archivo_url, archivo_nombre, subido_por: perfil?.nombre || 'usuario', creado_en: new Date().toISOString()
       }])
       if (error) { setSubiendo(false); return setMsg('Error: ' + error.message) }
-      setMsg('Ficha subida correctamente')
+      mostrarToast('Ficha subida correctamente')
     }
     setForm({ nombre: '', categoria: 'General', descripcion: '', nuevaCat: '' }); setArchivo(null); setEditId(null); setShowUpload(false); setSubiendo(false); cargar()
   }
@@ -99,13 +105,43 @@ export default function FichasTecnicas() {
 
   return (
     <div style={s.page}>
+      <style>{`
+        @keyframes slideInToast {
+          from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
+
+      {/* Toast de confirmación */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 24, right: 24, zIndex: 9999,
+          background: toast.tipo === 'error' ? '#e74c3c' : '#27ae60',
+          color: '#fff', borderRadius: 16, padding: '16px 24px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)', fontSize: 15, fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 10,
+          animation: 'slideInToast 0.3s ease',
+          maxWidth: 360,
+        }}>
+          <span style={{ fontSize: 20 }}>{toast.tipo === 'error' ? '❌' : '✅'}</span>
+          {toast.texto}
+        </div>
+      )}
+
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: s.txt, margin: 0 }}>📋 Fichas Técnicas</h1>
             <p style={{ color: s.muted, margin: '4px 0 0', fontSize: 15 }}>Documentación técnica de productos</p>
           </div>
-          {isAdmin && <button style={s.btn} onClick={() => { setShowUpload(!showUpload); setEditId(null); setForm({ nombre: '', categoria: 'General', descripcion: '', nuevaCat: '' }); setArchivo(null) }}>{showUpload ? '✕ Cerrar' : '+ Nueva Ficha'}</button>}
+          {puedeSubir && (
+            <button style={s.btn} onClick={() => {
+              setShowUpload(!showUpload); setEditId(null)
+              setForm({ nombre: '', categoria: 'General', descripcion: '', nuevaCat: '' }); setArchivo(null)
+            }}>
+              {showUpload ? '✕ Cerrar' : '+ Nueva Ficha'}
+            </button>
+          )}
         </div>
 
         {/* KPIs */}
@@ -118,8 +154,8 @@ export default function FichasTecnicas() {
           ))}
         </div>
 
-        {/* Upload/Edit form (admin only) */}
-        {isAdmin && showUpload && (
+        {/* Formulario de subida (admin o con permiso fichas-tecnicas) */}
+        {puedeSubir && showUpload && (
           <div style={{ ...s.card, marginBottom: 24, borderLeft: editId ? '4px solid #3b82f6' : '4px solid #c8a84b' }}>
             <h3 style={{ margin: '0 0 16px', color: s.txt, fontSize: 18 }}>{editId ? '✏️ Editar Ficha' : '📤 Subir Nueva Ficha'}</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
@@ -142,22 +178,33 @@ export default function FichasTecnicas() {
               )}
               <div>
                 <label style={{ fontSize: 12, color: s.muted, display: 'block', marginBottom: 4 }}>{editId ? 'Reemplazar PDF (opcional)' : 'Archivo PDF *'}</label>
-                <input style={s.input} type="file" accept=".pdf" onChange={e => setArchivo(e.target.files[0])} />
+                <input style={s.input} type="file" accept=".pdf" onChange={e => { setArchivo(e.target.files[0] || null); setMsg('') }} />
+                {archivo && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(39,174,96,0.08)', border: '1px solid rgba(39,174,96,0.3)', borderRadius: 10, padding: '8px 12px' }}>
+                    <span style={{ fontSize: 18 }}>📎</span>
+                    <div>
+                      <div style={{ fontSize: 13, color: '#27ae60', fontWeight: 600 }}>{archivo.name}</div>
+                      <div style={{ fontSize: 11, color: s.muted }}>{(archivo.size / 1024).toFixed(0)} KB — listo para subir</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: s.muted, display: 'block', marginBottom: 4 }}>Descripción</label>
               <textarea style={{ ...s.input, minHeight: 60 }} placeholder="Descripción breve (opcional)" value={form.descripcion} onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button style={s.btn} onClick={guardar} disabled={subiendo}>{subiendo ? 'Guardando...' : editId ? 'Guardar Cambios' : 'Subir Ficha'}</button>
-              <button style={s.btnOut} onClick={() => { setShowUpload(false); setEditId(null) }}>Cancelar</button>
-              {msg && <span style={{ color: msg.includes('Error') ? '#e74c3c' : '#27ae60', fontSize: 14 }}>{msg}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button style={{ ...s.btn, opacity: subiendo ? 0.7 : 1 }} onClick={guardar} disabled={subiendo}>
+                {subiendo ? '⏳ Subiendo...' : editId ? 'Guardar Cambios' : 'Subir Ficha'}
+              </button>
+              <button style={s.btnOut} onClick={() => { setShowUpload(false); setEditId(null); setMsg('') }}>Cancelar</button>
+              {msg && <span style={{ color: msg.includes('Error') ? '#e74c3c' : '#27ae60', fontSize: 13, fontWeight: 500 }}>{msg}</span>}
             </div>
           </div>
         )}
 
-        {/* Search + Filter */}
+        {/* Búsqueda + Filtro */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
           <input style={{ ...s.input, flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, categoría o descripción..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
           <select style={{ ...s.input, width: 'auto', minWidth: 160 }} value={catFiltro} onChange={e => setCatFiltro(e.target.value)}>
@@ -166,7 +213,7 @@ export default function FichasTecnicas() {
           </select>
         </div>
 
-        {/* Grid */}
+        {/* Grid de fichas */}
         {filtradas.length === 0 ? (
           <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
             <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
