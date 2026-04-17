@@ -342,7 +342,7 @@ export default function DashboardPage() {
         // Valor inventario — agregado server-side para evitar límite de 1000 filas
         let valorInventario = 0
         try {
-          const { data: invData } = await supabase.rpc('inventario_valor_actual')
+          const { data: invData } = await supabase.rpc('inventario_valor_actual', { tc: tcVenta })
           valorInventario = parseFloat(invData?.[0]?.valor_costo) || 0
         } catch(e) { /* no bloquear si falla */ }
 
