@@ -119,6 +119,10 @@ export default function CajasAurora() {
   const handleSave = async () => {
     if (!form.fecha) { setMsg({ tipo: 'error', texto: 'La fecha es requerida.' }); return }
     if (!cajera) { setMsg({ tipo: 'error', texto: 'No se pudo identificar la cajera. Recargá la página.' }); return }
+    if (!editId) {
+      const duplicado = registros.find(r => r.fecha === form.fecha && r._turno === form.turno)
+      if (duplicado) { setMsg({ tipo: 'error', texto: `Ya existe un cierre para ${form.turno} el ${form.fecha}. Editalo en lugar de crear uno nuevo.` }); return }
+    }
     setSaving(true)
     const payload = {
       fecha: form.fecha,
@@ -221,7 +225,13 @@ export default function CajasAurora() {
             {anioOpts.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {vista === 'lista'
-            ? <button style={s.btnPrimary} onClick={() => { setForm(EMPTY_FORM); setEditId(null); setVista('form') }}>+ Nuevo registro</button>
+            ? <button style={s.btnPrimary} onClick={() => {
+                const hoy = today()
+                const turnosHoy = registros.filter(r => r.fecha === hoy).map(r => r._turno)
+                const siguienteTurno = TURNOS.find(t => !turnosHoy.includes(t)) || 'Turno 1'
+                setForm({...EMPTY_FORM, turno: siguienteTurno})
+                setEditId(null); setVista('form')
+              }}>+ Nuevo registro</button>
             : <button style={s.btnSecondary} onClick={() => { setVista('lista'); setEditId(null); setForm(EMPTY_FORM) }}>← Volver</button>
           }
         </div>
