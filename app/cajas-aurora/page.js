@@ -76,40 +76,36 @@ export default function CajasAurora() {
   const [confirm, setConfirm] = useState(null)
   const [seccion, setSeccion] = useState('caja') // 'caja' | 'planificacion'
 
+  const esAdmin = perfil?.rol === 'admin'
+
   const fetchRegistros = useCallback(async () => {
-    if (!cajera) return
+    if (!cajera && !esAdmin) return
     setLoading(true)
     const desde = `${filtroAnio}-${String(filtroMes + 1).padStart(2,'0')}-01`
-    // Primer día del mes siguiente (evita fechas inválidas tipo "2026-04-31")
     const nextMes  = filtroMes === 11 ? 0 : filtroMes + 1
     const nextAnio = filtroMes === 11 ? filtroAnio + 1 : filtroAnio
     const hasta = `${nextAnio}-${String(nextMes + 1).padStart(2,'0')}-01`
-    const { data, error } = await supabase
+    let query = supabase
       .from('cajas_aurora')
       .select('*')
       .gte('fecha', desde)
       .lt('fecha', hasta)
       .order('fecha', { ascending: false })
+    if (!esAdmin) query = query.eq('cajera', cajera)
+    const { data, error } = await query
     if (!error) {
-      const processed = (data || [])
-        .map(r => {
-          const meta = parseMeta(r.observaciones)
-          return { ...r, _turno: meta.turno, _cajera: meta.cajera, _obs: meta.obs }
-        })
-        .filter(r => {
-          if (r._cajera === cajera) return true
-          if (!r._cajera && cajera === 'Laura') return true  // registros legacy sin cajera
-          return false
-        })
-      // Sort: fecha DESC, then turno ASC
+      const processed = (data || []).map(r => {
+        const meta = parseMeta(r.observaciones)
+        return { ...r, _turno: r.turno || meta.turno, _cajera: r.cajera || meta.cajera, _obs: meta.obs }
+      })
       processed.sort((a, b) => {
         if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha)
-        return a._turno.localeCompare(b._turno)
+        return (a._turno || '').localeCompare(b._turno || '')
       })
       setRegistros(processed)
     }
     setLoading(false)
-  }, [filtroMes, filtroAnio, cajera])
+  }, [filtroMes, filtroAnio, cajera, esAdmin])
 
   useEffect(() => { fetchRegistros() }, [fetchRegistros])
 
@@ -127,6 +123,8 @@ export default function CajasAurora() {
     setSaving(true)
     const payload = {
       fecha: form.fecha,
+      turno: form.turno || 'Turno 1',
+      cajera,
       numero_caja: form.numero_caja || null,
       efectivo: parseMontoCR(form.efectivo),
       tarjeta: parseMontoCR(form.tarjeta),
@@ -135,7 +133,7 @@ export default function CajasAurora() {
       otros: parseMontoCR(form.otros),
       total_sistema: parseMontoCR(form.total_sistema),
       diferencia: calcDiferencia(form),
-      observaciones: withMeta(form.turno || 'Turno 1', cajera, form.observaciones),
+      observaciones: form.observaciones || null,
       incidencias: form.incidencias || null,
       updated_at: new Date().toISOString(),
     }
@@ -158,7 +156,7 @@ export default function CajasAurora() {
   const handleEdit = (r) => {
     setForm({
       fecha: r.fecha,
-      turno: r._turno || 'Turno 1',
+      turno: r.turno || r._turno || 'Turno 1',
       numero_caja: r.numero_caja || '',
       efectivo: r.efectivo || '',
       tarjeta: r.tarjeta || '',
@@ -166,7 +164,7 @@ export default function CajasAurora() {
       credito: r.credito || '',
       otros: r.otros || '',
       total_sistema: r.total_sistema || '',
-      observaciones: r._obs || '', // use pre-parsed obs (without META prefix)
+      observaciones: r._obs || '',
       incidencias: r.incidencias || '',
     })
     setEditId(r.id)
