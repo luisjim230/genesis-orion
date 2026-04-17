@@ -11,7 +11,7 @@ Horario automático (LaunchAgent):
   Sábados: 10:00
 """
 
-import os, sys, asyncio, logging, json, re, urllib.request, urllib.error
+import os, sys, asyncio, logging, json, re, urllib.request, urllib.error, fcntl
 from pathlib import Path
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
@@ -355,4 +355,15 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    lock_path = BASE / "neo_minimos_downloader.lock"
+    lock_file = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log.warning("Otra instancia ya está corriendo — abortando para evitar duplicados en BD")
+        sys.exit(0)
+    try:
+        asyncio.run(main())
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()

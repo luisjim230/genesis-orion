@@ -238,27 +238,13 @@ export default function Inventario() {
     if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
     setDatos(todos);
-    // Calcular valor del inventario localmente usando los datos ya cargados.
-    // Items con moneda='USD' se convierten a CRC con el TC del BCCR (fallback 530).
-    (async () => {
-      let tc = 530;
-      try {
-        const hoy = new Date().toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const res = await fetch(
-          'https://gee.bccr.fi.cr/Indicadores/Suscripciones/WS/wsindicadoreseconomicos.asmx/ObtenerIndicadoresEconomicos?' +
-          new URLSearchParams({ Indicador: '318', FechaInicio: hoy, FechaFinal: hoy, Nombre: 'genesis', SubNiveles: 'N', CorreoElectronico: 'genesis@rojimo.com', Token: 'OJXUWSTM2J' })
-        );
-        const txt = await res.text();
-        const m = txt.match(/<NUM_VALOR>([\d.,]+)<\/NUM_VALOR>/);
-        if (m) tc = parseFloat(m[1].replace(',', '.'));
-      } catch (_) { /* usar fallback */ }
-      const valor = todos.reduce((s, i) => {
-        const existencias = parseFloat(i.existencias) || 0;
-        const costo = parseFloat(i.ultimo_costo) || 0;
-        return s + existencias * costo * (i.moneda === 'USD' ? tc : 1);
-      }, 0);
-      setValorInventario(valor);
-    })();
+    const valor = todos.reduce((s, i) => {
+      const existencias = parseFloat(i.existencias) || 0;
+      if (existencias <= 0) return s;
+      const costo = parseFloat(i.ultimo_costo) || 0;
+      return s + existencias * costo;
+    }, 0);
+    setValorInventario(valor);
     const { data: tData } = await supabase.from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item,orden_id').in('estado_item', ['pendiente', 'parcial']);
     const tMap = {};
     const ordenIds = new Set();
