@@ -93,17 +93,16 @@ export default function CajasAurora() {
       .order('fecha', { ascending: false })
     // All cajeras see all records; cajera column tracks who entered each
     const { data, error } = await query
-    if (!error) {
-      const processed = (data || []).map(r => {
-        const meta = parseMeta(r.observaciones)
-        return { ...r, _turno: r.turno || meta.turno, _cajera: r.cajera || meta.cajera, _obs: meta.obs }
-      })
-      processed.sort((a, b) => {
-        if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha)
-        return (a._turno || '').localeCompare(b._turno || '')
-      })
-      setRegistros(processed)
-    }
+    if (error) { setMsg({ tipo: 'error', texto: 'Error al cargar: ' + error.message }); setLoading(false); return }
+    const processed = (data || []).map(r => {
+      const meta = parseMeta(r.observaciones)
+      return { ...r, _turno: r.turno || meta.turno, _cajera: r.cajera || meta.cajera, _obs: meta.obs }
+    })
+    processed.sort((a, b) => {
+      if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha)
+      return (a._turno || '').localeCompare(b._turno || '')
+    })
+    setRegistros(processed)
     setLoading(false)
   }, [filtroMes, filtroAnio, cajera, esAdmin])
 
