@@ -17,7 +17,9 @@ const TIPO_MAP = {
   permiso_sin_goce: { label: 'Permiso sin goce', color: '#8b5cf6' },
   cita_medica: { label: 'Cita médica', color: '#06b6d4' },
   permiso_urgente: { label: 'Permiso urgente', color: '#ef4444' },
+  incapacidad: { label: 'Incapacidad', color: '#f59e0b' },
 }
+const TIPOS_PERMISOS = ['permiso_sin_goce', 'cita_medica', 'permiso_urgente']
 const ESTADO_MAP = {
   pendiente: { label: 'Pendiente', color: '#f97316' },
   aprobado: { label: 'Aprobado', color: '#22c55e' },
@@ -76,12 +78,29 @@ export default function RRHHPage() {
 
   const ahora = new Date()
   const mesActual = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`
-  const kpis = useMemo(() => ({
-    pendientes: sol.filter(s => s.estado === 'pendiente').length,
-    aprobadas: sol.filter(s => s.estado === 'aprobado' && s.fecha_aprobacion?.startsWith(mesActual)).length,
-    rechazadas: sol.filter(s => s.estado === 'rechazado').length,
-    total: sol.length,
-  }), [sol, mesActual])
+
+  const kpis = useMemo(() => {
+    const cat = (filtro) => {
+      const s = Array.isArray(filtro) ? sol.filter(x => filtro.includes(x.tipo)) : sol.filter(x => x.tipo === filtro)
+      return {
+        pendientes: s.filter(x => x.estado === 'pendiente').length,
+        aprobadas: s.filter(x => x.estado === 'aprobado').length,
+        rechazadas: s.filter(x => x.estado === 'rechazado').length,
+        total: s.length,
+      }
+    }
+    return {
+      vacaciones: cat('vacaciones'),
+      permisos: cat(TIPOS_PERMISOS),
+      incapacidades: cat('incapacidad'),
+      total: {
+        pendientes: sol.filter(x => x.estado === 'pendiente').length,
+        aprobadas: sol.filter(x => x.estado === 'aprobado').length,
+        rechazadas: sol.filter(x => x.estado === 'rechazado').length,
+        total: sol.length,
+      },
+    }
+  }, [sol])
 
   const filtered = useMemo(() => {
     let f = sol
@@ -236,19 +255,48 @@ export default function RRHHPage() {
       {/* TAB SOLICITUDES */}
       {tab === 'solicitudes' && (
         <>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 20 }}>
-            {[
-              { label: 'Pendientes', val: kpis.pendientes, color: '#f97316' },
-              { label: 'Aprobadas este mes', val: kpis.aprobadas, color: '#22c55e' },
-              { label: 'Rechazadas', val: kpis.rechazadas, color: '#ef4444' },
-              { label: 'Total solicitudes', val: kpis.total, color: GOLD },
-            ].map(k => (
-              <div key={k.label} style={{ ...S.card, textAlign: 'center', padding: '18px 16px' }}>
-                <div style={{ fontSize: '1.8em', fontWeight: 700, color: k.color }}>{k.val}</div>
-                <div style={{ fontSize: '0.78em', color: MUTED, marginTop: 2 }}>{k.label}</div>
-              </div>
-            ))}
+          {/* KPIs - Resumen consolidado */}
+          <div style={{ ...S.card, marginBottom: 20, padding: '20px 24px' }}>
+            <div style={{ fontSize: '0.82em', fontWeight: 700, color: MUTED, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Resumen consolidado</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88em' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 14px 10px', color: MUTED, fontWeight: 600, fontSize: '0.85em' }}>Categoría</th>
+                    {[['#f97316', 'Pendientes'], ['#22c55e', 'Aprobadas'], ['#ef4444', 'Rechazadas'], [GOLD, 'Total']].map(([c, l]) => (
+                      <th key={l} style={{ textAlign: 'center', padding: '6px 14px 10px', color: c, fontWeight: 700, fontSize: '0.88em' }}>{l}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: 'Vacaciones', data: kpis.vacaciones, color: '#3b82f6' },
+                    { label: 'Permisos especiales', data: kpis.permisos, color: '#8b5cf6' },
+                    { label: 'Incapacidades', data: kpis.incapacidades, color: '#f59e0b' },
+                  ].map((row, i) => (
+                    <tr key={row.label} style={{ background: i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent' }}>
+                      <td style={{ padding: '11px 14px', fontWeight: 600 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, display: 'inline-block', flexShrink: 0 }} />
+                          <span style={{ color: TEXT }}>{row.label}</span>
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '11px 14px', fontWeight: 700, color: '#f97316', fontSize: '1.05em' }}>{row.data.pendientes}</td>
+                      <td style={{ textAlign: 'center', padding: '11px 14px', fontWeight: 700, color: '#22c55e', fontSize: '1.05em' }}>{row.data.aprobadas}</td>
+                      <td style={{ textAlign: 'center', padding: '11px 14px', fontWeight: 700, color: '#ef4444', fontSize: '1.05em' }}>{row.data.rechazadas}</td>
+                      <td style={{ textAlign: 'center', padding: '11px 14px', fontWeight: 700, color: MUTED, fontSize: '1.05em' }}>{row.data.total}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid rgba(0,0,0,0.1)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 700, color: TEXT }}>Total general</td>
+                    <td style={{ textAlign: 'center', padding: '12px 14px', fontWeight: 800, color: '#f97316', fontSize: '1.2em' }}>{kpis.total.pendientes}</td>
+                    <td style={{ textAlign: 'center', padding: '12px 14px', fontWeight: 800, color: '#22c55e', fontSize: '1.2em' }}>{kpis.total.aprobadas}</td>
+                    <td style={{ textAlign: 'center', padding: '12px 14px', fontWeight: 800, color: '#ef4444', fontSize: '1.2em' }}>{kpis.total.rechazadas}</td>
+                    <td style={{ textAlign: 'center', padding: '12px 14px', fontWeight: 800, color: GOLD, fontSize: '1.2em' }}>{kpis.total.total}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* TOOLBAR */}
