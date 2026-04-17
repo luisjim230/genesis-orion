@@ -91,7 +91,7 @@ export default function CajasAurora() {
       .gte('fecha', desde)
       .lt('fecha', hasta)
       .order('fecha', { ascending: false })
-    if (!esAdmin) query = query.eq('cajera', cajera)
+    // All cajeras see all records; cajera column tracks who entered each
     const { data, error } = await query
     if (!error) {
       const processed = (data || []).map(r => {
@@ -267,6 +267,11 @@ export default function CajasAurora() {
                     <div style={{ ...s.cajaBadge, background:'rgba(91,75,200,0.1)', color:'#5b4bc8' }}>
                       {r._turno || 'Turno 1'}
                     </div>
+                    {(r._cajera || r.cajera) && (
+                      <div style={{ ...s.cajaBadge, background:'rgba(76,175,125,0.1)', color:'#4caf7d' }}>
+                        {r._cajera || r.cajera}
+                      </div>
+                    )}
                     {r.numero_caja && <div style={s.cajaBadge}>Caja #{r.numero_caja}</div>}
                     <div style={{ ...s.difBadge, background: difR === 0 ? 'rgba(76,175,125,0.12)' : difR > 0 ? 'rgba(91,155,213,0.12)' : 'rgba(224,82,82,0.12)', color: difR === 0 ? '#4caf7d' : difR > 0 ? '#5b9bd5' : '#e05252' }}>
                       {difR === 0 ? 'Cuadrado ✓' : difR > 0 ? `+${fmt(difR)}` : fmt(difR)}
