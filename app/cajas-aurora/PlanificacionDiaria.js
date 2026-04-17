@@ -88,6 +88,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
   }, [movimientos, usuario, esAdmin]);
 
   const agregar = async () => {
+    if (!usuario && !esAdmin) return;  // no guardar hasta que el perfil esté cargado
     if (!concepto.trim()) return;
     if (!monto || parseFloat(monto) === 0) return;
     setSaving(true);
@@ -101,6 +102,7 @@ export default function PlanificacionDiaria({ usuario, esAdmin }) {
       created_by: usuario || 'cajera',
     });
     if (!error) {
+      setConcepto('');
       setDescripcion('');
       setMonto('');
       setResponsable('');
