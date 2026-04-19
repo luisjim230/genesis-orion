@@ -1,0 +1,30 @@
+name: SOL — Tareas diarias por Telegram
+
+on:
+  schedule:
+    # 10:00 AM hora Costa Rica (UTC-6) = 16:00 UTC
+    # Lunes–Sábado (domingo se omite)
+    - cron: '0 16 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Send daily tasks
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/send_daily_tasks.mjs
