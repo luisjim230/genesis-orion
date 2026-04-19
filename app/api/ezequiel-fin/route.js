@@ -143,17 +143,30 @@ export async function POST(req) {
       return Response.json({ error: 'Sin datos válidos' }, { status: 422 });
     }
 
-    // Borrar período anterior y reinsertar
-    await getDb().from(tabla).delete().eq('periodo_reporte', periodo);
-    const { error } = await getDb().from(tabla).insert(records);
+    // Deduplicar por (codigo, numero, tipo) — el reporte NEO puede incluir la misma factura dos veces
+    const seen = new Set();
+    const deduped = records.filter(r => {
+      const key = `${r.codigo ?? r.vendedor}|${r.numero}|${r.tipo}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (deduped.length < records.length) {
+      console.log(`[FinAPI] Deduplicados: ${records.length - deduped.length} registros duplicados eliminados`);
+    }
+
+    // Borrar todos los registros anteriores de esta tabla y reinsertar con datos limpios
+    await getDb().from(tabla).delete().lt('fecha_carga', now);
+    const { error } = await getDb().from(tabla).insert(deduped);
 
     if (error) {
       console.error('[FinAPI] insert error:', error);
       return Response.json({ error: error.message }, { status: 500 });
     }
 
-    console.log(`[FinAPI] OK: ${records.length} registros en ${tabla}`);
-    return Response.json({ ok: true, registros: records.length, tabla });
+    console.log(`[FinAPI] OK: ${deduped.length} registros en ${tabla}`);
+    return Response.json({ ok: true, registros: deduped.length, tabla });
 
   } catch (e) {
     console.error('[FinAPI] Error:', e);
