@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-let _sb; function sb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
+let _sb; function sb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } }); return _sb; }
 export async function POST(req){
   try{
     const {accion,proveedor,motivo}=await req.json()

@@ -26,6 +26,7 @@ except ImportError:
 
 SUPA_URL = os.getenv("SUPABASE_URL",      "https://xeeieqjqmtoiutfnltqu.supabase.co")
 SUPA_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlZWllcWpxbXRvaXV0Zm5sdHF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MjA2NTMsImV4cCI6MjA4ODI5NjY1M30.SqYdotAkZOyMARsZb1XutfgYiH9Ig2qoHOD8j6oPy00")
+APP_URL  = os.getenv("APP_URL", "https://genesis-orion.vercel.app")
 
 PYTHON  = "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
 SCRIPTS = BASE
@@ -138,6 +139,18 @@ def procesar_solicitud(req):
         "status": status,
         "completed_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
+
+    # Disparar procesar-match después de bajar ítems comprados
+    if script_key == "items_comprados" and status == "completed":
+        try:
+            url = f"{APP_URL}/api/procesar-match"
+            req_http = urllib.request.Request(url, data=b'{}', method="POST")
+            req_http.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req_http, timeout=120) as r:
+                body = r.read().decode()
+                log.info(f"  🔄 procesar-match: {body[:200]}")
+        except Exception as e:
+            log.warning(f"  ⚠️ procesar-match falló (no crítico): {e}")
 
 
 # ─── SCHEDULER INTEGRADO ──────────────────────────────────────────────────────
