@@ -331,8 +331,9 @@ export default function CajasAurora() {
                 {(() => {
                   const existentes = registros.filter(r => r.fecha === form.fecha).map(r => r._turno).filter(Boolean)
                   const maxNum = existentes.reduce((max, t) => { const m = t.match(/Turno (\d+)/); return m ? Math.max(max, parseInt(m[1])) : max }, 0)
+                  const total = Math.max(maxNum + 1, 3)
                   const lista = []
-                  for (let i = 1; i <= Math.max(maxNum + 1, 1); i++) lista.push(`Turno ${i}`)
+                  for (let i = 1; i <= total; i++) lista.push(`Turno ${i}`)
                   if (!lista.includes(form.turno)) lista.push(form.turno)
                   return lista.map(t => (
                     <button key={t} type="button" onClick={() => setForm(f=>({...f, turno:t}))} style={{
