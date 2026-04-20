@@ -92,62 +92,113 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, ...res });
     }
 
-    // 4. Agrupar compras por código con fecha parseada
-    //    CRÍTICO: si la fecha no se puede parsear, omitir la compra.
-    //    No podemos saber si es anterior o posterior a la orden sin fecha válida.
-    const comprasPorCodigo = {};
+    // 4. Agrupar compras por código (exacto y normalizado) con fecha parseada
+    //    Si la fecha no se puede parsear, omitir la compra.
+    const comprasPorCodigo = {};       // clave: codigo exacto
+    const comprasPorCodigoNorm = {};   // clave: codigo.toUpperCase().trim() como fallback
+
     for (const c of todos) {
-      const cod = String(c.codigo_interno || '').trim();
-      if (!cod) continue;
+      const codExacto = String(c.codigo_interno || '').trim();
+      if (!codExacto) continue;
+      const codNorm = codExacto.toUpperCase();
       const fechaCompra = parseFecha(c.fecha);
       if (!fechaCompra) {
-        console.warn(`[procesar-match] Fecha no parseable código ${cod}: "${c.fecha}" — omitido`);
+        console.warn(`[procesar-match] Fecha no parseable código ${codExacto}: "${c.fecha}" — omitido`);
         continue;
       }
-      if (!comprasPorCodigo[cod]) comprasPorCodigo[cod] = [];
-      comprasPorCodigo[cod].push({
-        cantidad: parseFloat(c.cantidad_comprada) || 0,
-        fecha: fechaCompra,
+      const entrada = { cantidad: parseFloat(c.cantidad_comprada) || 0, fecha: fechaCompra };
+      if (!comprasPorCodigo[codExacto]) comprasPorCodigo[codExacto] = [];
+      comprasPorCodigo[codExacto].push(entrada);
+      if (!comprasPorCodigoNorm[codNorm]) comprasPorCodigoNorm[codNorm] = [];
+      comprasPorCodigoNorm[codNorm].push(entrada);
+    }
+
+    // 5. Agrupar OC items por código y ordenar por fecha de orden (FIFO: más antiguo primero)
+    //    Esto garantiza que las compras se asignen primero a la OC más antigua.
+    const itemsPorCodigo = {};
+    for (const item of itemsPend) {
+      const cod = String(item.codigo || '').trim();
+      if (!cod) continue;
+      if (!itemsPorCodigo[cod]) itemsPorCodigo[cod] = [];
+      itemsPorCodigo[cod].push(item);
+    }
+    for (const cod of Object.keys(itemsPorCodigo)) {
+      itemsPorCodigo[cod].sort((a, b) => {
+        const fA = parseFecha(a.ordenes_compra?.fecha_orden || a.fecha_orden);
+        const fB = parseFecha(b.ordenes_compra?.fecha_orden || b.fecha_orden);
+        if (!fA && !fB) return 0;
+        if (!fA) return 1;
+        if (!fB) return -1;
+        return fA - fB;
       });
     }
 
-    // 5. Match — SOLO compras ESTRICTAMENTE POSTERIORES a la fecha de la orden
+    // 6. Match FIFO — cada unidad comprada se asigna UNA SOLA VEZ a la OC más antigua pendiente
     const actualizaciones = [];
-    for (const item of itemsPend) {
-      const cod = String(item.codigo || '').trim();
-      const compras = comprasPorCodigo[cod];
-      if (!compras || compras.length === 0) { res.sin_match++; continue; }
 
-      const foRaw = item.ordenes_compra?.fecha_orden || item.fecha_orden;
-      const fechaOrden = parseFecha(foRaw);
+    for (const cod of Object.keys(itemsPorCodigo)) {
+      const codNorm = cod.toUpperCase();
 
-      if (!fechaOrden) {
-        console.warn(`[procesar-match] Orden sin fecha para item ${item.id} código ${cod} — ignorado`);
-        res.ignorados_por_fecha++;
+      // Intentar primero match exacto, luego normalizado (case-insensitive)
+      const comprasBase = comprasPorCodigo[cod] || comprasPorCodigoNorm[codNorm];
+
+      if (!comprasBase || comprasBase.length === 0) {
+        res.sin_match += itemsPorCodigo[cod].length;
+        console.warn(`[procesar-match] Sin compras para código "${cod}" — ${itemsPorCodigo[cod].length} ítem(s) sin match`);
         continue;
       }
 
-      // Comparar solo por fecha calendario (ignorar hora), para que compras del mismo día siempre matcheen
-      const fechaOrdenDia = new Date(fechaOrden); fechaOrdenDia.setUTCHours(0, 0, 0, 0);
-      const validas = compras.filter(c => c.fecha >= fechaOrdenDia);
+      // Ordenar compras de más antigua a más nueva para asignación FIFO
+      const comprasOrdenadas = [...comprasBase].sort((a, b) => a.fecha - b.fecha);
 
-      if (validas.length === 0) {
-        res.ignorados_por_fecha++;
-        continue;
+      // Cada entrada lleva el restante disponible (se consume a medida que se asigna a OCs)
+      const disponibles = comprasOrdenadas.map(c => ({ ...c, restante: c.cantidad }));
+
+      for (const item of itemsPorCodigo[cod]) {
+        const foRaw = item.ordenes_compra?.fecha_orden || item.fecha_orden;
+        const fechaOrden = parseFecha(foRaw);
+
+        if (!fechaOrden) {
+          console.warn(`[procesar-match] Orden sin fecha para item ${item.id} código ${cod} — ignorado`);
+          res.ignorados_por_fecha++;
+          continue;
+        }
+
+        // Comparar solo por fecha calendario (ignorar hora)
+        const fechaOrdenDia = new Date(fechaOrden);
+        fechaOrdenDia.setUTCHours(0, 0, 0, 0);
+
+        const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0;
+        let cantRecibida = 0;
+        let fechaRecep = null;
+
+        // Consumir compras en orden FIFO, solo las posteriores a la fecha de la orden
+        for (const disp of disponibles) {
+          if (disp.fecha < fechaOrdenDia) continue; // compra anterior a la orden, saltar
+          if (disp.restante <= 0) continue;          // ya consumida por OC anterior
+          if (cantRecibida >= cantOrdenada) break;   // OC ya satisfecha
+
+          const consumir = Math.min(disp.restante, cantOrdenada - cantRecibida);
+          cantRecibida += consumir;
+          disp.restante -= consumir;
+          if (!fechaRecep || disp.fecha > fechaRecep) fechaRecep = disp.fecha;
+        }
+
+        if (cantRecibida === 0) {
+          res.sin_match++;
+          continue;
+        }
+
+        const nuevoEstado = cantRecibida >= cantOrdenada ? 'completo' : 'parcial';
+        res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++;
+
+        actualizaciones.push({
+          id:                item.id,
+          cantidad_recibida: cantRecibida,
+          estado_item:       nuevoEstado,
+          fecha_recepcion:   fechaRecep ? fechaRecep.toISOString() : null,
+        });
       }
-
-      const cantRecibida = validas.reduce((s, c) => s + c.cantidad, 0);
-      const fechaRecep   = validas.reduce((mx, c) => (!mx || c.fecha > mx ? c.fecha : mx), null);
-      const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0;
-      const nuevoEstado  = cantRecibida >= cantOrdenada ? 'completo' : 'parcial';
-      res[nuevoEstado === 'completo' ? 'completados' : 'parciales']++;
-
-      actualizaciones.push({
-        id:               item.id,
-        cantidad_recibida: cantRecibida,
-        estado_item:       nuevoEstado,
-        fecha_recepcion:   fechaRecep ? fechaRecep.toISOString() : null,
-      });
     }
 
     // Bulk upsert en lotes de 500 para no exceder límites

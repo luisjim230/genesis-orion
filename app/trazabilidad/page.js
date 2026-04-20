@@ -565,7 +565,7 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
               Última carga disponible: <strong style={{ color: TEXT }}>{fechaLegible}</strong>
             </p>
 
-            {!yaFueProcesado ? (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
               <button
                 style={{ ...S.btn(), opacity: estado === 'procesando' ? 0.6 : 1 }}
                 onClick={ejecutarMatch}
@@ -573,12 +573,10 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
               >
                 {estado === 'procesando' ? '⏳ Procesando...' : '🔄 Procesar compras recibidas'}
               </button>
-            ) : (
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              {yaFueProcesado && (
                 <span style={{ fontSize: '0.84em', color: '#68d391' }}>✅ Match completado para esta carga.</span>
-                <button style={S.btnSm()} onClick={() => { setFechaProcesada(null); setResumen(null); setInfoMsg(null) }}>🔄 Volver a procesar</button>
-              </div>
-            )}
+              )}
+            </div>
 
             {estado === 'procesando' && (
               <div style={{ fontSize: '0.82em', color: MUTED, marginTop: 10 }}>Cruzando compras con órdenes pendientes...</div>
@@ -590,7 +588,7 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
                   {[
                     ['🟢 Completados',        resumen.completados,        '#68d391'],
                     ['🟡 Parciales',           resumen.parciales,          '#f6ad55'],
-                    ['⚪ Sin match',           resumen.sin_match,          MUTED],
+                    ['⚪ Sin match',           resumen.sin_match,          resumen.sin_match > 0 ? '#fc8181' : MUTED],
                     ['📅 Ignorados por fecha', resumen.ignorados_por_fecha,'#63b3ed'],
                   ].map(([l, v, c]) => (
                     <div key={l} style={{ background: BG, border: `1px solid ${c}33`, borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
@@ -599,6 +597,11 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
                     </div>
                   ))}
                 </div>
+                {resumen.sin_match > 0 && (
+                  <div style={{ background: '#2d1a1a', border: '1px solid #fc818133', borderRadius: 8, padding: '10px 14px', marginTop: 10, fontSize: '0.8em', color: '#fc8181' }}>
+                    ⚠️ <strong>{resumen.sin_match}</strong> ítem(s) pendiente(s) no encontraron compras en el historial NEO. Verificá que el reporte subido incluya todos los productos de las órdenes activas.
+                  </div>
+                )}
                 <p style={{ fontSize: '0.78em', color: MUTED, marginTop: 10 }}>
                   👈 Revisá la pestaña <strong style={{ color: TEXT }}>Alertas de Pendientes</strong> para ver el estado actualizado.
                 </p>

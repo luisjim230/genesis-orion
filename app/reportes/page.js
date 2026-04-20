@@ -706,8 +706,16 @@ function TabSubir() {
             });
             const matchData = await matchRes.json();
             console.log('[SOL] Match trazabilidad auto:', matchData);
-            if (matchData.ok) res.matchTrazabilidad = `✅ Match: ${matchData.completados} completos, ${matchData.parciales} parciales`;
-          } catch(e) { console.warn('[SOL] Match auto falló:', e.message); }
+            if (matchData.ok) {
+              const sinMatch = matchData.sin_match || 0;
+              res.matchTrazabilidad = `✅ Match trazabilidad: ${matchData.completados} completos, ${matchData.parciales} parciales${sinMatch > 0 ? ` — ⚠️ ${sinMatch} sin match` : ''}`;
+            } else {
+              res.matchTrazabilidad = `⚠️ Match trazabilidad falló: ${matchData.error || 'error desconocido'}`;
+            }
+          } catch(e) {
+            console.warn('[SOL] Match auto falló:', e.message);
+            res.matchTrazabilidad = `⚠️ Match trazabilidad no se pudo ejecutar: ${e.message}`;
+          }
         }
 
         // ── Auto-cruce OC NEO → Trazabilidad ──────────────────────────
@@ -939,6 +947,11 @@ function TabSubir() {
                           : <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:4, padding:'1px 7px', fontSize:'0.72rem', fontWeight:700 }}>↺ REEMPLAZADO</span>
                         }
                       </div>
+                      {r.matchTrazabilidad && (
+                        <div style={{ fontSize:'0.8rem', marginTop:'6px', color: r.matchTrazabilidad.startsWith('⚠️') ? '#f6ad55' : '#68d391' }}>
+                          {r.matchTrazabilidad}
+                        </div>
+                      )}
                     </>
                   )}
                   {r.estado==='no_reconocido' && <div style={{ fontSize:'0.83rem', color:'#7B341E' }}>⚠️ No reconocido — {r.error}</div>}
