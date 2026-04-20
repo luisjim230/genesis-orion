@@ -510,6 +510,8 @@ export default function Inventario() {
           // Extraer proveedor base (sin sufijo de lote)
           const provBase = loteName.replace(/ \(\d+\/\d+\)$/, '');
           const nombreLote = `OC_${loteName}_${fecha}`;
+          const { data: existenteOC } = await supabase.from('ordenes_compra').select('id').eq('nombre_lote', nombreLote).limit(1);
+          if (existenteOC?.length) continue;
           const { data: cab, error: errCab } = await supabase
             .from('ordenes_compra')
             .insert([{ fecha_orden: ahora, nombre_lote: nombreLote, dias_tribucion: dias, total_productos: items.length, creado_en: ahora }])

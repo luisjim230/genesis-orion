@@ -29,10 +29,12 @@ function parseFecha(val) {
 
 export async function ejecutarMatch() {
   // Cargar fechas de órdenes por separado (no depender de joins FK)
-  const { data: todasOrdenes } = await getDb().from('ordenes_compra').select('id, fecha_orden')
+  const { data: todasOrdenes } = await getDb().from('ordenes_compra').select('id, fecha_orden, nombre_lote')
   const fechaOrdenMap = {}
+  const nombreLoteMap = {}
   for (const o of (todasOrdenes || [])) {
     if (o.id && o.fecha_orden) fechaOrdenMap[o.id] = o.fecha_orden
+    if (o.id && o.nombre_lote) nombreLoteMap[o.id] = o.nombre_lote
   }
 
   // 1. Revertir matchs inválidos
@@ -83,8 +85,28 @@ export async function ejecutarMatch() {
     .in('estado_item', ['pendiente', 'parcial'])
     .order('creado_en', { ascending: false })
 
-  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos }
+  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos, duplicados_cancelados: 0 }
   if (!itemsPend || itemsPend.length === 0) return res
+
+  // Cancelar OC items duplicados: mismo (nombre_lote, codigo) → conservar el más antiguo
+  const itemsPendOrdenados = [...itemsPend].sort((a, b) => new Date(a.creado_en || 0) - new Date(b.creado_en || 0))
+  const vistoDedup = new Set()
+  const idsDuplicados = []
+  for (const item of itemsPendOrdenados) {
+    const nombreLote = nombreLoteMap[item.orden_id] || ''
+    if (!nombreLote) continue
+    const key = `${nombreLote.toUpperCase()}__${(item.codigo || '').trim().toUpperCase()}`
+    if (vistoDedup.has(key)) {
+      idsDuplicados.push(item.id)
+    } else {
+      vistoDedup.add(key)
+    }
+  }
+  if (idsDuplicados.length > 0) {
+    await getDb().from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', idsDuplicados)
+    res.duplicados_cancelados = idsDuplicados.length
+  }
+  const itemsPendDedup = idsDuplicados.length > 0 ? itemsPend.filter(i => !idsDuplicados.includes(i.id)) : itemsPend
 
   // 4. Agrupar compras por código
   const comprasPorCodigo = {}, comprasPorCodigoNorm = {}
@@ -103,7 +125,7 @@ export async function ejecutarMatch() {
 
   // 5. Agrupar OC items por código, ordenar por fecha (FIFO: más antiguo primero)
   const itemsPorCodigo = {}
-  for (const item of itemsPend) {
+  for (const item of itemsPendDedup) {
     const cod = String(item.codigo || '').trim()
     if (!cod) continue
     if (!itemsPorCodigo[cod]) itemsPorCodigo[cod] = []

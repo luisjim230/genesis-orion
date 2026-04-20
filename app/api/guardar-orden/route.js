@@ -4,8 +4,7 @@ export async function POST(req){
   try{
     const {items,nombreLote,diasTribucion}=await req.json()
     const ahora=new Date().toISOString()
-    const hace10min=new Date(Date.now()-10*60*1000).toISOString()
-    const {data:existente}=await sb().from('ordenes_compra').select('id').eq('nombre_lote',nombreLote).gte('creado_en',hace10min).limit(1)
+    const {data:existente}=await sb().from('ordenes_compra').select('id').eq('nombre_lote',nombreLote).limit(1)
     if(existente?.length)return Response.json({ok:true,orden_id:existente[0].id})
     const {data:orden}=await sb().from('ordenes_compra').insert({fecha_orden:ahora,nombre_lote:nombreLote,dias_tribucion:diasTribucion,total_productos:items.length,creado_en:ahora}).select().single()
     const rows=items.map(i=>({orden_id:orden.id,codigo:String(i.codigo||'').trim(),nombre:String(i.nombre||''),proveedor:String(i.proveedor||''),cantidad_ordenada:parseFloat(i.cantidad)||0,costo_unitario:parseFloat(i.costo_unitario||i.costo||i.ultimo_costo||i.precio)||0,descuento:parseFloat(i.descuento)||0,dias_tribucion:diasTribucion,cantidad_recibida:0,estado_item:'pendiente',creado_en:ahora}))
