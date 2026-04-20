@@ -2,6 +2,10 @@ import { createClient } from '@supabase/supabase-js'
 
 let _sb
 function getDb() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL)
+    throw new Error('CONFIG: falta NEXT_PUBLIC_SUPABASE_URL en env vars de Vercel')
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
+    throw new Error('CONFIG: falta SUPABASE_SERVICE_ROLE_KEY en env vars de Vercel — sin esta var los upserts fallan en silencio por RLS')
   if (!_sb) _sb = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -150,8 +154,16 @@ export async function ejecutarMatch() {
   }
 
   const BATCH = 500
-  for (let i = 0; i < actualizaciones.length; i += BATCH)
-    await getDb().from('ordenes_compra_items').upsert(actualizaciones.slice(i, i + BATCH), { onConflict: 'id' })
+  res.persistidos = 0
+  for (let i = 0; i < actualizaciones.length; i += BATCH) {
+    const lote = actualizaciones.slice(i, i + BATCH)
+    const { error } = await getDb().from('ordenes_compra_items').upsert(lote, { onConflict: 'id' })
+    if (error) {
+      console.error('[procesar-match] upsert falló:', error.message, error.details || '')
+      throw new Error(`UPSERT falló en lote ${i / BATCH + 1}: ${error.message}. Probable causa: RLS sin service_role key o permisos incorrectos.`)
+    }
+    res.persistidos += lote.length
+  }
 
   return res
 }
