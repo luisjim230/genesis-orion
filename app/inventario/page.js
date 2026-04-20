@@ -208,6 +208,8 @@ export default function Inventario() {
 
   async function cargarDatos() {
     setLoading(true);
+    // Sincronizar tránsito con compras antes de calcular
+    try { await fetch('/api/procesar-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch(_) {}
     // Fetch paginado directo a la tabla (el RPC no respeta .range())
     const BATCH = 1000;
     let todos = [];

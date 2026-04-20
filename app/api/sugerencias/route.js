@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
+import { ejecutarMatch } from '../../lib/procesar-match.js'
 let _supabase; function supabase() { if (!_supabase) _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _supabase; }
 export async function POST(req) {
   try {
     const { dias } = await req.json()
+    // Ejecutar match antes de calcular tránsito para reflejar compras recientes
+    try { await ejecutarMatch(); } catch(_) {}
     const { data: latest } = await supabase().from('neo_minimos_maximos').select('fecha_carga,periodo_reporte').order('fecha_carga',{ascending:false}).limit(1)
     if (!latest?.length) return Response.json({error:'Sin datos'},{status:404})
     const fc = latest[0].fecha_carga
