@@ -525,8 +525,16 @@ function TabSubir() {
   const [procesando, setProcesando] = useState(false);
   const [arrastrar, setArrastrar]   = useState(false);
   const [statusMeses, setStatusMeses] = useState([]);
-  const [syncStatus, setSyncStatus]   = useState({});
-  const [forzando, setForzando]       = useState({});
+  const [syncStatus, setSyncStatus]     = useState({});
+  const [forzando, setForzando]         = useState({});
+  const [syncPolling, setSyncPolling]   = useState({});
+  const [itemsCompradosInfo, setItemsCompradosInfo] = useState(null);
+
+  async function cargarInfoItemsComprados() {
+    const { count } = await supabase.from('neo_items_comprados').select('*', { count: 'exact', head: true });
+    const { data } = await supabase.from('neo_items_comprados').select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending: false }).limit(1);
+    setItemsCompradosInfo({ count: count || 0, fechaCarga: data?.[0]?.fecha_carga || null, periodo: data?.[0]?.periodo_reporte || null });
+  }
 
   // Cargar última fecha de sync para cada reporte
   useEffect(() => {
@@ -538,12 +546,54 @@ function TabSubir() {
         setSyncStatus(map);
       }
     })();
+    cargarInfoItemsComprados();
   }, []);
 
   async function forzarSync(scriptKey) {
     setForzando(f => ({ ...f, [scriptKey]: true }));
     await supabase.from('sync_requests').insert({ script: scriptKey, status: 'pending' });
-    setTimeout(() => setForzando(f => ({ ...f, [scriptKey]: false })), 3000);
+
+    if (scriptKey !== 'items_comprados') {
+      setTimeout(() => setForzando(f => ({ ...f, [scriptKey]: false })), 3000);
+      return;
+    }
+
+    // Poll sync_requests for items_comprados status
+    setSyncPolling(p => ({ ...p, items_comprados: { status: 'pending', message: 'Solicitud enviada al daemon local...' } }));
+    let polls = 0;
+    const doPoll = async () => {
+      polls++;
+      if (polls > 180) {
+        setSyncPolling(p => ({ ...p, items_comprados: { status: 'timeout', message: 'Tiempo de espera agotado (15 min)' } }));
+        setForzando(f => ({ ...f, items_comprados: false }));
+        return;
+      }
+      const { data: reqs } = await supabase
+        .from('sync_requests')
+        .select('status,completed_at')
+        .eq('script', 'items_comprados')
+        .order('requested_at', { ascending: false })
+        .limit(1);
+      const req = reqs?.[0];
+      if (req) {
+        const msgs = {
+          pending: 'En cola — esperando que el daemon local procese la solicitud...',
+          running: '⟳ Descargando reporte desde NEO...',
+          completed: '✅ Descarga completada — actualizando trazabilidad...',
+          error: '❌ Error durante la descarga',
+          timeout: '⏱ Timeout en el daemon',
+          no_disponible: 'Script no disponible',
+        };
+        setSyncPolling(p => ({ ...p, items_comprados: { status: req.status, message: msgs[req.status] || req.status } }));
+        if (['completed', 'error', 'timeout', 'no_disponible'].includes(req.status)) {
+          setForzando(f => ({ ...f, items_comprados: false }));
+          if (req.status === 'completed') cargarInfoItemsComprados();
+          return;
+        }
+      }
+      setTimeout(doPoll, 5000);
+    };
+    setTimeout(doPoll, 5000);
   }
 
   // Load report status for last 6 months
@@ -608,6 +658,29 @@ function TabSubir() {
           res.filas = cantidad;
           res.periodo = apiData.fecha_carga?.slice(0, 10) || '';
           res.estado = 'ok';
+          nuevos.push(res);
+          continue;
+        }
+
+        // neo_items_comprados: usar API servidor (service role key, evita bloqueo RLS)
+        if (tipo === 'neo_items_comprados') {
+          const fd = new FormData();
+          fd.append('file', file);
+          const apiRes = await fetch('/api/subir-items-comprados', { method: 'POST', body: fd });
+          const apiData = await apiRes.json();
+          if (!apiRes.ok) throw new Error(apiData.error || 'Error en servidor');
+          cantidad = apiData.total;
+          res.tipo = tipo;
+          res.filas = cantidad;
+          res.periodo = apiData.periodo || '';
+          res.esNuevoPeriodo = apiData.esNuevoPeriodo;
+          res.estado = 'ok';
+          if (apiData.match?.ok) {
+            const sinMatch = apiData.match.sin_match || 0;
+            res.matchTrazabilidad = `✅ Match trazabilidad: ${apiData.match.completados} completos, ${apiData.match.parciales} parciales${sinMatch > 0 ? ` — ⚠️ ${sinMatch} sin match` : ''}`;
+          } else if (apiData.match?.error) {
+            res.matchTrazabilidad = `⚠️ Match trazabilidad falló: ${apiData.match.error}`;
+          }
           nuevos.push(res);
           continue;
         }
@@ -849,6 +922,45 @@ function TabSubir() {
           </table>
         </div>
       </details>
+
+      {/* Diagnóstico ítems comprados */}
+      <div style={{ ...S.card, marginBottom:'16px', borderLeft:'3px solid #63b3ed' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:4, fontSize:'0.9rem' }}>
+              🛒 Estado de ítems comprados en base de datos
+            </div>
+            {itemsCompradosInfo === null ? (
+              <div style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>Cargando...</div>
+            ) : itemsCompradosInfo.count === 0 ? (
+              <div style={{ fontSize:'0.82rem', color:'#f87171' }}>⚠️ Sin datos — el reporte no se ha subido aún (o falló silenciosamente)</div>
+            ) : (
+              <div style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>
+                <span style={{ color:'#4ade80', fontWeight:600 }}>{itemsCompradosInfo.count.toLocaleString()}</span> registros en DB
+                {itemsCompradosInfo.periodo && <span> · período: <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{itemsCompradosInfo.periodo}</span></span>}
+                {itemsCompradosInfo.fechaCarga && (
+                  <span> · cargado: <span style={{ color:'var(--text-primary)', fontWeight:600 }}>
+                    {new Date(itemsCompradosInfo.fechaCarga).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                  </span></span>
+                )}
+              </div>
+            )}
+            {syncPolling.items_comprados && (
+              <div style={{ marginTop:6, fontSize:'0.82rem', color:
+                syncPolling.items_comprados.status === 'completed' ? '#4ade80'
+                : ['error','timeout'].includes(syncPolling.items_comprados.status) ? '#f87171'
+                : '#f6ad55'
+              }}>
+                {syncPolling.items_comprados.message}
+              </div>
+            )}
+          </div>
+          <button onClick={cargarInfoItemsComprados}
+            style={{ background:'transparent', border:'1px solid #2a3a50', borderRadius:6, color:'#63b3ed', padding:'3px 10px', fontSize:'0.75rem', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+            ⟳ Actualizar
+          </button>
+        </div>
+      </div>
 
       {/* Dropzone */}
       <div
