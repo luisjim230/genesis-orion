@@ -227,8 +227,9 @@ export default function CajasAurora() {
           {vista === 'lista'
             ? <button style={s.btnPrimary} onClick={() => {
                 const hoy = today()
-                const turnosHoy = registros.filter(r => r.fecha === hoy).map(r => r._turno)
-                const siguienteTurno = TURNOS.find(t => !turnosHoy.includes(t)) || 'Turno 1'
+                const turnosHoy = registros.filter(r => r.fecha === hoy).map(r => r._turno).filter(Boolean)
+                const maxNum = turnosHoy.reduce((max, t) => { const m = t.match(/Turno (\d+)/); return m ? Math.max(max, parseInt(m[1])) : max }, 0)
+                const siguienteTurno = `Turno ${maxNum + 1}`
                 setForm({...EMPTY_FORM, turno: siguienteTurno})
                 setEditId(null); setVista('form')
               }}>+ Nuevo registro</button>
@@ -326,16 +327,23 @@ export default function CajasAurora() {
             </div>
             <div style={s.field}>
               <label style={s.label}>Turno *</label>
-              <div style={{ display:'flex', gap:8 }}>
-                {TURNOS.map(t => (
-                  <button key={t} type="button" onClick={() => setForm(f=>({...f, turno:t}))} style={{
-                    flex:1, padding:'9px 12px', borderRadius:8, border: form.turno===t ? 'none' : '1px solid rgba(0,0,0,0.12)',
-                    background: form.turno===t ? 'linear-gradient(135deg, #c8a84b, #a08930)' : 'rgba(255,255,255,0.5)',
-                    color: form.turno===t ? '#fff' : 'rgba(0,0,0,0.55)', cursor:'pointer',
-                    fontWeight: form.turno===t ? 700 : 400, fontSize:13,
-                    boxShadow: form.turno===t ? '0 4px 12px rgba(200,168,75,0.3)' : 'none', transition:'all 0.15s',
-                  }}>{t}</button>
-                ))}
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {(() => {
+                  const existentes = registros.filter(r => r.fecha === form.fecha).map(r => r._turno).filter(Boolean)
+                  const maxNum = existentes.reduce((max, t) => { const m = t.match(/Turno (\d+)/); return m ? Math.max(max, parseInt(m[1])) : max }, 0)
+                  const lista = []
+                  for (let i = 1; i <= Math.max(maxNum + 1, 1); i++) lista.push(`Turno ${i}`)
+                  if (!lista.includes(form.turno)) lista.push(form.turno)
+                  return lista.map(t => (
+                    <button key={t} type="button" onClick={() => setForm(f=>({...f, turno:t}))} style={{
+                      padding:'9px 12px', borderRadius:8, border: form.turno===t ? 'none' : '1px solid rgba(0,0,0,0.12)',
+                      background: form.turno===t ? 'linear-gradient(135deg, #c8a84b, #a08930)' : 'rgba(255,255,255,0.5)',
+                      color: form.turno===t ? '#fff' : 'rgba(0,0,0,0.55)', cursor:'pointer',
+                      fontWeight: form.turno===t ? 700 : 400, fontSize:13,
+                      boxShadow: form.turno===t ? '0 4px 12px rgba(200,168,75,0.3)' : 'none', transition:'all 0.15s',
+                    }}>{t}</button>
+                  ))
+                })()}
               </div>
             </div>
           </div>
