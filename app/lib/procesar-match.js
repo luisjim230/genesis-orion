@@ -51,7 +51,6 @@ export async function ejecutarMatch() {
       const fRecep = parseFecha(item.fecha_recepcion)
       const fOrden = parseFecha(fechaOrdenRaw)
       if (!fRecep || !fOrden) continue
-      // Comparar solo a nivel de día para evitar falsos positivos por hora
       const fRecepDia = new Date(fRecep); fRecepDia.setUTCHours(0, 0, 0, 0)
       const fOrdenDia = new Date(fOrden); fOrdenDia.setUTCHours(0, 0, 0, 0)
       if (fRecepDia < fOrdenDia) {
