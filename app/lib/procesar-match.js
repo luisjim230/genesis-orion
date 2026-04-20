@@ -153,14 +153,20 @@ export async function ejecutarMatch() {
     }
   }
 
-  const BATCH = 500
+  const BATCH = 100
   res.persistidos = 0
   for (let i = 0; i < actualizaciones.length; i += BATCH) {
     const lote = actualizaciones.slice(i, i + BATCH)
-    const { error } = await getDb().from('ordenes_compra_items').upsert(lote, { onConflict: 'id' })
-    if (error) {
-      console.error('[procesar-match] upsert falló:', error.message, error.details || '')
-      throw new Error(`UPSERT falló en lote ${i / BATCH + 1}: ${error.message}. Probable causa: RLS sin service_role key o permisos incorrectos.`)
+    const results = await Promise.all(lote.map(a =>
+      getDb().from('ordenes_compra_items')
+        .update({ cantidad_recibida: a.cantidad_recibida, estado_item: a.estado_item, fecha_recepcion: a.fecha_recepcion })
+        .eq('id', a.id)
+    ))
+    for (const { error } of results) {
+      if (error) {
+        console.error('[procesar-match] update falló:', error.message)
+        throw new Error(`UPDATE falló: ${error.message}`)
+      }
     }
     res.persistidos += lote.length
   }
