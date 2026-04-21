@@ -288,9 +288,13 @@ async def main():
             # ── 3. HOME con token ────────────────────────────────────────────
             await page.wait_for_load_state("networkidle")
             tok_match = re.search(r'\(S\([^)]+\)\)', page.url)
+            # Detectar el servidor real al que NEO redirigió (neo1/neo7/etc.) en vez de hardcodear
+            host_match = re.match(r'(https?://[^/]+)', page.url)
+            host = host_match.group(1) if host_match else "https://neo1.neotecnologias.com"
+            log.info(f"  Servidor NEO detectado: {host}")
             if tok_match:
                 tok = tok_match.group(0)
-                home = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/NEO/Home.aspx"
+                home = f"{host}/NEOBusiness/{tok}/Paginas/Modulos/NEO/Home.aspx"
                 await page.goto(home)
                 await page.wait_for_load_state("networkidle")
                 await page.wait_for_timeout(2000)
@@ -306,9 +310,25 @@ async def main():
 
             # ── 5. INVENTARIO → ÍTEMS ────────────────────────────────────────
             log.info("Navegando: Inventario → Ítems...")
-            # Usar JS click para evitar problemas de viewport en headless
-            await page.evaluate("document.querySelector('[id=\"102000\"]')?.click()")
-            await page.wait_for_timeout(2500)
+            # Intentar varias estrategias: id numérico, click directo en link "Inventario"
+            clicked_inv = False
+            try:
+                n = await page.locator("#102000").count()
+                if n > 0:
+                    await page.evaluate("document.querySelector('[id=\"102000\"]')?.click()")
+                    clicked_inv = True
+                    log.info("  Click Inventario por id=102000")
+            except Exception:
+                pass
+            if not clicked_inv:
+                try:
+                    inv_link = page.get_by_role("link", name="Inventario").first
+                    await inv_link.click(timeout=5000)
+                    clicked_inv = True
+                    log.info("  Click Inventario por role=link name='Inventario'")
+                except Exception as e:
+                    log.warning(f"  No se pudo clickear Inventario: {e}")
+            await page.wait_for_timeout(4000)
 
             iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
 
