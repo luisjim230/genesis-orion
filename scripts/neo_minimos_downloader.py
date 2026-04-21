@@ -192,6 +192,7 @@ async def main():
     log.info(f"NEO → Mínimos y Máximos  [{ts}]")
     log.info("=" * 50)
 
+    exit_code = 0
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=True,
@@ -278,11 +279,26 @@ async def main():
 
             # ── 5. INVENTARIO → MÍNIMOS Y MÁXIMOS ────────────────────────────
             log.info("Navegando: Inventario → Mínimos y máximos...")
-            await page.get_by_role("link", name="Inventario").click()
-            await page.wait_for_timeout(1500)
+            # JS click por ID de módulo — evita timeouts por viewport en headless
+            await page.evaluate("document.querySelector('[id=\"102000\"]')?.click()")
+            await page.wait_for_timeout(2500)
 
             iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
-            await iframe.get_by_role("link", name=" Mínimos y máximos").click()
+            try:
+                mm_link = iframe.locator("a").filter(has_text="Mínimos y máximos").first
+                await mm_link.wait_for(state="visible", timeout=15000)
+                await mm_link.click()
+            except Exception as e:
+                log.error(f"❌ No se encontró el link 'Mínimos y máximos': {e}")
+                links = await iframe.locator("a").all()
+                for l in links[:30]:
+                    try:
+                        txt = (await l.inner_text()).strip()
+                        if txt:
+                            log.info(f"  Link disponible: {repr(txt)}")
+                    except Exception:
+                        pass
+                raise
             await page.wait_for_timeout(3000)
             log.info("✅ Mínimos y máximos cargado")
 
@@ -347,11 +363,14 @@ async def main():
 
         except Exception as e:
             log.error(f"Error: {e}", exc_info=True)
+            exit_code = 1
         finally:
             await page.wait_for_timeout(1000)
             await browser.close()
 
     log.info("Listo.")
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
