@@ -17,6 +17,8 @@ from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 
 BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+from neo_session import relogin_si_hace_falta
 load_dotenv(BASE / ".env")
 
 NEO_URL      = "https://neo.neotecnologias.com/NEOBusiness/"
@@ -222,6 +224,7 @@ async def main():
     log.info(f"NEO → Lista de ítems  [{ts}]")
     log.info("=" * 50)
 
+    exit_code = 0
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=True,
@@ -294,6 +297,10 @@ async def main():
                 await page.goto(home)
                 await page.wait_for_load_state("networkidle")
                 await page.wait_for_timeout(2000)
+
+            # ── 3b. RELOGIN si NEO nos expulsó ───────────────────────────────
+            if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
+                raise RuntimeError(f"NEO sigue en Login.aspx — sesión tomada por otro cliente. URL: {page.url}")
 
             # ── 4. SIDEBAR ───────────────────────────────────────────────────
             try:
@@ -387,11 +394,14 @@ async def main():
 
         except Exception as e:
             log.error(f"Error: {e}", exc_info=True)
+            exit_code = 1
         finally:
             await page.wait_for_timeout(1000)
             await browser.close()
 
     log.info("Listo.")
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

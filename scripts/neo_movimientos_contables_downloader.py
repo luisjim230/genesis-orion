@@ -18,6 +18,8 @@ from pathlib import Path
 from datetime import datetime, date
 
 BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+from neo_session import relogin_si_hace_falta
 
 try:
     from dotenv import load_dotenv
@@ -137,6 +139,9 @@ async def descargar():
         await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
         await page.wait_for_load_state("networkidle")
         log.info(f"  Empresa OK ({EMPRESA_ID} = Rojimo)")
+
+        if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
+            raise RuntimeError(f"NEO sigue en Login.aspx — sesión tomada por otro cliente. URL: {page.url}")
 
         # ── Navegar: Contabilidad → Movimientos de cuentas ────────────────────
         await page.locator("#mostrar_barra_izquierda").click()
@@ -281,9 +286,13 @@ async def main():
     log.info(f"NEO → Movimientos contables  [{datetime.now():%Y-%m-%d %H:%M}]")
     log.info("=" * 50)
 
-    excel_path = await descargar()
-    subir_a_supabase(excel_path)
-    log.info("Listo.")
+    try:
+        excel_path = await descargar()
+        subir_a_supabase(excel_path)
+        log.info("Listo.")
+    except Exception as e:
+        log.error(f"Error: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
