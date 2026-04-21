@@ -312,6 +312,15 @@ def subir_a_supabase(excel_path):
     log.info(f"✅ Supabase: {ok:,}/{total:,} registros cargados")
     exito = ok == total
 
+    # Refrescar la vista materializada que alimenta comercial_top_productos/tendencias.
+    # Sin esto, los reportes quedan congelados en datos viejos.
+    refresh_status = supa_request("POST", "rpc/refresh_mv_items_por_vend_mes", {},
+                                   prefer="return=minimal")
+    if refresh_status and refresh_status < 300:
+        log.info("  ↻ vista materializada refrescada")
+    else:
+        log.warning(f"  ⚠ refresh de vista materializada falló (status={refresh_status})")
+
     # Actualizar sync_status
     ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     supa_request("PATCH", "sync_status?id=eq.items_facturados", {
