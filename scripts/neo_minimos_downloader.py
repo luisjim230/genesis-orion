@@ -19,6 +19,8 @@ from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 
 BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+from neo_session import relogin_si_hace_falta
 load_dotenv(BASE / ".env")
 
 NEO_URL      = "https://neo.neotecnologias.com/NEOBusiness/"
@@ -271,51 +273,8 @@ async def main():
             # ── 3b. RELOGIN si NEO nos expulsó ───────────────────────────────
             # Pasa cuando otra sesión roba la nuestra (NEO abierto en navegador,
             # otro script corriendo en paralelo, etc.)
-            for intento in range(3):
-                if "Login.aspx" not in page.url:
-                    break
-                log.warning(f"  NEO pidió relogin (intento {intento+1})")
-                try:
-                    usar = page.locator("text=Usar aquí")
-                    if await usar.count() > 0:
-                        await usar.first.click()
-                        await page.wait_for_load_state("networkidle")
-                        await page.wait_for_timeout(2000)
-                        continue
-                except Exception:
-                    pass
-                try:
-                    u = page.get_by_role("textbox", name="Usuario o correo electrónico")
-                    await u.wait_for(state="visible", timeout=8000)
-                    await u.fill(NEO_USUARIO)
-                    await u.press("Tab")
-                    await page.get_by_role("textbox", name="Contraseña").fill(NEO_CLAVE)
-                    await page.get_by_role("button", name="Ingresar").click()
-                    await page.wait_for_load_state("networkidle")
-                    await page.wait_for_timeout(2500)
-                    try:
-                        usar = page.locator("text=Usar aquí")
-                        if await usar.count() > 0:
-                            await usar.first.click()
-                            await page.wait_for_load_state("networkidle")
-                            await page.wait_for_timeout(1500)
-                    except Exception:
-                        pass
-                    tok_match = re.search(r'\(S\([^)]+\)\)', page.url)
-                    if tok_match and "Login.aspx" in page.url:
-                        tok = tok_match.group(0)
-                        home = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/NEO/Home.aspx"
-                        await page.goto(home)
-                        await page.wait_for_load_state("networkidle")
-                        await page.wait_for_timeout(2000)
-                except Exception as e:
-                    log.error(f"  Relogin falló: {e}")
-                    break
-
-            if "Login.aspx" in page.url:
-                raise RuntimeError(
-                    f"NEO sigue en Login.aspx después de 3 intentos — sesión tomada por otro cliente. URL: {page.url}"
-                )
+            if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
+                raise RuntimeError(f"NEO sigue en Login.aspx — sesión tomada por otro cliente. URL: {page.url}")
 
             # ── 4. SIDEBAR ───────────────────────────────────────────────────
             try:
