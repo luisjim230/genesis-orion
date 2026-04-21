@@ -8,7 +8,10 @@
 -- (ej. ₡18M en ventanas el 19-abr que no aparecían en el dashboard SOL).
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.inventario_valor_actual()
+-- Tirar la versión vieja (tipo de return distinto → no se puede CREATE OR REPLACE)
+DROP FUNCTION IF EXISTS public.inventario_valor_actual();
+
+CREATE FUNCTION public.inventario_valor_actual()
 RETURNS TABLE(
     valor_costo numeric,
     items_positivos integer,
