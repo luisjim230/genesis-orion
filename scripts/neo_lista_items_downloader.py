@@ -312,24 +312,83 @@ async def main():
 
             iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
 
-            # El reporte "Lista de ítems" se llama "Ítems" en el sidebar de NEO
-            try:
-                items_link = iframe.locator("a").filter(has_text="Ítems").first
-                if await items_link.count() == 0:
-                    items_link = iframe.locator("a").filter(has_text="Items").first
-                await items_link.click()
-                log.info("  Navegado a Ítems ✅")
-            except Exception as e:
-                log.error(f"❌ No se encontró el link 'Ítems': {e}")
-                # Volcar links disponibles para diagnóstico
+            # El reporte "Lista de ítems" se llama "Ítems" en el sidebar de NEO.
+            # Probar varias estrategias porque NEO cambia el texto (Ítems / Items / Ítem / Item)
+            clicked = False
+            for pattern in ["Ítems", "Items", "Ítem", "Item", "Lista de ítems", "Lista de items"]:
+                try:
+                    link = iframe.locator("a").filter(has_text=pattern).first
+                    if await link.count() > 0 and await link.is_visible():
+                        await link.click()
+                        log.info(f"  Navegado a reporte con texto={pattern!r} ✅")
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                log.error("❌ No se encontró el link al reporte de Ítems — volcando links disponibles:")
                 links = await iframe.locator("a").all()
-                for l in links[:30]:
-                    txt = (await l.inner_text()).strip()
-                    if txt: log.info(f"  Link disponible: {repr(txt)}")
+                for l in links[:40]:
+                    try:
+                        txt = (await l.inner_text()).strip()
+                        if txt: log.info(f"  Link disponible: {repr(txt)}")
+                    except Exception:
+                        pass
                 return
 
             await page.wait_for_timeout(3000)
             log.info("✅ Lista de ítems cargada")
+
+            # ── 5b. DIAGNÓSTICO: volcar todos los filtros del formulario ──────
+            try:
+                campos = await iframe.evaluate("""() => {
+                    const out = [];
+                    document.querySelectorAll('input, select').forEach(el => {
+                        out.push({
+                            tag: el.tagName,
+                            id: el.id || null,
+                            name: el.name || null,
+                            type: el.type || null,
+                            value: el.value || null,
+                            visible: !!(el.offsetWidth || el.offsetHeight)
+                        });
+                    });
+                    return out;
+                }""")
+                log.info(f"  Filtros en el formulario ({len(campos)}):")
+                for c in campos:
+                    if c.get("id") or c.get("name"):
+                        log.info(f"    {c['tag']} id={c['id']!r} name={c['name']!r} type={c['type']!r} value={c['value']!r} visible={c['visible']}")
+            except Exception as e:
+                log.warning(f"  Diagnóstico filtros falló: {e}")
+
+            # ── 5c. FORZAR FECHA DE CORTE A HOY ───────────────────────────────
+            # NEO 'Lista de ítems' usa una fecha de corte por default que puede estar desactualizada.
+            # Seteamos cualquier input con id/name que contenga 'fecha'/'corte'/'hasta' al día de hoy.
+            try:
+                hoy = datetime.now().strftime("%d/%m/%Y")
+                hoy_iso = datetime.now().strftime("%Y-%m-%d")
+                seteados = await iframe.evaluate("""(hoy, hoy_iso) => {
+                    const out = [];
+                    document.querySelectorAll('input').forEach(el => {
+                        const key = ((el.id || '') + ' ' + (el.name || '')).toLowerCase();
+                        if (/fecha|corte|hasta|fin|final/.test(key) && !/activ|desde|inicio|ini/.test(key)) {
+                            const prev = el.value;
+                            el.value = el.type === 'date' ? hoy_iso : hoy;
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            out.push({id: el.id, name: el.name, type: el.type, prev, nuevo: el.value});
+                        }
+                    });
+                    return out;
+                }""", hoy, hoy_iso)
+                if seteados:
+                    for s in seteados:
+                        log.info(f"  Fecha forzada a HOY: id={s['id']!r} name={s['name']!r} '{s['prev']}' → '{s['nuevo']}'")
+                else:
+                    log.info("  (no se encontró input de fecha de corte para forzar)")
+            except Exception as e:
+                log.warning(f"  Forzar fecha falló: {e}")
 
             # ── 6. FILTRO: solo activos ───────────────────────────────────────
             try:
