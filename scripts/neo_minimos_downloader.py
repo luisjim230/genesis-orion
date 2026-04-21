@@ -281,24 +281,47 @@ async def main():
             log.info("Navegando: Inventario → Mínimos y máximos...")
             # JS click por ID de módulo — evita timeouts por viewport en headless
             await page.evaluate("document.querySelector('[id=\"102000\"]')?.click()")
-            await page.wait_for_timeout(2500)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await page.wait_for_timeout(4000)
 
             iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
-            try:
-                mm_link = iframe.locator("a").filter(has_text="Mínimos y máximos").first
-                await mm_link.wait_for(state="visible", timeout=15000)
-                await mm_link.click()
-            except Exception as e:
-                log.error(f"❌ No se encontró el link 'Mínimos y máximos': {e}")
-                links = await iframe.locator("a").all()
-                for l in links[:30]:
-                    try:
-                        txt = (await l.inner_text()).strip()
-                        if txt:
-                            log.info(f"  Link disponible: {repr(txt)}")
-                    except Exception:
-                        pass
-                raise
+
+            mm_link = None
+            for selector_desc, locator in [
+                ("filter Mínimos y máximos", iframe.locator("a").filter(has_text="Mínimos y máximos").first),
+                ("role link ' Mínimos y máximos'", iframe.get_by_role("link", name=" Mínimos y máximos")),
+                ("role link 'Mínimos y máximos'", iframe.get_by_role("link", name="Mínimos y máximos")),
+                ("filter Minimos (sin tilde)", iframe.locator("a").filter(has_text="Minimos y maximos").first),
+            ]:
+                try:
+                    await locator.wait_for(state="visible", timeout=8000)
+                    mm_link = locator
+                    log.info(f"  Link encontrado vía: {selector_desc}")
+                    break
+                except Exception:
+                    continue
+
+            if mm_link is None:
+                log.error("❌ No se encontró el link 'Mínimos y máximos' con ningún selector")
+                try:
+                    log.info(f"  URL actual: {page.url}")
+                    links = await iframe.locator("a").all()
+                    log.info(f"  Total links en iframe: {len(links)}")
+                    for i, l in enumerate(links[:40]):
+                        try:
+                            txt = (await l.inner_text()).strip()
+                            if txt:
+                                log.info(f"  Link[{i}]: {repr(txt)}")
+                        except Exception:
+                            pass
+                except Exception as dump_err:
+                    log.error(f"  Diagnóstico falló: {dump_err}")
+                raise RuntimeError("Link 'Mínimos y máximos' no disponible en el sidebar del iframe")
+
+            await mm_link.click()
             await page.wait_for_timeout(3000)
             log.info("✅ Mínimos y máximos cargado")
 
