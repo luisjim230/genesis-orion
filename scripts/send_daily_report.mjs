@@ -69,11 +69,22 @@ async function supaFetch(queryPath) {
   while (true) {
     const sep = queryPath.includes("?") ? "&" : "?";
     const url = `${SUPABASE_URL}/rest/v1/${queryPath}${sep}limit=${LIMIT}&offset=${offset}`;
-    const r = await fetch(url, {
-      headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
-    });
-    if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`);
-    const rows = await r.json();
+    let rows = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const r = await fetch(url, {
+          headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+        });
+        if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`);
+        rows = await r.json();
+        break;
+      } catch (e) {
+        lastErr = e;
+        await new Promise(res => setTimeout(res, 500 * (attempt + 1)));
+      }
+    }
+    if (rows === null) throw lastErr;
     all.push(...rows);
     if (rows.length < LIMIT) break;
     offset += LIMIT;
@@ -82,8 +93,15 @@ async function supaFetch(queryPath) {
 }
 
 // ───────────────────────────────────────────────
-// Ventas
+// Ventas (netas sin IVA, alineado con NEO "Ventas netas")
+//   · se excluyen items de servicio (transporte/flete/ruteo)
+//   · se prorratea por devoluciones: subt_neto = subtotal × (fact - dev) / fact
 // ───────────────────────────────────────────────
+function esServicio(itemNombre) {
+  const s = (itemNombre || "").toLowerCase();
+  return s.includes("transporte") || s.includes("flete") || s.includes("ruteo");
+}
+
 async function fetchVentas(fechaDDMMYYYY) {
   const q = encodeURIComponent(fechaDDMMYYYY);
   const rows = await supaFetch(
@@ -96,13 +114,20 @@ async function fetchVentas(fechaDDMMYYYY) {
   const prodMap = new Map();
 
   for (const r of rows) {
-    const cant = (r.cantidad_facturada || 0) - (r.cantidad_devuelta || 0);
-    const sub  = r.subtotal || 0;
-    const util = sub - (r.costo_unitario || 0) * cant;
+    if (r.factura) facturas.add(r.factura);
+    if (esServicio(r.item)) continue;
+
+    const cantF = r.cantidad_facturada || 0;
+    const cantD = r.cantidad_devuelta || 0;
+    const cantNeta = cantF - cantD;
+    if (cantF <= 0) continue;
+
+    const ratio = cantNeta / cantF;
+    const sub  = (r.subtotal || 0) * ratio;
+    const util = sub - (r.costo_unitario || 0) * cantNeta;
 
     ventas   += sub;
     utilidad += util;
-    if (r.factura) facturas.add(r.factura);
 
     if (r.vendedor) {
       const v = vendMap.get(r.vendedor) || { ventas: 0, util: 0, f: new Set() };
@@ -113,7 +138,7 @@ async function fetchVentas(fechaDDMMYYYY) {
     const key = r.codigo_interno || r.item;
     if (key) {
       const p = prodMap.get(key) || { nombre: r.item, ventas: 0, util: 0, cant: 0 };
-      p.ventas += sub; p.util += util; p.cant += cant;
+      p.ventas += sub; p.util += util; p.cant += cantNeta;
       prodMap.set(key, p);
     }
   }
