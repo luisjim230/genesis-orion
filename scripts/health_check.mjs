@@ -2,10 +2,14 @@
 /**
  * health_check.mjs — Monitoreo automático del sistema SOL.
  *
- * Corre cada 2h vía GitHub Actions. Verifica:
- *   1. sync_status: última sincronización <6h para ítems críticos
+ * Corre 2×/día (8am y 4pm CR) vía GitHub Actions. Verifica:
+ *   1. sync_status: última sincronización <30h para ítems críticos
  *   2. /api/procesar-match responde OK (env vars OK, RLS OK, upserts OK)
  *   3. neo_items_comprados tiene datos recientes
+ *   4. neo_lista_items.ultima_venta tiene ventas de los últimos días
+ *      (detecta mismatch tipo "última venta dic-2025" cuando en realidad
+ *      hubo ventas más recientes pero el reporte Lista de ítems no se
+ *      sincronizó o NEO no refrescó las fechas resumen)
  *
  * Si algo falla → manda mensaje a Telegram (@SOL_DJ_BOT).
  *
@@ -26,8 +30,11 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !TELEGRAM_BOT_TOKEN || !TELEGRAM_C
   process.exit(1);
 }
 
-const HORAS_SYNC_CRITICO = 6;
-const REPORTES_CRITICOS = ['items_comprados', 'minimos_maximos'];
+// Umbrales relajados: con 2 corridas/día alcanza con ventana de 30h para
+// detectar sync caídos sin generar falsos positivos si hay un delay menor.
+const HORAS_SYNC_CRITICO = 30;
+const DIAS_MAX_SIN_VENTAS = 4; // si hace 4+ días sin ventas cargadas, algo pasa
+const REPORTES_CRITICOS = ['items_comprados', 'items_lista_general', 'minimos_maximos'];
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -120,6 +127,41 @@ try {
   }
 } catch (e) {
   alertas.push(`🔴 Error consultando <code>neo_items_comprados</code>: ${e.message}`);
+}
+
+// 4. Frescura de ventas NEO — detecta el bug tipo "última venta dic-2025"
+// El reporte "Lista de ítems" (tabla neo_lista_items) es el que alimenta
+// la columna "Última Venta" de la UI de Inteligencia. Si la venta más
+// reciente registrada ahí tiene más de DIAS_MAX_SIN_VENTAS días, el sync
+// se está rompiendo o NEO dejó de refrescar el reporte resumen.
+try {
+  const rows = await supaGet(
+    'neo_lista_items?select=ultima_venta&order=ultima_venta.desc.nullslast&limit=1',
+  );
+  if (!rows.length) {
+    alertas.push('🔴 <b>neo_lista_items</b> está vacía — la UI no va a poder mostrar últimas ventas');
+  } else {
+    const fechaRaw = rows[0].ultima_venta;
+    if (!fechaRaw) {
+      alertas.push('🔴 <b>neo_lista_items.ultima_venta</b> no tiene ningún valor — revisá el sync del reporte Lista de ítems');
+    } else {
+      const fechaMax = new Date(fechaRaw);
+      if (isNaN(fechaMax.getTime())) {
+        alertas.push(`⚠️ Fecha ilegible en <b>neo_lista_items.ultima_venta</b>: <code>${fechaRaw}</code>`);
+      } else {
+        const diasSinVentas = Math.floor((Date.now() - fechaMax.getTime()) / 86400000);
+        if (diasSinVentas > DIAS_MAX_SIN_VENTAS) {
+          alertas.push(
+            `🔴 La venta más reciente en <b>neo_lista_items</b> es del <b>${fechaRaw}</b> (${diasSinVentas} días atrás).\n` +
+            `💡 El reporte "Lista de ítems" no está trayendo ventas recientes. ` +
+            `Revisá el LaunchAgent <code>com.sol.neo-lista-items</code> o corré <code>python3 scripts/neo_lista_items_downloader.py</code> manualmente.`,
+          );
+        }
+      }
+    }
+  }
+} catch (e) {
+  alertas.push(`🔴 Error consultando <code>neo_lista_items</code>: ${e.message}`);
 }
 
 // Resultado

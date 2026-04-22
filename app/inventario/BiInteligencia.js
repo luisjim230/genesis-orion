@@ -62,6 +62,63 @@ function Badge({ text, color }) {
 function cobColor(m) { const v = Number(m) || 0; return v > 12 ? RED : v >= 6 ? ORANGE : GOLD }
 function tendColor(t) { return t === 'bajando' ? RED : t === 'subiendo' ? GREEN : '#888' }
 
+// Umbral de días en inventario antes de clasificar un producto como problema
+// (muerto / sobrestock / liquidar). Productos con menos de N días desde la
+// última entrada de stock se consideran "nuevos" y quedan fuera de alertas.
+const DIAS_MIN_INVENTARIO = 30
+
+// Mapa {codigo → { ultima_venta, ultima_compra }} desde neo_lista_items.
+// Esta tabla es el reporte "Lista de ítems" de NEO: trae un renglón por
+// producto con las fechas resumen oficiales, evitando tener que agregar
+// 180 días de transacciones facturadas para calcular "última venta".
+async function cargarResumenItems() {
+  let offset = 0
+  const BATCH = 1000
+  const map = {}
+  while (true) {
+    const { data, error } = await supabase
+      .from('neo_lista_items')
+      .select('codigo_interno,ultima_compra,ultima_venta')
+      .range(offset, offset + BATCH - 1)
+    if (error || !data || !data.length) break
+    data.forEach(r => {
+      const cod = (r.codigo_interno || '').toString().trim()
+      if (!cod) return
+      map[cod] = { ultima_compra: r.ultima_compra || null, ultima_venta: r.ultima_venta || null }
+    })
+    if (data.length < BATCH) break
+    offset += BATCH
+  }
+  return map
+}
+
+// Aplica el filtro de 30 días contra la última compra de neo_lista_items.
+// Devuelve true si el producto ya lleva suficiente tiempo en inventario como
+// para ser evaluado (o si no hay registro de compra → se asume viejo).
+function yaEvaluable(codigo, resumenMap) {
+  const cod = (codigo || '').toString().trim()
+  const f = resumenMap[cod]?.ultima_compra
+  if (!f) return true
+  const dias = Math.floor((Date.now() - new Date(f).getTime()) / 86400000)
+  return dias >= DIAS_MIN_INVENTARIO
+}
+
+// Sobreescribe la fecha ultima_venta del RPC con la del reporte oficial de
+// NEO cuando está disponible. Los RPCs bi_* calculan ultima_venta agregando
+// neo_items_facturados que sólo trae el mes actual, y quedan desactualizados
+// para productos con baja rotación.
+function enriquecerFechas(rows, resumenMap) {
+  return rows.map(row => {
+    const info = resumenMap[(row.codigo || '').toString().trim()]
+    if (!info) return row
+    return {
+      ...row,
+      ultima_venta: info.ultima_venta || row.ultima_venta || null,
+      ultima_compra: info.ultima_compra || row.ultima_compra || null,
+    }
+  })
+}
+
 export default function BiInteligencia() {
   const [activeTab, setActiveTab] = useState('muertos')
   const [loading, setLoading] = useState(true)
@@ -74,19 +131,36 @@ export default function BiInteligencia() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [d, o, l, r, t] = await Promise.allSettled([
-        supabase.rpc('bi_dead_stock'),
-        supabase.rpc('bi_overstock_alerts'),
-        supabase.rpc('bi_liquidar_candidates'),
-        supabase.rpc('bi_reforzar_candidates'),
-        supabase.rpc('bi_trend_analysis'),
-      ]).then(results => results.map(res => res.status === 'fulfilled' ? res.value : { data: [], error: res.reason }))
-      console.log('BI Inteligencia RPCs:', { dead: d.data?.length, dead_err: d.error, over: o.data?.length, liq: l.data?.length, ref: r.data?.length, trends: t.data?.length, trends_err: t.error })
-      setDeadStock(Array.isArray(d.data) ? d.data : [])
-      setOverstock(Array.isArray(o.data) ? o.data : [])
-      setLiquidar(Array.isArray(l.data) ? l.data : [])
-      setReforzar(Array.isArray(r.data) ? r.data : [])
-      setTrends(Array.isArray(t.data) ? t.data : [])
+      const [rpcs, resumenMap] = await Promise.all([
+        Promise.allSettled([
+          supabase.rpc('bi_dead_stock'),
+          supabase.rpc('bi_overstock_alerts'),
+          supabase.rpc('bi_liquidar_candidates'),
+          supabase.rpc('bi_reforzar_candidates'),
+          supabase.rpc('bi_trend_analysis'),
+        ]).then(results => results.map(res => res.status === 'fulfilled' ? res.value : { data: [], error: res.reason })),
+        cargarResumenItems(),
+      ])
+      const [d, o, l, r, t] = rpcs
+      const dead = enriquecerFechas(Array.isArray(d.data) ? d.data : [], resumenMap)
+      const over = enriquecerFechas(Array.isArray(o.data) ? o.data : [], resumenMap)
+      const liq  = enriquecerFechas(Array.isArray(l.data) ? l.data : [], resumenMap)
+      const ref  = enriquecerFechas(Array.isArray(r.data) ? r.data : [], resumenMap)
+      const trd  = Array.isArray(t.data) ? t.data : []
+      const deadFilt = dead.filter(row => yaEvaluable(row.codigo, resumenMap))
+      const overFilt = over.filter(row => yaEvaluable(row.codigo, resumenMap))
+      const liqFilt  = liq.filter(row => yaEvaluable(row.codigo, resumenMap))
+      console.log('BI Inteligencia RPCs:', {
+        dead: dead.length, dead_filtrado: deadFilt.length, dead_err: d.error,
+        over: over.length, over_filtrado: overFilt.length,
+        liq: liq.length, liq_filtrado: liqFilt.length,
+        ref: ref.length, trends: trd.length, trends_err: t.error,
+      })
+      setDeadStock(deadFilt)
+      setOverstock(overFilt)
+      setLiquidar(liqFilt)
+      setReforzar(ref)
+      setTrends(trd)
       setLoading(false)
     }
     load()

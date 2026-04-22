@@ -5,6 +5,10 @@ Selectores obtenidos con Playwright Codegen el 2026-03-29.
 
 Rango de fechas: 1° del mes actual hasta hoy (dinámico).
 
+Nota: la fecha "última venta" por producto en la UI de Inteligencia NO se
+calcula desde esta tabla; viene del reporte "Lista de ítems" de NEO
+(ver neo_lista_items_downloader.py → tabla neo_lista_items).
+
 Cómo correr manualmente:
   cd ~/Documents/GitHub/genesis-orion/scripts
   python3 neo_items_facturados_downloader.py
