@@ -34,7 +34,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !TELEGRAM_BOT_TOKEN || !TELEGRAM_C
 // detectar sync caídos sin generar falsos positivos si hay un delay menor.
 const HORAS_SYNC_CRITICO = 30;
 const DIAS_MAX_SIN_VENTAS = 4; // si hace 4+ días sin ventas cargadas, algo pasa
-const REPORTES_CRITICOS = ['items_comprados', 'lista_items', 'minimos_maximos'];
+const REPORTES_CRITICOS = ['items_comprados', 'items_lista_general', 'minimos_maximos'];
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
