@@ -3,12 +3,11 @@ neo_items_facturados_downloader.py — Descarga "Lista de ítems facturados" de 
 y sube a Supabase (tabla neo_items_facturados).
 Selectores obtenidos con Playwright Codegen el 2026-03-29.
 
-Rango de fechas: últimos 180 días hasta hoy (dinámico). El rango amplio es
-necesario porque la UI muestra "última venta" por producto: si solo bajamos
-el mes actual, una venta de marzo nunca actualiza la fecha hasta que la venta
-de abril aparezca, y productos con rotación baja quedan con fechas viejas.
-El upsert por (factura, codigo_interno, bodega) hace que reimportar rango
-amplio sea idempotente.
+Rango de fechas: 1° del mes actual hasta hoy (dinámico).
+
+Nota: la fecha "última venta" por producto en la UI de Inteligencia NO se
+calcula desde esta tabla; viene del reporte "Lista de ítems" de NEO
+(ver neo_lista_items_downloader.py → tabla neo_lista_items).
 
 Cómo correr manualmente:
   cd ~/Documents/GitHub/genesis-orion/scripts
@@ -20,7 +19,7 @@ Horario automático: definir en LaunchAgent (por configurar).
 import os, sys, asyncio, logging, json, urllib.request, urllib.error
 import unicodedata
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
@@ -60,13 +59,10 @@ log = logging.getLogger(__name__)
 
 # ─── FECHAS ───────────────────────────────────────────────────────────────────
 
-DIAS_HISTORIAL = int(os.getenv("NEO_FACTURADOS_DIAS", "180"))
-
-
 def rango_fechas():
-    """Retorna (inicio, fin) en formato DDMMYYYY: últimos DIAS_HISTORIAL hasta hoy."""
+    """Retorna (inicio, fin) en formato DDMMYYYY: 1° del mes actual hasta hoy."""
     hoy = date.today()
-    inicio = hoy - timedelta(days=DIAS_HISTORIAL)
+    inicio = hoy.replace(day=1)
     return inicio.strftime("%d%m%Y"), hoy.strftime("%d%m%Y")
 
 
@@ -131,104 +127,18 @@ COL_MAP = {
 
 # ─── DESCARGA ─────────────────────────────────────────────────────────────────
 
-DIAS_POR_CHUNK = int(os.getenv("NEO_FACTURADOS_CHUNK_DIAS", "60"))
-TIMEOUT_EXPORT_MS = int(os.getenv("NEO_FACTURADOS_TIMEOUT_MS", "420000"))  # 7 min
-
-
-def _chunks_de_fechas(dias_total, dias_chunk):
-    """Divide el rango total en tramos de `dias_chunk` días, desde el más
-    antiguo al más reciente. Devuelve lista de (inicio_str, fin_str) en
-    formato DDMMYYYY."""
-    hoy = date.today()
-    inicio_total = hoy - timedelta(days=dias_total)
-    rangos = []
-    cur = inicio_total
-    while cur <= hoy:
-        fin = min(cur + timedelta(days=dias_chunk - 1), hoy)
-        rangos.append((cur.strftime("%d%m%Y"), fin.strftime("%d%m%Y")))
-        cur = fin + timedelta(days=1)
-    return rangos
-
-
-async def _setear_fechas(iframe, f_inicio, f_fin):
-    """Setea el rango en los inputs de fecha del iframe. Devuelve True si tuvo
-    éxito, False si no encontró los inputs."""
-    selectores_fecha = [
-        ("#fFechaInicio", "#fFechaFin"),
-        ("#txtFechaInicio", "#txtFechaFin"),
-        ("input[name='fFechaInicio']", "input[name='fFechaFin']"),
-        ("input[name='txtFechaInicio']", "input[name='txtFechaFin']"),
-    ]
-    for sel_inicio, sel_fin in selectores_fecha:
-        try:
-            el_ini = iframe.locator(sel_inicio)
-            if await el_ini.count() > 0:
-                await el_ini.click(click_count=3)
-                await el_ini.fill(f_inicio)
-                await iframe.locator(sel_fin).click(click_count=3)
-                await iframe.locator(sel_fin).fill(f_fin)
-                log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
-                return True
-        except Exception:
-            continue
-    # Fallback: buscar por valor tipo fecha
-    try:
-        inputs = iframe.locator("input[type='text']")
-        count = await inputs.count()
-        for idx in range(min(count, 10)):
-            val = await inputs.nth(idx).get_attribute("value") or ""
-            if "/" in val and len(val) >= 8 and idx + 1 < count:
-                await inputs.nth(idx).click(click_count=3)
-                await inputs.nth(idx).fill(f_inicio)
-                await inputs.nth(idx + 1).click(click_count=3)
-                await inputs.nth(idx + 1).fill(f_fin)
-                log.info(f"  Fechas OK (fallback input[{idx}]): {f_inicio} → {f_fin}")
-                return True
-    except Exception as e:
-        log.warning(f"  Error en fallback de fechas: {e}")
-    return False
-
-
-async def _exportar_excel_actual(page, iframe, sufijo):
-    """Click Refrescar → esperar datos → click Exportar → guardar .xlsx."""
-    await iframe.get_by_role("button", name="Refrescar").click()
-    log.info("  Esperando datos (NEO es lento)...")
-    try:
-        await iframe.locator("text=registros").wait_for(timeout=120_000)
-        log.info("  Datos cargados")
-    except Exception:
-        log.warning("  Timeout 120s esperando datos — exportando igual")
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    excel_path = DOWNLOAD_DIR / f"items_facturados_{sufijo}_{ts}.xlsx"
-    log.info(f"  Descargando Excel (timeout {TIMEOUT_EXPORT_MS // 1000}s)...")
-    async with page.expect_download(timeout=TIMEOUT_EXPORT_MS) as dl_info:
-        await iframe.get_by_role("button", name="Exportar").click()
-    dl = await dl_info.value
-    await dl.save_as(excel_path)
-    size = excel_path.stat().st_size
-    log.info(f"  ✅ {excel_path.name} ({size:,} bytes)")
-    return excel_path
-
-
 async def descargar():
-    """Descarga los últimos DIAS_HISTORIAL días en chunks de DIAS_POR_CHUNK
-    días, reutilizando la misma sesión de navegador. Devuelve lista de Paths
-    de Excel generados (uno por chunk)."""
     from playwright.async_api import async_playwright
 
-    rangos = _chunks_de_fechas(DIAS_HISTORIAL, DIAS_POR_CHUNK)
-    log.info(f"  Historial total: {DIAS_HISTORIAL} días en {len(rangos)} chunk(s) de {DIAS_POR_CHUNK} días")
-    for i, (ini, fin) in enumerate(rangos, 1):
-        log.info(f"    chunk {i}: {ini[:2]}/{ini[2:4]}/{ini[4:]} → {fin[:2]}/{fin[2:4]}/{fin[4:]}")
+    f_inicio, f_fin = rango_fechas()
+    log.info(f"  Rango: {f_inicio[:2]}/{f_inicio[2:4]}/{f_inicio[4:]} → {f_fin[:2]}/{f_fin[2:4]}/{f_fin[4:]}")
 
-    excel_paths = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         ctx     = await browser.new_context(accept_downloads=True)
         page    = await ctx.new_page()
 
-        # ── Login (una sola vez para toda la corrida) ────────────────────────
+        # ── Login ──────────────────────────────────────────────────────────────
         log.info("Abriendo NEO...")
         await page.goto(NEO_URL)
         await page.get_by_role("textbox", name="Usuario o correo electrónico").fill(NEO_USUARIO)
@@ -237,6 +147,7 @@ async def descargar():
         await page.wait_for_load_state("networkidle")
         log.info("Login OK")
 
+        # ── Verificar empresa: Corporación Rojimo (984) ────────────────────────
         await page.get_by_title("Perfil").click()
         await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
         await page.wait_for_load_state("networkidle")
@@ -245,7 +156,7 @@ async def descargar():
         if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
             raise RuntimeError(f"NEO sigue en Login.aspx — sesión tomada por otro cliente. URL: {page.url}")
 
-        # ── Navegar una sola vez: Ventas → Ítems facturados ─────────────────
+        # ── Navegar: Ventas → Ítems facturados ────────────────────────────────
         await page.locator("#mostrar_barra_izquierda").click()
         await page.get_by_role("link", name="Ventas").click()
         await page.wait_for_timeout(2000)
@@ -255,25 +166,76 @@ async def descargar():
         await page.wait_for_load_state("networkidle")
         log.info("✅ Ítems facturados cargado")
 
-        # ── Iterar chunks ────────────────────────────────────────────────────
-        for i, (f_inicio, f_fin) in enumerate(rangos, 1):
-            log.info(f"── Chunk {i}/{len(rangos)} ────────────────────────────────────────")
-            ok = await _setear_fechas(iframe, f_inicio, f_fin)
-            if not ok:
-                log.warning(f"  No se pudieron setear fechas — se omite chunk {i}")
-                continue
+        # ── Fechas: 1° del mes hasta hoy ──────────────────────────────────────
+        fecha_ok = False
+        # Intentar múltiples selectores para los campos de fecha
+        selectores_fecha = [
+            ("#fFechaInicio", "#fFechaFin"),
+            ("#txtFechaInicio", "#txtFechaFin"),
+            ("input[name='fFechaInicio']", "input[name='fFechaFin']"),
+            ("input[name='txtFechaInicio']", "input[name='txtFechaFin']"),
+        ]
+        for sel_inicio, sel_fin in selectores_fecha:
             try:
-                path = await _exportar_excel_actual(page, iframe, f"{f_inicio}-{f_fin}")
-                excel_paths.append(path)
-            except Exception as e:
-                log.error(f"  Error exportando chunk {i}: {e}")
-                # Seguir con el resto — cada chunk es independiente
+                el_ini = iframe.locator(sel_inicio)
+                if await el_ini.count() > 0:
+                    await el_ini.click(click_count=3)
+                    await el_ini.fill(f_inicio)
+                    await iframe.locator(sel_fin).click(click_count=3)
+                    await iframe.locator(sel_fin).fill(f_fin)
+                    log.info(f"  Fechas OK ({sel_inicio}): {f_inicio} → {f_fin}")
+                    fecha_ok = True
+                    break
+            except Exception:
                 continue
+        # Fallback: buscar cualquier input tipo fecha visible en el iframe
+        if not fecha_ok:
+            try:
+                inputs = iframe.locator("input[type='text']")
+                count = await inputs.count()
+                log.info(f"  Buscando campos de fecha entre {count} inputs...")
+                for idx in range(min(count, 10)):
+                    val = await inputs.nth(idx).get_attribute("value") or ""
+                    el_id = await inputs.nth(idx).get_attribute("id") or ""
+                    log.info(f"    input[{idx}] id='{el_id}' value='{val}'")
+                    # Si el valor parece una fecha (contiene /) intentar usarlo
+                    if "/" in val and len(val) >= 8 and idx + 1 < count:
+                        await inputs.nth(idx).click(click_count=3)
+                        await inputs.nth(idx).fill(f_inicio)
+                        await inputs.nth(idx + 1).click(click_count=3)
+                        await inputs.nth(idx + 1).fill(f_fin)
+                        log.info(f"  Fechas OK (fallback input[{idx}]): {f_inicio} → {f_fin}")
+                        fecha_ok = True
+                        break
+            except Exception as e:
+                log.warning(f"  Error en fallback de fechas: {e}")
+        if not fecha_ok:
+            log.warning("  No se encontraron campos de fecha — usando valores por defecto")
 
+        # ── Refrescar y esperar datos ──────────────────────────────────────────
+        await iframe.get_by_role("button", name="Refrescar").click()
+        log.info("Esperando datos (NEO es lento)...")
+        try:
+            await iframe.locator("text=registros").wait_for(timeout=90_000)
+            log.info("  Datos cargados")
+        except Exception:
+            log.warning("Timeout 90s — exportando igual")
+
+        # ── Exportar Excel ─────────────────────────────────────────────────────
+        log.info("Descargando Excel...")
+        ts = datetime.now().strftime("%Y%m%d_%H%M")
+        excel_path = DOWNLOAD_DIR / f"items_facturados_{ts}.xlsx"
+
+        async with page.expect_download(timeout=120_000) as dl_info:
+            await iframe.get_by_role("button", name="Exportar").click()
+
+        dl = await dl_info.value
+        await dl.save_as(excel_path)
         await browser.close()
 
-    log.info(f"✅ {len(excel_paths)}/{len(rangos)} chunks descargados")
-    return excel_paths
+    size = excel_path.stat().st_size
+    log.info(f"✅ Descargado: {excel_path} ({size:,} bytes)")
+    return excel_path
 
 
 # ─── SUBIR A SUPABASE ─────────────────────────────────────────────────────────
@@ -386,19 +348,9 @@ async def main():
     log.info("=" * 50)
 
     try:
-        excel_paths = await descargar()
-        if not excel_paths:
-            log.error("No se descargó ningún chunk — abortando upload")
-            sys.exit(1)
-        fallos = 0
-        for i, excel_path in enumerate(excel_paths, 1):
-            log.info(f"── Subida {i}/{len(excel_paths)}: {excel_path.name} ──")
-            if not subir_a_supabase(excel_path):
-                fallos += 1
-        if fallos:
-            log.warning(f"Listo con {fallos}/{len(excel_paths)} chunks fallados en upload")
-        else:
-            log.info(f"Listo. {len(excel_paths)} chunk(s) sincronizados.")
+        excel_path = await descargar()
+        subir_a_supabase(excel_path)
+        log.info("Listo.")
     except Exception as e:
         log.error(f"Error: {e}", exc_info=True)
         sys.exit(1)

@@ -6,9 +6,10 @@
  *   1. sync_status: última sincronización <30h para ítems críticos
  *   2. /api/procesar-match responde OK (env vars OK, RLS OK, upserts OK)
  *   3. neo_items_comprados tiene datos recientes
- *   4. neo_items_facturados tiene ventas de los últimos días (detecta
- *      mismatch tipo "última venta dic-2025" cuando en realidad hubo ventas
- *      más recientes pero no se sincronizaron)
+ *   4. neo_lista_items.ultima_venta tiene ventas de los últimos días
+ *      (detecta mismatch tipo "última venta dic-2025" cuando en realidad
+ *      hubo ventas más recientes pero el reporte Lista de ítems no se
+ *      sincronizó o NEO no refrescó las fechas resumen)
  *
  * Si algo falla → manda mensaje a Telegram (@SOL_DJ_BOT).
  *
@@ -33,7 +34,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !TELEGRAM_BOT_TOKEN || !TELEGRAM_C
 // detectar sync caídos sin generar falsos positivos si hay un delay menor.
 const HORAS_SYNC_CRITICO = 30;
 const DIAS_MAX_SIN_VENTAS = 4; // si hace 4+ días sin ventas cargadas, algo pasa
-const REPORTES_CRITICOS = ['items_comprados', 'items_facturados', 'minimos_maximos'];
+const REPORTES_CRITICOS = ['items_comprados', 'lista_items', 'minimos_maximos'];
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -129,33 +130,38 @@ try {
 }
 
 // 4. Frescura de ventas NEO — detecta el bug tipo "última venta dic-2025"
-// Si la venta más reciente en la tabla tiene más de DIAS_MAX_SIN_VENTAS días,
-// el sync de ítems facturados se está rompiendo y las fechas "última venta"
-// de la UI van a quedar desactualizadas.
+// El reporte "Lista de ítems" (tabla neo_lista_items) es el que alimenta
+// la columna "Última Venta" de la UI de Inteligencia. Si la venta más
+// reciente registrada ahí tiene más de DIAS_MAX_SIN_VENTAS días, el sync
+// se está rompiendo o NEO dejó de refrescar el reporte resumen.
 try {
   const rows = await supaGet(
-    'neo_items_facturados?select=fecha&order=fecha.desc&limit=1',
+    'neo_lista_items?select=ultima_venta&order=ultima_venta.desc.nullslast&limit=1',
   );
   if (!rows.length) {
-    alertas.push('🔴 <b>neo_items_facturados</b> está vacía — la UI no va a poder mostrar últimas ventas');
+    alertas.push('🔴 <b>neo_lista_items</b> está vacía — la UI no va a poder mostrar últimas ventas');
   } else {
-    const fechaRaw = rows[0].fecha;
-    const fechaMax = new Date(fechaRaw);
-    if (isNaN(fechaMax.getTime())) {
-      alertas.push(`⚠️ Fecha ilegible en <b>neo_items_facturados</b>: <code>${fechaRaw}</code>`);
+    const fechaRaw = rows[0].ultima_venta;
+    if (!fechaRaw) {
+      alertas.push('🔴 <b>neo_lista_items.ultima_venta</b> no tiene ningún valor — revisá el sync del reporte Lista de ítems');
     } else {
-      const diasSinVentas = Math.floor((Date.now() - fechaMax.getTime()) / 86400000);
-      if (diasSinVentas > DIAS_MAX_SIN_VENTAS) {
-        alertas.push(
-          `🔴 La venta más reciente en <b>neo_items_facturados</b> es del <b>${fechaRaw}</b> (${diasSinVentas} días atrás).\n` +
-          `💡 El downloader <code>neo_items_facturados_downloader.py</code> no está trayendo ventas recientes. ` +
-          `Revisá el LaunchAgent en la Mac o corré <code>python3 scripts/neo_items_facturados_downloader.py</code> manualmente.`,
-        );
+      const fechaMax = new Date(fechaRaw);
+      if (isNaN(fechaMax.getTime())) {
+        alertas.push(`⚠️ Fecha ilegible en <b>neo_lista_items.ultima_venta</b>: <code>${fechaRaw}</code>`);
+      } else {
+        const diasSinVentas = Math.floor((Date.now() - fechaMax.getTime()) / 86400000);
+        if (diasSinVentas > DIAS_MAX_SIN_VENTAS) {
+          alertas.push(
+            `🔴 La venta más reciente en <b>neo_lista_items</b> es del <b>${fechaRaw}</b> (${diasSinVentas} días atrás).\n` +
+            `💡 El reporte "Lista de ítems" no está trayendo ventas recientes. ` +
+            `Revisá el LaunchAgent <code>com.sol.neo-lista-items</code> o corré <code>python3 scripts/neo_lista_items_downloader.py</code> manualmente.`,
+          );
+        }
       }
     }
   }
 } catch (e) {
-  alertas.push(`🔴 Error consultando <code>neo_items_facturados</code>: ${e.message}`);
+  alertas.push(`🔴 Error consultando <code>neo_lista_items</code>: ${e.message}`);
 }
 
 // Resultado

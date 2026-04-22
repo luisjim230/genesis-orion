@@ -101,7 +101,8 @@ export default function KronosTab({ calc, transitoMap }) {
     cargarUltimasCompras();
   }, []);
 
-  // Última fecha de entrada de stock por código. Se usa como piso de 30 días
+  // Última fecha de entrada de stock por código, leída del reporte oficial
+  // "Lista de ítems" (tabla neo_lista_items). Se usa como piso de 30 días
   // antes de clasificar un producto como "muerto" / liquidable / sobrestock.
   async function cargarUltimasCompras() {
     try {
@@ -110,15 +111,14 @@ export default function KronosTab({ calc, transitoMap }) {
       const map = {};
       while (true) {
         const { data, error } = await supabase
-          .from('neo_items_comprados')
-          .select('codigo_interno,fecha')
+          .from('neo_lista_items')
+          .select('codigo_interno,ultima_compra')
           .range(offset, offset + BATCH - 1);
         if (error || !data || !data.length) break;
         data.forEach(r => {
           const cod = (r.codigo_interno || '').toString().trim();
-          if (!cod || !r.fecha) return;
-          const f = r.fecha;
-          if (!map[cod] || f > map[cod]) map[cod] = f;
+          if (!cod || !r.ultima_compra) return;
+          map[cod] = r.ultima_compra;
         });
         if (data.length < BATCH) break;
         offset += BATCH;
