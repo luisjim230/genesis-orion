@@ -19,6 +19,12 @@
 
 6. **Advertir sobre rotación de secrets** cuando el usuario pegue una service key, token, o contraseña en el chat — y recordárselo al final de la tarea.
 
+7. **Siempre incluir `git checkout <rama>` antes de cualquier `git pull`** en comandos que se le den al usuario. El usuario no sabe que `git pull` solo actualiza la rama donde está parado. Si los cambios que el usuario tiene que correr están en una rama de feature (ej. `claude/xxx`), el comando DEBE ser:
+   ```
+   cd <ruta> && git checkout <rama-feature> && git pull origin <rama-feature> && <comando-a-correr>
+   ```
+   Nunca asumir que el usuario está en la rama correcta. Nunca darle `git pull` sin checkout previo. Si la rama no existe local, `git checkout -B <rama> origin/<rama>` la crea y traquea en un solo paso.
+
 ## Contexto del proyecto
 
 - **Repo:** genesis-orion (Next.js + Supabase)
