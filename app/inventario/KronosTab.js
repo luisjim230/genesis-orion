@@ -86,6 +86,7 @@ export default function KronosTab({ calc, transitoMap }) {
   const [expandidos, setExpandidos] = useState({});
   const [msg, setMsg] = useState(null);
   const [consumoHistorico, setConsumoHistorico] = useState({});
+  const [ultimaCompraMap, setUltimaCompraMap] = useState({});
   const [preciosMap, setPreciosMap] = useState({});
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
   const [periodos, setPeriodos] = useState([]);
@@ -97,7 +98,44 @@ export default function KronosTab({ calc, transitoMap }) {
   useEffect(() => {
     cargarLeadTimes();
     cargarConsumoHistorico();
+    cargarUltimasCompras();
   }, []);
+
+  // Última fecha de entrada de stock por código. Se usa como piso de 30 días
+  // antes de clasificar un producto como "muerto" / liquidable / sobrestock.
+  async function cargarUltimasCompras() {
+    try {
+      let offset = 0;
+      const BATCH = 1000;
+      const map = {};
+      while (true) {
+        const { data, error } = await supabase
+          .from('neo_items_comprados')
+          .select('codigo_interno,fecha')
+          .range(offset, offset + BATCH - 1);
+        if (error || !data || !data.length) break;
+        data.forEach(r => {
+          const cod = (r.codigo_interno || '').toString().trim();
+          if (!cod || !r.fecha) return;
+          const f = r.fecha;
+          if (!map[cod] || f > map[cod]) map[cod] = f;
+        });
+        if (data.length < BATCH) break;
+        offset += BATCH;
+      }
+      setUltimaCompraMap(map);
+    } catch (e) { console.error(e); }
+  }
+
+  // Días desde la última entrada de stock. Si nunca se compró en el histórico
+  // cargado, devuelve Infinity (= el producto no es "nuevo").
+  const diasDesdeUltimaCompra = useCallback((codigo) => {
+    const cod = (codigo || '').toString().trim();
+    const f = ultimaCompraMap[cod];
+    if (!f) return Infinity;
+    const ms = Date.now() - new Date(f).getTime();
+    return Math.floor(ms / 86400000);
+  }, [ultimaCompraMap]);
 
   async function cargarLeadTimes() {
     try {
@@ -353,15 +391,29 @@ export default function KronosTab({ calc, transitoMap }) {
       .sort((a, b) => (b._margen * b._ventaMensualCRC) - (a._margen * a._ventaMensualCRC))
       .slice(0, 50);
 
-    // Productos muertos: en inventario pero sin consumo real en historial
+    // Productos muertos: en inventario pero sin consumo real en historial.
+    // Productos ingresados hace menos de 30 días quedan fuera: son nuevos y
+    // todavía no tuvieron tiempo de venderse — marcarlos como muertos genera
+    // alertas falsas el mismo día que se reciben.
     const muertos = proyecciones
-      .filter(i => !consumoHistorico[i.codigo] && (parseFloat(i.existencias) || 0) > 0 && (parseFloat(i.promedio_mensual) || 0) === 0)
+      .filter(i =>
+        !consumoHistorico[i.codigo] &&
+        (parseFloat(i.existencias) || 0) > 0 &&
+        (parseFloat(i.promedio_mensual) || 0) === 0 &&
+        diasDesdeUltimaCompra(i.codigo) >= 30
+      )
       .sort((a, b) => (parseFloat(b.existencias) || 0) - (parseFloat(a.existencias) || 0))
       .slice(0, 50);
 
-    // Candidatos a liquidar: sobrestock + margen bajo (<15%)
+    // Candidatos a liquidar: sobrestock + margen bajo (<15%). Mismo criterio
+    // de 30 días en inventario antes de decidir liquidar.
     const liquidar = conDatos
-      .filter(i => i._mesesCobertura >= 4 && i._margen < 15 && i._valorStock > 0)
+      .filter(i =>
+        i._mesesCobertura >= 4 &&
+        i._margen < 15 &&
+        i._valorStock > 0 &&
+        diasDesdeUltimaCompra(i.codigo) >= 30
+      )
       .sort((a, b) => b._valorStock - a._valorStock)
       .slice(0, 50);
 
@@ -376,7 +428,7 @@ export default function KronosTab({ calc, transitoMap }) {
       .slice(0, 50);
 
     return { estrellasEnRiesgo, muertos, liquidar, prioridad };
-  }, [proyecciones, consumoHistorico]);
+  }, [proyecciones, consumoHistorico, diasDesdeUltimaCompra]);
 
   // ── Vista por proveedor (igual que antes) ──────────────────────────────────
   const grupos = useMemo(() => {

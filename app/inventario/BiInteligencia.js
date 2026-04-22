@@ -62,6 +62,43 @@ function Badge({ text, color }) {
 function cobColor(m) { const v = Number(m) || 0; return v > 12 ? RED : v >= 6 ? ORANGE : GOLD }
 function tendColor(t) { return t === 'bajando' ? RED : t === 'subiendo' ? GREEN : '#888' }
 
+// Umbral de días en inventario antes de clasificar un producto como problema
+// (muerto / sobrestock / liquidar). Productos con menos de N días desde la
+// última entrada de stock se consideran "nuevos" y quedan fuera de alertas.
+const DIAS_MIN_INVENTARIO = 30
+
+// Aplica el filtro de 30 días contra el mapa de últimas compras. Devuelve
+// true si el producto ya lleva suficiente tiempo en inventario como para
+// ser evaluado (o si no hay registro de compra → se asume viejo).
+function yaEvaluable(codigo, ultimaCompraMap) {
+  const cod = (codigo || '').toString().trim()
+  const f = ultimaCompraMap[cod]
+  if (!f) return true
+  const dias = Math.floor((Date.now() - new Date(f).getTime()) / 86400000)
+  return dias >= DIAS_MIN_INVENTARIO
+}
+
+async function cargarUltimasCompras() {
+  let offset = 0
+  const BATCH = 1000
+  const map = {}
+  while (true) {
+    const { data, error } = await supabase
+      .from('neo_items_comprados')
+      .select('codigo_interno,fecha')
+      .range(offset, offset + BATCH - 1)
+    if (error || !data || !data.length) break
+    data.forEach(r => {
+      const cod = (r.codigo_interno || '').toString().trim()
+      if (!cod || !r.fecha) return
+      if (!map[cod] || r.fecha > map[cod]) map[cod] = r.fecha
+    })
+    if (data.length < BATCH) break
+    offset += BATCH
+  }
+  return map
+}
+
 export default function BiInteligencia() {
   const [activeTab, setActiveTab] = useState('muertos')
   const [loading, setLoading] = useState(true)
@@ -74,19 +111,36 @@ export default function BiInteligencia() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [d, o, l, r, t] = await Promise.allSettled([
-        supabase.rpc('bi_dead_stock'),
-        supabase.rpc('bi_overstock_alerts'),
-        supabase.rpc('bi_liquidar_candidates'),
-        supabase.rpc('bi_reforzar_candidates'),
-        supabase.rpc('bi_trend_analysis'),
-      ]).then(results => results.map(res => res.status === 'fulfilled' ? res.value : { data: [], error: res.reason }))
-      console.log('BI Inteligencia RPCs:', { dead: d.data?.length, dead_err: d.error, over: o.data?.length, liq: l.data?.length, ref: r.data?.length, trends: t.data?.length, trends_err: t.error })
-      setDeadStock(Array.isArray(d.data) ? d.data : [])
-      setOverstock(Array.isArray(o.data) ? o.data : [])
-      setLiquidar(Array.isArray(l.data) ? l.data : [])
-      setReforzar(Array.isArray(r.data) ? r.data : [])
-      setTrends(Array.isArray(t.data) ? t.data : [])
+      const [rpcs, ultimaCompraMap] = await Promise.all([
+        Promise.allSettled([
+          supabase.rpc('bi_dead_stock'),
+          supabase.rpc('bi_overstock_alerts'),
+          supabase.rpc('bi_liquidar_candidates'),
+          supabase.rpc('bi_reforzar_candidates'),
+          supabase.rpc('bi_trend_analysis'),
+        ]).then(results => results.map(res => res.status === 'fulfilled' ? res.value : { data: [], error: res.reason })),
+        cargarUltimasCompras(),
+      ])
+      const [d, o, l, r, t] = rpcs
+      const dead = Array.isArray(d.data) ? d.data : []
+      const over = Array.isArray(o.data) ? o.data : []
+      const liq  = Array.isArray(l.data) ? l.data : []
+      const ref  = Array.isArray(r.data) ? r.data : []
+      const trd  = Array.isArray(t.data) ? t.data : []
+      const deadFilt = dead.filter(row => yaEvaluable(row.codigo, ultimaCompraMap))
+      const overFilt = over.filter(row => yaEvaluable(row.codigo, ultimaCompraMap))
+      const liqFilt  = liq.filter(row => yaEvaluable(row.codigo, ultimaCompraMap))
+      console.log('BI Inteligencia RPCs:', {
+        dead: dead.length, dead_filtrado: deadFilt.length, dead_err: d.error,
+        over: over.length, over_filtrado: overFilt.length,
+        liq: liq.length, liq_filtrado: liqFilt.length,
+        ref: ref.length, trends: trd.length, trends_err: t.error,
+      })
+      setDeadStock(deadFilt)
+      setOverstock(overFilt)
+      setLiquidar(liqFilt)
+      setReforzar(ref)
+      setTrends(trd)
       setLoading(false)
     }
     load()

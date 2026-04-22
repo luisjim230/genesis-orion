@@ -2,10 +2,13 @@
 /**
  * health_check.mjs — Monitoreo automático del sistema SOL.
  *
- * Corre cada 2h vía GitHub Actions. Verifica:
- *   1. sync_status: última sincronización <6h para ítems críticos
+ * Corre 2×/día (8am y 4pm CR) vía GitHub Actions. Verifica:
+ *   1. sync_status: última sincronización <30h para ítems críticos
  *   2. /api/procesar-match responde OK (env vars OK, RLS OK, upserts OK)
  *   3. neo_items_comprados tiene datos recientes
+ *   4. neo_items_facturados tiene ventas de los últimos días (detecta
+ *      mismatch tipo "última venta dic-2025" cuando en realidad hubo ventas
+ *      más recientes pero no se sincronizaron)
  *
  * Si algo falla → manda mensaje a Telegram (@SOL_DJ_BOT).
  *
@@ -26,8 +29,11 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !TELEGRAM_BOT_TOKEN || !TELEGRAM_C
   process.exit(1);
 }
 
-const HORAS_SYNC_CRITICO = 6;
-const REPORTES_CRITICOS = ['items_comprados', 'minimos_maximos'];
+// Umbrales relajados: con 2 corridas/día alcanza con ventana de 30h para
+// detectar sync caídos sin generar falsos positivos si hay un delay menor.
+const HORAS_SYNC_CRITICO = 30;
+const DIAS_MAX_SIN_VENTAS = 4; // si hace 4+ días sin ventas cargadas, algo pasa
+const REPORTES_CRITICOS = ['items_comprados', 'items_facturados', 'minimos_maximos'];
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -120,6 +126,36 @@ try {
   }
 } catch (e) {
   alertas.push(`🔴 Error consultando <code>neo_items_comprados</code>: ${e.message}`);
+}
+
+// 4. Frescura de ventas NEO — detecta el bug tipo "última venta dic-2025"
+// Si la venta más reciente en la tabla tiene más de DIAS_MAX_SIN_VENTAS días,
+// el sync de ítems facturados se está rompiendo y las fechas "última venta"
+// de la UI van a quedar desactualizadas.
+try {
+  const rows = await supaGet(
+    'neo_items_facturados?select=fecha&order=fecha.desc&limit=1',
+  );
+  if (!rows.length) {
+    alertas.push('🔴 <b>neo_items_facturados</b> está vacía — la UI no va a poder mostrar últimas ventas');
+  } else {
+    const fechaRaw = rows[0].fecha;
+    const fechaMax = new Date(fechaRaw);
+    if (isNaN(fechaMax.getTime())) {
+      alertas.push(`⚠️ Fecha ilegible en <b>neo_items_facturados</b>: <code>${fechaRaw}</code>`);
+    } else {
+      const diasSinVentas = Math.floor((Date.now() - fechaMax.getTime()) / 86400000);
+      if (diasSinVentas > DIAS_MAX_SIN_VENTAS) {
+        alertas.push(
+          `🔴 La venta más reciente en <b>neo_items_facturados</b> es del <b>${fechaRaw}</b> (${diasSinVentas} días atrás).\n` +
+          `💡 El downloader <code>neo_items_facturados_downloader.py</code> no está trayendo ventas recientes. ` +
+          `Revisá el LaunchAgent en la Mac o corré <code>python3 scripts/neo_items_facturados_downloader.py</code> manualmente.`,
+        );
+      }
+    }
+  }
+} catch (e) {
+  alertas.push(`🔴 Error consultando <code>neo_items_facturados</code>: ${e.message}`);
 }
 
 // Resultado

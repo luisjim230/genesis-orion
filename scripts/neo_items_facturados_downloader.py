@@ -3,7 +3,12 @@ neo_items_facturados_downloader.py — Descarga "Lista de ítems facturados" de 
 y sube a Supabase (tabla neo_items_facturados).
 Selectores obtenidos con Playwright Codegen el 2026-03-29.
 
-Rango de fechas: 1° del mes actual hasta hoy (dinámico).
+Rango de fechas: últimos 180 días hasta hoy (dinámico). El rango amplio es
+necesario porque la UI muestra "última venta" por producto: si solo bajamos
+el mes actual, una venta de marzo nunca actualiza la fecha hasta que la venta
+de abril aparezca, y productos con rotación baja quedan con fechas viejas.
+El upsert por (factura, codigo_interno, bodega) hace que reimportar rango
+amplio sea idempotente.
 
 Cómo correr manualmente:
   cd ~/Documents/GitHub/genesis-orion/scripts
@@ -15,7 +20,7 @@ Horario automático: definir en LaunchAgent (por configurar).
 import os, sys, asyncio, logging, json, urllib.request, urllib.error
 import unicodedata
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
@@ -55,10 +60,13 @@ log = logging.getLogger(__name__)
 
 # ─── FECHAS ───────────────────────────────────────────────────────────────────
 
+DIAS_HISTORIAL = int(os.getenv("NEO_FACTURADOS_DIAS", "180"))
+
+
 def rango_fechas():
-    """Retorna (inicio, fin) en formato DDMMYYYY: 1° del mes actual hasta hoy."""
+    """Retorna (inicio, fin) en formato DDMMYYYY: últimos DIAS_HISTORIAL hasta hoy."""
     hoy = date.today()
-    inicio = hoy.replace(day=1)
+    inicio = hoy - timedelta(days=DIAS_HISTORIAL)
     return inicio.strftime("%d%m%Y"), hoy.strftime("%d%m%Y")
 
 
