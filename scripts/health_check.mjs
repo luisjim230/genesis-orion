@@ -10,6 +10,9 @@
  *      (detecta mismatch tipo "última venta dic-2025" cuando en realidad
  *      hubo ventas más recientes pero el reporte Lista de ítems no se
  *      sincronizó o NEO no refrescó las fechas resumen)
+ *   5. cola_neo_uploads: sin filas stuck en error (3+ intentos) ni
+ *      pendientes viejas (>3h sin procesar) — detecta que las OC de SOL
+ *      llegan y el daemon com.sol.sync-daemon las sube a NEO.
  *
  * Si algo falla → manda mensaje a Telegram (@SOL_DJ_BOT).
  *
@@ -162,6 +165,41 @@ try {
   }
 } catch (e) {
   alertas.push(`🔴 Error consultando <code>neo_lista_items</code>: ${e.message}`);
+}
+
+// 5. Pipeline de OC: SOL → cola_neo_uploads → NEO
+// Cubre dos fallas: (a) OCs stuck en error con 3+ intentos (daemon no
+// las puede reintentar) y (b) OCs pendientes viejas (daemon no está
+// consumiendo la cola).
+try {
+  const stuckError = await supaGet(
+    'cola_neo_uploads?select=id,numero_sol,detalle,intentos&estado=eq.error&intentos=gte.3&limit=5',
+  );
+  if (stuckError.length > 0) {
+    const detalle = stuckError
+      .map(r => `<code>${r.numero_sol || r.id}</code>${r.detalle ? ' — ' + r.detalle.slice(0, 80) : ''}`)
+      .join('\n   ');
+    alertas.push(
+      `🔴 <b>${stuckError.length}</b> OC stuck en <code>cola_neo_uploads</code> con 3+ intentos fallidos:\n   ${detalle}\n` +
+      `💡 Revisá el log del uploader en la Mac: <code>tail -100 ~/Documents/neo-sync/oc-uploader.log</code>`,
+    );
+  }
+
+  const hace3h = new Date(Date.now() - 3 * 3600_000).toISOString();
+  const stuckPend = await supaGet(
+    `cola_neo_uploads?select=id,numero_sol,created_at&estado=eq.pendiente&created_at=lt.${hace3h}&limit=5`,
+  );
+  if (stuckPend.length > 0) {
+    const detalle = stuckPend
+      .map(r => `<code>${r.numero_sol || r.id}</code> (${r.created_at})`)
+      .join('\n   ');
+    alertas.push(
+      `🔴 <b>${stuckPend.length}</b> OC pendientes sin procesar hace >3h:\n   ${detalle}\n` +
+      `💡 El daemon <code>com.sol.sync-daemon</code> no está corriendo. En la Mac: <code>launchctl list | grep com.sol.sync-daemon</code>`,
+    );
+  }
+} catch (e) {
+  alertas.push(`🔴 Error consultando <code>cola_neo_uploads</code>: ${e.message}`);
 }
 
 // Resultado
