@@ -46,7 +46,7 @@ export async function POST(request) {
     // Enriquecer items con precios de neo_minimos_maximos si vienen en 0
     const codigos = items.filter(i => !i.costo_unitario).map(i => String(i.codigo))
     if (codigos.length > 0) {
-      const { data: precios } = await supabase
+      const { data: precios } = await getDb()
         .from('neo_minimos_maximos')
         .select('codigo, ultimo_costo')
         .in('codigo', codigos)
