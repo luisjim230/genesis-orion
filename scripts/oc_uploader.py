@@ -106,6 +106,13 @@ def get_token(url):
     m = re.search(r'\(S\([^)]+\)\)', url)
     return m.group(0) if m else ""
 
+def get_neo_base(url):
+    # NEO balancea entre neo1..neo7. El token de sesión solo vale en el
+    # host donde NEO nos dejó después del login; si cambiamos a neo1
+    # hardcodeado, NEO rompe con NullReferenceException en FilterCombo.
+    m = re.match(r'(https?://neo\d*\.neotecnologias\.com)', url)
+    return m.group(1) if m else "https://neo1.neotecnologias.com"
+
 async def set_input(page, fid, val):
     el = page.locator(f"#{fid}")
     await el.wait_for(state="visible", timeout=10000)
@@ -174,8 +181,8 @@ async def verificar_empresa(page):
 async def navegar_nueva_oc(page):
     """Navega a Proveeduría → Órdenes de compra → Nueva."""
     tok = get_token(page.url)
-    # URL del listado de OCs (IdOpcion 105019 es Órdenes de compra en Proveeduría)
-    url_oc = f"{NEO_URL.replace('neo.', 'neo1.')}{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
+    base = get_neo_base(page.url)
+    url_oc = f"{base}/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
     log.info(f"Navegando a OC: {url_oc}")
     await page.goto(url_oc)
     await page.wait_for_load_state("networkidle")
@@ -340,7 +347,8 @@ async def registrar_oc(page, numero_sol=None):
     try:
         # Navegar al listado de OCs
         tok = get_token(page.url)
-        url_lista = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
+        base = get_neo_base(page.url)
+        url_lista = f"{base}/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
         await page.goto(url_lista)
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(3000)
