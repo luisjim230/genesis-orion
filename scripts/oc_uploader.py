@@ -494,25 +494,20 @@ async def procesar_oc(page, registro):
 async def main():
     import fcntl
     lock_path = BASE / "oc-uploader.lock"
-    lock_file = open(lock_path, 'w')
+    # 'a+' no trunca — permite leer el PID de la instancia que tiene el lock
+    lock_file = open(lock_path, 'a+')
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        lock_file.write(str(os.getpid()))
-        lock_file.flush()
-    except IOError:
-        try:
-            with open(lock_path, 'r') as lf:
-                pid = int(lf.read().strip())
-            os.kill(pid, 0)
-            log.info(f"Ya hay una instancia corriendo (PID {pid}) — saliendo.")
-            return
-        except (ProcessLookupError, ValueError, FileNotFoundError, OSError):
-            log.info("Lock de proceso muerto — limpiando y continuando.")
-            lock_path.unlink(missing_ok=True)
-            lock_file = open(lock_path, 'w')
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock_file.write(str(os.getpid()))
-            lock_file.flush()
+    except (IOError, BlockingIOError):
+        lock_file.seek(0)
+        pid_str = lock_file.read().strip()
+        log.info(f"Ya hay otra instancia corriendo (PID {pid_str or '?'}) — saliendo.")
+        return
+    # Lock adquirido — escribimos nuestro PID
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
 
     pendientes = obtener_pendientes()
     if not pendientes:
