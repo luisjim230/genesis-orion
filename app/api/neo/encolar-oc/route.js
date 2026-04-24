@@ -40,8 +40,11 @@ async function buildXlsxBuffer(items) {
 export async function POST(request) {
   try {
     let { proveedor, items, creadoPor } = await request.json()
-    if (!proveedor || !items?.length) {
-      return Response.json({ error: 'Faltan proveedor o items' }, { status: 400 })
+    if (!proveedor || !String(proveedor).trim() || String(proveedor).trim().toLowerCase() === 'sin nombre') {
+      return Response.json({ error: 'Proveedor requerido' }, { status: 400 })
+    }
+    if (!items?.length) {
+      return Response.json({ error: 'Faltan items' }, { status: 400 })
     }
     // Enriquecer items con precios de neo_minimos_maximos si vienen en 0
     const codigos = items.filter(i => !i.costo_unitario).map(i => String(i.codigo))
