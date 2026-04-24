@@ -457,7 +457,15 @@ async def procesar_oc(page, registro):
 
     # 3. Seleccionar proveedor
     try:
-        await buscar_y_seleccionar_proveedor(page, proveedor)
+        prov_ok = await buscar_y_seleccionar_proveedor(page, proveedor)
+        if not prov_ok:
+            # No subir el Excel si NEO no aceptó el proveedor — si no,
+            # NEO lo cuelga del último proveedor que tuvo en memoria
+            # (p.ej. "Acuña y Hernández") y queda contaminando OCs.
+            log.error(f"Proveedor '{proveedor}' no seleccionado en NEO — abortando OC sin subir Excel")
+            marcar_procesado(oc_id, False, f"Proveedor no encontrado en NEO: {proveedor}")
+            os.unlink(tmp_path)
+            return False
     except Exception as e:
         log.error(f"Error buscando proveedor: {e}")
         marcar_procesado(oc_id, False, f"Error proveedor: {e}")
