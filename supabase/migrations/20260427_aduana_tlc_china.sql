@@ -29,13 +29,15 @@ CREATE INDEX IF NOT EXISTS idx_tlc_categoria ON tlc_china_partidas(categoria_des
 CREATE INDEX IF NOT EXISTS idx_tlc_descripcion_search
   ON tlc_china_partidas USING gin(to_tsvector('spanish', descripcion));
 
--- RLS abierto a usuarios autenticados (solo lectura para todos los roles)
+-- RLS: lectura pública (datos del TLC son públicos, ya publicados por COMEX).
+-- El cliente de Supabase del browser usa `persistSession: false`, así que las
+-- queries van como `anon`, no como `authenticated`.
 ALTER TABLE tlc_china_partidas ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tlc_partidas_select ON tlc_china_partidas;
 CREATE POLICY tlc_partidas_select
   ON tlc_china_partidas FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (true);
 
 -- Solo service_role puede insertar/actualizar (lo hace el script de seed)
 DROP POLICY IF EXISTS tlc_partidas_admin ON tlc_china_partidas;
