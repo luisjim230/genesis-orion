@@ -422,7 +422,7 @@ function TabFlujo({ tcC }) {
           let all = [], off = 0;
           while (true) {
             const { data } = await sb.from('fin_cuentas_pagar')
-              .select('saldo_actual,sin_vencer,dias_1_30,dias_31_60')
+              .select('saldo_actual,moneda,fecha_vencimiento,sin_vencer,dias_1_30,dias_31_60')
               .eq('fecha_carga', fd2[0].fecha_carga).range(off, off + 999);
             if (!data?.length) break;
             all = [...all, ...data];
@@ -522,6 +522,9 @@ function TabFlujo({ tcC }) {
   const promedioMensual = promedioMensualReal * 0.70; // escenario pesimista -30%
   const ventaW = promedioMensual / 4;
 
+  // ── TC para conversión USD→CRC: BCCR del día, con fallback a TC_IMP ──────
+  const tcImp = (Number.isFinite(tcC) && tcC > 0) ? tcC : TC_IMP;
+
   // ── Pagos de importaciones por semana ────────────────────────────────────
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const envisConFecha = envios.map(e => {
@@ -531,7 +534,7 @@ function TabFlujo({ tcC }) {
     const diffDays = Math.floor((fechaPago - today) / (1000 * 60 * 60 * 24));
     const weekIdx  = Math.floor(diffDays / 7);
     const montoUSD = N(e.final_monto);
-    const montoCRC = montoUSD * TC_IMP;
+    const montoCRC = montoUSD * tcImp;
     return { ...e, eta, fechaPago, diffDays, weekIdx, montoUSD, montoCRC };
   });
   const pagosImpSem = Array(8).fill(0);
@@ -541,18 +544,45 @@ function TabFlujo({ tcC }) {
   const totalImpUSD = envisConFecha.reduce((s, e) => s + e.montoUSD, 0);
   const totalImpCRC = envisConFecha.reduce((s, e) => s + e.montoCRC, 0);
 
-  // ── Distribución semanal ─────────────────────────────────────────────────
+  // ── Pagos CxP por semana — basado en fecha_vencimiento real ──────────────
+  // Cada factura cae en la semana de su fecha de vencimiento.
+  // Vencidas (diffDays < 0) → S1 (hay que pagarlas ya).
+  // Más allá de 8 semanas → fuera del horizonte (no se incluye).
+  // USD se convierte con tcImp (BCCR).
+  const pagosSem = Array(8).fill(0);
+  const sinFecha = { sin_vencer: 0, dias_1_30: 0, dias_31_60: 0 };
+  pagar.forEach(r => {
+    const saldo = N(r.saldo_actual);
+    const enCRC = r.moneda === 'USD' ? saldo * tcImp : saldo;
+    if (r.fecha_vencimiento) {
+      const fv = new Date(r.fecha_vencimiento);
+      const diffDays = Math.floor((fv - today) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        pagosSem[0] += enCRC;
+      } else if (diffDays < 56) {
+        pagosSem[Math.floor(diffDays / 7)] += enCRC;
+      }
+    } else {
+      sinFecha.sin_vencer += N(r.sin_vencer);
+      sinFecha.dias_1_30  += N(r.dias_1_30);
+      sinFecha.dias_31_60 += N(r.dias_31_60);
+    }
+  });
+  // Fallback para registros sin fecha_vencimiento: distribución por buckets
+  const fbSV = sinFecha.sin_vencer / 2;
+  const fb130 = sinFecha.dias_1_30 / 4;
+  const fb3160 = sinFecha.dias_31_60 / 2;
+  [fbSV, fbSV, fb130, fb130, fb130, fb130, fb3160, fb3160]
+    .forEach((v, i) => { pagosSem[i] += v; });
+
+  // ── Cobros CxC por semana (mantengo distribución por buckets) ────────────
   // sin_vencer → sem 1-2 · dias_1_30 → sem 3-6 · dias_31_60 → sem 7-8
   const cSV   = cobrar.reduce((s, r) => s + N(r.sin_vencer), 0);
   const c130  = cobrar.reduce((s, r) => s + N(r.dias_1_30), 0);
   const c3160 = cobrar.reduce((s, r) => s + N(r.dias_31_60), 0);
-  const pSV   = pagar.reduce((s, r) => s + N(r.sin_vencer), 0);
-  const p130  = pagar.reduce((s, r) => s + N(r.dias_1_30), 0);
-  const p3160 = pagar.reduce((s, r) => s + N(r.dias_31_60), 0);
   const gastoW = gastos.reduce((s, g) => s + g.semanal, 0);
 
   const cobrosSem = [cSV/2, cSV/2, c130/4, c130/4, c130/4, c130/4, c3160/2, c3160/2];
-  const pagosSem  = [pSV/2, pSV/2, p130/4, p130/4, p130/4, p130/4, p3160/2, p3160/2];
 
   const semanas = (() => {
     const arr = []; let sAcum = saldoCRC;
@@ -812,7 +842,10 @@ function TabFlujo({ tcC }) {
       ) : (
         <div style={{ background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'12px', padding:'16px', marginBottom:'16px' }}>
           <div style={{ fontSize:'0.82rem', color:'var(--text-muted)', marginBottom:'10px' }}>
-            TC importaciones: <strong style={{ color:'var(--text-primary)' }}>₡{TC_IMP}/USD</strong> ·{' '}
+            TC importaciones: <strong style={{ color:'var(--text-primary)' }}>₡{tcImp.toFixed(2)}/USD</strong>
+            {' '}<span style={{ color: tcC ? '#276749' : '#B7791F', fontSize:'0.76rem' }}>
+              ({tcC ? 'BCCR del día' : 'fallback ₡515 — BCCR no disponible'})
+            </span> ·{' '}
             Fecha pago estimada = ETA − 25 días ·{' '}
             {envisConFecha.filter(e => e.weekIdx >= 0 && e.weekIdx < 8).length > 0 && (
               <span style={{ color:'#C53030', fontWeight:600 }}>
@@ -830,7 +863,7 @@ function TabFlujo({ tcC }) {
                   <th style={S.th}>ETA</th>
                   <th style={S.th}>Fecha pago est.</th>
                   <th style={{ ...S.th, textAlign:'right' }}>USD</th>
-                  <th style={{ ...S.th, textAlign:'right' }}>CRC (₡{TC_IMP}/USD)</th>
+                  <th style={{ ...S.th, textAlign:'right' }}>CRC (₡{tcImp.toFixed(2)}/USD)</th>
                   <th style={S.th}>Estado</th>
                 </tr>
               </thead>
