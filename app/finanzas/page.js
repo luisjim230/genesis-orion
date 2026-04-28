@@ -381,6 +381,18 @@ function TabCobrar({ tcC }) {
 // ── Tab: Flujo de Caja ─────────────────────────────────────────────────────
 const TC_IMP = 515; // ₡ por USD para pagos de importaciones (ajustable)
 
+// Clasificador de gastos recurrentes por categoría — define cuándo cae el pago.
+// Mismas reglas que finanzas/movimientos/page.jsx para mantener consistencia.
+function categoriaGasto(cuenta) {
+  if (!cuenta) return 'Otros';
+  const code = cuenta.split(' ')[0].trim();
+  const desc = cuenta.toLowerCase();
+  if (code.startsWith('70-80')) return 'Depreciación'; // no es cash → excluir
+  if (code.startsWith('70-30-18') || desc.includes('alquiler')) return 'Alquileres';
+  if (['sueld','ccss','aguinaldo','vacacion','cesant','planilla','salario'].some(k => desc.includes(k))) return 'Nómina';
+  return 'Otros';
+}
+
 function TabFlujo({ tcC }) {
   const [bancos,     setBancos]    = useState([]);
   const [cobrar,     setCobrar]    = useState([]);
@@ -580,17 +592,60 @@ function TabFlujo({ tcC }) {
   const cSV   = cobrar.reduce((s, r) => s + N(r.sin_vencer), 0);
   const c130  = cobrar.reduce((s, r) => s + N(r.dias_1_30), 0);
   const c3160 = cobrar.reduce((s, r) => s + N(r.dias_31_60), 0);
-  const gastoW = gastos.reduce((s, g) => s + g.semanal, 0);
-
   const cobrosSem = [cSV/2, cSV/2, c130/4, c130/4, c130/4, c130/4, c3160/2, c3160/2];
+
+  // ── Gastos recurrentes por semana — calendario real por categoría ────────
+  // Nómina:      50% día 15 + 50% último día del mes (quincenal CR).
+  // Alquileres:  100% el día 1 de cada mes.
+  // Depreciación: excluida (es asiento contable, no flujo de caja real).
+  // Otros:       distribuidos uniformemente (servicios, operativo, etc.).
+  const totMensualPorCat = { 'Nómina': 0, 'Alquileres': 0, 'Otros': 0 };
+  gastos.forEach(g => {
+    const cat = categoriaGasto(g.cuenta);
+    if (cat === 'Depreciación') return;
+    totMensualPorCat[cat] = (totMensualPorCat[cat] || 0) + g.mensual;
+  });
+
+  const gastosSem = Array(8).fill(0);
+  const addEvento = (fecha, monto) => {
+    const dd = Math.floor((fecha - today) / 86400000);
+    if (dd >= 0 && dd < 56) gastosSem[Math.floor(dd / 7)] += monto;
+  };
+  const meses = new Set();
+  for (let d = 0; d < 56; d++) {
+    const x = new Date(today); x.setDate(x.getDate() + d);
+    meses.add(`${x.getFullYear()}-${x.getMonth()}`);
+  }
+
+  Object.entries(totMensualPorCat).forEach(([cat, mensual]) => {
+    if (mensual <= 0) return;
+    if (cat === 'Nómina') {
+      meses.forEach(ym => {
+        const [y, m] = ym.split('-').map(Number);
+        addEvento(new Date(y, m, 15),    mensual / 2);
+        addEvento(new Date(y, m + 1, 0), mensual / 2); // último día del mes
+      });
+    } else if (cat === 'Alquileres') {
+      meses.forEach(ym => {
+        const [y, m] = ym.split('-').map(Number);
+        addEvento(new Date(y, m, 1), mensual);
+      });
+    } else {
+      // Otros: 1/4 del mensual en cada semana del horizonte
+      for (let i = 0; i < 8; i++) gastosSem[i] += mensual / 4;
+    }
+  });
+
+  const gastoMensualTotal = Object.values(totMensualPorCat).reduce((s, v) => s + v, 0);
+  const gastoW = gastoMensualTotal / 4; // promedio referencial para footer
 
   const semanas = (() => {
     const arr = []; let sAcum = saldoCRC;
     for (let i = 0; i < 8; i++) {
       const d = new Date(); d.setDate(d.getDate() + i * 7);
       const sInicial = sAcum;
-      sAcum = sAcum + cobrosSem[i] + ventaW - pagosSem[i] - gastoW - pagosImpSem[i];
-      arr.push({ label: `S${i+1} ${d.getDate()}/${d.getMonth()+1}`, sInicial, cobro: cobrosSem[i], ventaProy: ventaW, pago: pagosSem[i], gasto: gastoW, pagoImp: pagosImpSem[i], sFinal: sAcum });
+      sAcum = sAcum + cobrosSem[i] + ventaW - pagosSem[i] - gastosSem[i] - pagosImpSem[i];
+      arr.push({ label: `S${i+1} ${d.getDate()}/${d.getMonth()+1}`, sInicial, cobro: cobrosSem[i], ventaProy: ventaW, pago: pagosSem[i], gasto: gastosSem[i], pagoImp: pagosImpSem[i], sFinal: sAcum });
     }
     return arr;
   })();
@@ -606,7 +661,7 @@ function TabFlujo({ tcC }) {
 
   const CW = 800, CH = 310, padL = 74, padR = 16, padT = 42, padB = 46;
   const pW = CW - padL - padR, pH = CH - padT - padB;
-  const allBars = [...cobrosSem.map(c => c + ventaW), ...pagosSem.map((p, i) => p + gastoW + pagosImpSem[i])];
+  const allBars = [...cobrosSem.map(c => c + ventaW), ...pagosSem.map((p, i) => p + gastosSem[i] + pagosImpSem[i])];
   const rawMax  = Math.max(...allBars, saldoCRC, 1);
   const rawMin  = Math.min(...semanas.map(s => s.sFinal), 0);
   const yMax    = rawMax * 1.18;
@@ -810,6 +865,10 @@ function TabFlujo({ tcC }) {
         <div style={{ ...S.info, marginBottom:'16px' }}>📭 Sin datos de movimientos contables para estimar gastos.</div>
       ) : (
         <div style={{ background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'12px', padding:'16px', marginBottom:'16px' }}>
+          <div style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginBottom:'12px', padding:'8px 10px', background:'#FFFBEB', border:'1px solid #FAD776', borderRadius:'6px' }}>
+            📅 <strong>Calendario aplicado en la proyección:</strong> Nómina cae 50% el 15 y 50% el último día del mes ·
+            Alquileres el día 1 · Depreciación excluida (no es flujo real) · Otros distribuidos uniformemente.
+          </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:'6px' }}>
             {gastos.map((g, i) => (
               <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 12px', background:i%2===0?'var(--cream)':'#fff', borderRadius:'6px', border:'1px solid var(--border-soft)' }}>
