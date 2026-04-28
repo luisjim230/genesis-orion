@@ -7,8 +7,12 @@ async function ga4(metric_type, date_range, traffic_filter = 'external') {
   const r = await fetch(`/api/metricas-web/ga4?${params}`);
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error || 'error GA4');
-  // Adjuntamos el flag de fallback al objeto data para que la UI pueda avisar.
-  return { ...j.data, _filter_fallback: j.filter_fallback };
+  // Adjuntamos el flag SIN spread (que rompía arrays).
+  // Para arrays funciona porque podés colgar propiedades sin afectar .map().
+  if (j.data && typeof j.data === 'object') {
+    j.data._filter_fallback = !!j.filter_fallback;
+  }
+  return j.data;
 }
 
 function MetricCard({ label, value, pct, hint, color = GOLD }) {
