@@ -7,7 +7,8 @@ async function ga4(metric_type, date_range, traffic_filter = 'external') {
   const r = await fetch(`/api/metricas-web/ga4?${params}`);
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error || 'error GA4');
-  return j.data;
+  // Adjuntamos el flag de fallback al objeto data para que la UI pueda avisar.
+  return { ...j.data, _filter_fallback: j.filter_fallback };
 }
 
 function MetricCard({ label, value, pct, hint, color = GOLD }) {
@@ -27,24 +28,20 @@ function MetricCard({ label, value, pct, hint, color = GOLD }) {
 }
 
 function LiveSection({ dateRange }) {
-  const [external, setExternal] = useState(null);
-  const [internal, setInternal] = useState(null);
+  // GA4 Realtime API NO soporta filtro por dimensión custom traffic_type.
+  // Por eso solo mostramos el total (interno + externo combinados).
+  const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [ex, inn] = await Promise.all([
-        ga4('active_users_realtime', dateRange, 'external').catch(e => ({ _error: e.message })),
-        ga4('active_users_realtime', dateRange, 'internal').catch(e => ({ _error: e.message })),
-      ]);
-      if (ex?._error) setError(ex._error); else setExternal(ex);
-      if (inn?._error) {/* no es bloqueante */} else setInternal(inn);
+      const d = await ga4('active_users_realtime', dateRange, 'all');
+      setData(d);
     } catch (e) { setError(e.message); }
   }, [dateRange]);
 
   useEffect(() => {
     let cancelled = false;
-    // Disparo inicial vía microtask para que el setState quede fuera del cuerpo del effect.
     Promise.resolve().then(() => { if (!cancelled) refresh(); });
     const id = setInterval(() => { if (!cancelled) refresh(); }, 30000);
     return () => { cancelled = true; clearInterval(id); };
@@ -53,29 +50,20 @@ function LiveSection({ dateRange }) {
   return (
     <div style={S.card}>
       <div style={S.sectionTitle}>🟢 En vivo</div>
-      <div style={S.sectionCap}>Auto-refresh cada 30 segundos.</div>
+      <div style={S.sectionCap}>Auto-refresh cada 30 segundos · Total combinado (GA4 no permite separar interno/externo en tiempo real).</div>
       {error && <div style={{ background: 'rgba(192,64,64,0.1)', border: '1px solid rgba(192,64,64,0.3)', color: RED, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontSize: '0.85rem' }}>⚠️ {error}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
-        <div style={{ ...S.cardInner, background: 'rgba(46,125,79,0.06)', border: '1px solid rgba(46,125,79,0.25)' }}>
-          <div style={{ fontSize: '0.85rem', color: GREEN, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Usuarios activos ahora</div>
-          <div style={{ fontSize: '3.4rem', fontWeight: 900, color: GREEN, lineHeight: 1.1, marginTop: 4 }}>
-            {external ? fmtInt(external.active_users) : '...'}
-          </div>
-          <div style={{ fontSize: '0.82rem', color: 'rgba(0,0,0,0.5)', marginTop: 4 }}>solo visitantes externos (clientes)</div>
+      <div style={{ ...S.cardInner, background: 'rgba(46,125,79,0.06)', border: '1px solid rgba(46,125,79,0.25)' }}>
+        <div style={{ fontSize: '0.85rem', color: GREEN, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Usuarios activos ahora</div>
+        <div style={{ fontSize: '3.4rem', fontWeight: 900, color: GREEN, lineHeight: 1.1, marginTop: 4 }}>
+          {data ? fmtInt(data.active_users) : '...'}
         </div>
-        <div style={{ ...S.cardInner, background: 'rgba(0,0,0,0.04)' }}>
-          <div style={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Equipo activo</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'rgba(0,0,0,0.65)', marginTop: 4 }}>
-            {internal ? fmtInt(internal.active_users) : '...'}
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.4)', marginTop: 2 }}>miembros internos navegando</div>
-        </div>
+        <div style={{ fontSize: '0.82rem', color: 'rgba(0,0,0,0.5)', marginTop: 4 }}>incluye visitantes externos (clientes) y miembros del equipo</div>
       </div>
-      {external?.last_pages?.length > 0 && (
+      {data?.last_pages?.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 8 }}>Últimas páginas vistas</div>
+          <div style={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 8 }}>Páginas más vistas en este momento</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {external.last_pages.map((p, i) => (
+            {data.last_pages.map((p, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '6px 10px', background: 'rgba(255,255,255,0.5)', borderRadius: 8 }}>
                 <span style={{ color: 'rgba(0,0,0,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title || '(sin título)'}</span>
                 <span style={{ color: 'rgba(0,0,0,0.45)' }}>{fmtInt(p.views)}</span>
@@ -84,6 +72,15 @@ function LiveSection({ dateRange }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FallbackBanner({ data }) {
+  if (!data?._filter_fallback) return null;
+  return (
+    <div style={{ background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.4)', color: '#7a5d10', padding: '8px 12px', borderRadius: 10, fontSize: '0.78rem', marginBottom: 10 }}>
+      ⏳ La dimensión de tráfico custom todavía está propagándose en GA4 (puede tardar hasta 24h). Mientras tanto, mostramos el total sin filtrar interno/externo.
     </div>
   );
 }
@@ -106,6 +103,7 @@ function SummarySection({ dateRange }) {
       <div style={S.sectionTitle}>📊 Resumen del período</div>
       <div style={S.sectionCap}>Tráfico externo (excluye navegación interna del equipo).</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
       {loading ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Consultando GA4...</div>
       ) : data ? (
@@ -132,6 +130,7 @@ function TopProductsSection({ dateRange }) {
       <div style={S.sectionTitle}>🏆 Top productos</div>
       <div style={S.sectionCap}>Las 10 páginas de producto más vistas en el período.</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
       {!data ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
       ) : data.length === 0 ? (
@@ -186,6 +185,7 @@ function TrafficSourcesSection({ dateRange }) {
       <div style={S.sectionTitle}>🌐 Fuentes de tráfico</div>
       <div style={S.sectionCap}>De dónde vienen tus visitantes externos.</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
       {!data ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
       ) : (
@@ -265,6 +265,7 @@ function ConversionsSection({ dateRange }) {
       <div style={S.sectionTitle}>🎯 Conversiones</div>
       <div style={S.sectionCap}>Eventos clave del embudo de compra.</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
       {!data ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
       ) : (
@@ -291,6 +292,7 @@ function CampaignsPerformanceSection({ dateRange }) {
       <div style={S.sectionTitle}>📣 Rendimiento de campañas (UTMs)</div>
       <div style={S.sectionCap}>Solo sesiones con utm_campaign definido.</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
       {!data ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
       ) : data.length === 0 ? (
