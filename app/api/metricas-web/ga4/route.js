@@ -218,17 +218,20 @@ async function fetchConversions(client, property, range, traffic) {
 async function fetchCampaigns(client, property, range, traffic) {
   const filter = buildTrafficFilter(traffic);
   const dr = parseDateRange(range);
-  const notSetFilter = {
+  // Excluye los nombres "fantasma" que GA4 auto-asigna cuando no hay UTM real:
+  // (not set), (organic), (direct), (referral). Solo nos interesan las campañas
+  // que el equipo creó explícitamente con el generador de links.
+  const realCampaignsOnly = {
     notExpression: {
       filter: {
         fieldName: 'sessionCampaignName',
-        stringFilter: { matchType: 'EXACT', value: '(not set)', caseSensitive: false },
+        stringFilter: { matchType: 'BEGINS_WITH', value: '(', caseSensitive: false },
       },
     },
   };
   const dimensionFilter = filter
-    ? { andGroup: { expressions: [filter, notSetFilter] } }
-    : notSetFilter;
+    ? { andGroup: { expressions: [filter, realCampaignsOnly] } }
+    : realCampaignsOnly;
   const [resp] = await client.runReport({
     property,
     dateRanges: [dr],

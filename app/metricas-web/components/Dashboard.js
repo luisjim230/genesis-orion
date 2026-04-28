@@ -294,7 +294,7 @@ function CampaignsPerformanceSection({ dateRange }) {
   return (
     <div style={S.card}>
       <div style={S.sectionTitle}>📣 Rendimiento de campañas (UTMs)</div>
-      <div style={S.sectionCap}>Solo sesiones con utm_campaign definido.</div>
+      <div style={S.sectionCap}>Solo campañas reales creadas con el generador. Excluye las auto-etiquetas de GA4 como (direct), (organic), (referral) y (not set).</div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
       <FallbackBanner data={data} />
       {!data ? (
