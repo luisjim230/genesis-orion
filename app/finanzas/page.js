@@ -432,17 +432,17 @@ function TabFlujo({ tcC }) {
           setPagar(all);
         }
 
-        // 4. Gastos recurrentes — últimos 3 meses, cuentas 70-XX y 90-XX
+        // 4. Gastos recurrentes — últimos 3 meses, cuentas 70-XX, 77-XX y 90-XX
         const hace3m = new Date();
         hace3m.setMonth(hace3m.getMonth() - 3);
         const fStr = hace3m.toISOString().slice(0, 10);
         let movs = [], mOff = 0;
         while (mOff < 50000) {
           const { data } = await sb.from('neo_movimientos_contables')
-            .select('cuenta_contable,debe_moneda_asiento')
+            .select('cuenta_contable,debe_contabilidad')
             .not('fecha', 'is', null)
             .gte('fecha', fStr)
-            .or('cuenta_contable.ilike.70%,cuenta_contable.ilike.90%')
+            .or('cuenta_contable.ilike.70%,cuenta_contable.ilike.77%,cuenta_contable.ilike.90%')
             .range(mOff, mOff + 999);
           if (!data?.length) break;
           movs = [...movs, ...data];
@@ -452,7 +452,7 @@ function TabFlujo({ tcC }) {
         const cMap = {};
         movs.forEach(m => {
           const cc  = (m.cuenta_contable || '').trim() || '—';
-          const amt = parseFloat(String(m.debe_moneda_asiento || '').replace(/,/g, '')) || 0;
+          const amt = parseFloat(String(m.debe_contabilidad || '').replace(/,/g, '')) || 0;
           if (amt > 0) cMap[cc] = (cMap[cc] || 0) + amt;
         });
         setGastos(
