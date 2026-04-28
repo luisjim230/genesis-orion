@@ -191,18 +191,21 @@ async function runDaily() {
     if (!process.env.GA4_PROPERTY_ID || !process.env.GA4_SERVICE_ACCOUNT_JSON) {
       return NextResponse.json({ error: 'GA4 no configurado' }, { status: 503 });
     }
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      return NextResponse.json({ error: 'TELEGRAM_BOT_TOKEN no configurado' }, { status: 503 });
-    }
 
     const summary = await buildSummary();
     const message = buildMessage(summary);
-    const result = await sendTelegram(message);
 
-    if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error, message }, { status: 502 });
+    // Si Vercel tiene TELEGRAM_BOT_TOKEN configurado, mandamos directo desde acá.
+    // Si no, simplemente devolvemos el mensaje y lo manda quien nos llama
+    // (típicamente GitHub Actions con sus propios secrets).
+    let sent = false, sendError = null;
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      const result = await sendTelegram(message);
+      sent = !!result.ok;
+      if (!result.ok) sendError = result.error;
     }
-    return NextResponse.json({ ok: true, message });
+
+    return NextResponse.json({ ok: true, message, sent, send_error: sendError });
   } catch (e) {
     return NextResponse.json({ error: e.message || String(e) }, { status: 500 });
   }
