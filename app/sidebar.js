@@ -39,9 +39,12 @@ export default function Sidebar(){
   const {perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
   const navAll=ALL_NAV.map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))})).filter(g=>g.items.length>0);
-  // Filtrar por búsqueda
-  const navVisible = search.trim()
-    ? navAll.map(g => ({ ...g, items: g.items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || g.group.toLowerCase().includes(search.toLowerCase())) })).filter(g => g.items.length > 0)
+  // Normaliza para búsqueda insensible a tildes y mayúsculas.
+  // Ej: "métricas" y "metricas" se convierten ambos a "metricas".
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const q = norm(search.trim());
+  const navVisible = q
+    ? navAll.map(g => ({ ...g, items: g.items.filter(i => norm(i.name).includes(q) || norm(g.group).includes(q)) })).filter(g => g.items.length > 0)
     : navAll;
 
   // Grupos colapsables: solo abre el grupo que contiene la página activa
