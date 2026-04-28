@@ -259,12 +259,12 @@ async function fetchCampaigns(client, property, range, traffic) {
 }
 
 async function fetchRealtime(client, property, traffic) {
-  const filter = buildTrafficFilter(traffic);
-  // Usuarios activos ahora.
+  // GA4 Realtime API NO soporta dimensiones custom como customEvent:traffic_type.
+  // Por lo tanto, ignoramos `traffic` aquí y devolvemos siempre el total.
+  // Es una limitación permanente de Google, no un bug.
   const [usersResp] = await client.runRealtimeReport({
     property,
     metrics: [{ name: 'activeUsers' }],
-    ...(filter ? { dimensionFilter: filter } : {}),
   });
   const activeUsers = Number(usersResp.rows?.[0]?.metricValues?.[0]?.value) || 0;
 
@@ -277,14 +277,13 @@ async function fetchRealtime(client, property, traffic) {
       metrics: [{ name: 'screenPageViews' }],
       orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
       limit: 5,
-      ...(filter ? { dimensionFilter: filter } : {}),
     });
     lastPages = rowsToObjects(pagesResp).map(r => ({
       title: r.unifiedScreenName,
       views: Number(r.screenPageViews) || 0,
     }));
   } catch { /* algunas propiedades no exponen unifiedScreenName */ }
-  return { active_users: activeUsers, last_pages: lastPages };
+  return { active_users: activeUsers, last_pages: lastPages, filter_unsupported: true };
 }
 
 async function fetchInternalTeamActivity(client, property, range) {
@@ -420,39 +419,42 @@ export async function GET(req) {
     // 2) Fetch real.
     const client = getGA4Client();
     const property = getPropertyResource();
-    let data;
-    switch (metric_type) {
-      case 'summary':
-        data = await fetchSummary(client, property, date_range, traffic_filter);
-        break;
-      case 'active_users_realtime':
-        data = await fetchRealtime(client, property, traffic_filter);
-        break;
-      case 'top_products':
-        data = await fetchTopProducts(client, property, date_range, traffic_filter);
-        break;
-      case 'traffic_sources':
-        data = await fetchTrafficSources(client, property, date_range, traffic_filter);
-        break;
-      case 'conversions':
-        data = await fetchConversions(client, property, date_range, traffic_filter);
-        break;
-      case 'campaigns_performance':
-        data = await fetchCampaigns(client, property, date_range, traffic_filter);
-        break;
-      case 'internal_team_activity':
-        data = await fetchInternalTeamActivity(client, property, date_range);
-        break;
-      default:
-        return NextResponse.json({ error: `metric_type desconocido: ${metric_type}` }, { status: 400 });
+    const fetchOnce = async (filter) => {
+      switch (metric_type) {
+        case 'summary':                return fetchSummary(client, property, date_range, filter);
+        case 'active_users_realtime':  return fetchRealtime(client, property, filter);
+        case 'top_products':           return fetchTopProducts(client, property, date_range, filter);
+        case 'traffic_sources':        return fetchTrafficSources(client, property, date_range, filter);
+        case 'conversions':            return fetchConversions(client, property, date_range, filter);
+        case 'campaigns_performance':  return fetchCampaigns(client, property, date_range, filter);
+        case 'internal_team_activity': return fetchInternalTeamActivity(client, property, date_range);
+        default: throw new Error(`metric_type desconocido: ${metric_type}`);
+      }
+    };
+    let data, filter_fallback = false;
+    try {
+      data = await fetchOnce(traffic_filter);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      // Si el error es porque la dimensión custom traffic_type no se reconoce
+      // (suele suceder por hasta 24h post-registro), volvemos a llamar sin filtro.
+      // Esto mantiene el dashboard funcional mientras GA4 propaga la dimensión.
+      const dimNotReady = /not a valid dimension/i.test(msg) && /traffic_type/i.test(msg);
+      if (dimNotReady && traffic_filter !== 'all') {
+        data = await fetchOnce('all');
+        filter_fallback = true;
+      } else {
+        throw e;
+      }
     }
 
-    // 3) Cachear (excepto realtime).
-    if (metric_type !== 'active_users_realtime') {
+    // 3) Cachear (excepto realtime). No cacheamos respuestas con fallback,
+    // así cuando la dimensión propague el caché no las preserva.
+    if (metric_type !== 'active_users_realtime' && !filter_fallback) {
       await writeCache(metric_type, date_range, traffic_filter, data);
     }
 
-    return NextResponse.json({ ok: true, cached: false, data });
+    return NextResponse.json({ ok: true, cached: false, filter_fallback, data });
   } catch (e) {
     return NextResponse.json({ error: e.message || String(e) }, { status: 500 });
   }
