@@ -33,6 +33,20 @@ const S = {
 const fC = (v) => { try { return '₡' + parseFloat(v).toLocaleString('es-CR', { maximumFractionDigits:0 }); } catch { return '—'; }};
 const N  = (v) => parseFloat(v) || 0;
 
+// Parser robusto de fecha — maneja ISO (2026-05-15), DMY (15/05/2026), Date objs.
+function parseFecha(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);             // ISO
+  if (m) { const d = new Date(+m[1], +m[2]-1, +m[3]); return isNaN(d.getTime()) ? null : d; }
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);          // DD/MM/YYYY
+  if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); return isNaN(d.getTime()) ? null : d; }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 const SEM_P = ['dias_91_120','mas_120_dias'];
 const SEM_A = ['dias_61_90'];
 const SEM_Y = ['dias_31_60','dias_23_30'];
@@ -562,22 +576,36 @@ function TabFlujo({ tcC }) {
   // Más allá de 8 semanas → fuera del horizonte (no se incluye).
   // USD se convierte con tcImp (BCCR).
   const pagosSem = Array(8).fill(0);
-  const sinFecha = { sin_vencer: 0, dias_1_30: 0, dias_31_60: 0 };
+  const sinFecha = { sin_vencer: 0, dias_1_30: 0, dias_31_60: 0, count: 0 };
+  const diag = {
+    totalRows: pagar.length, totalMonto: 0,
+    vencidasN: 0, vencidasMonto: 0,
+    horizonteN: 0, horizonteMonto: 0,
+    futuroN: 0, futuroMonto: 0,
+    sinFechaN: 0, sinFechaMonto: 0,
+  };
   pagar.forEach(r => {
     const saldo = N(r.saldo_actual);
     const enCRC = r.moneda === 'USD' ? saldo * tcImp : saldo;
-    if (r.fecha_vencimiento) {
-      const fv = new Date(r.fecha_vencimiento);
+    diag.totalMonto += enCRC;
+    const fv = parseFecha(r.fecha_vencimiento);
+    if (fv) {
       const diffDays = Math.floor((fv - today) / (1000 * 60 * 60 * 24));
       if (diffDays < 0) {
         pagosSem[0] += enCRC;
+        diag.vencidasN++; diag.vencidasMonto += enCRC;
       } else if (diffDays < 56) {
         pagosSem[Math.floor(diffDays / 7)] += enCRC;
+        diag.horizonteN++; diag.horizonteMonto += enCRC;
+      } else {
+        diag.futuroN++; diag.futuroMonto += enCRC;
       }
     } else {
       sinFecha.sin_vencer += N(r.sin_vencer);
       sinFecha.dias_1_30  += N(r.dias_1_30);
       sinFecha.dias_31_60 += N(r.dias_31_60);
+      sinFecha.count++;
+      diag.sinFechaN++; diag.sinFechaMonto += enCRC;
     }
   });
   // Fallback para registros sin fecha_vencimiento: distribución por buckets
@@ -586,6 +614,7 @@ function TabFlujo({ tcC }) {
   const fb3160 = sinFecha.dias_31_60 / 2;
   [fbSV, fbSV, fb130, fb130, fb130, fb130, fb3160, fb3160]
     .forEach((v, i) => { pagosSem[i] += v; });
+  const totalProyectado = pagosSem.reduce((s, v) => s + v, 0);
 
   // ── Cobros CxC por semana (mantengo distribución por buckets) ────────────
   // sin_vencer → sem 1-2 · dias_1_30 → sem 3-6 · dias_31_60 → sem 7-8
@@ -969,6 +998,32 @@ function TabFlujo({ tcC }) {
       )}
 
       <hr style={S.divider}/>
+
+      {/* ── Diagnóstico CxP ───────────────────────────────────── */}
+      {diag.totalRows > 0 && (
+        <div style={{ background:'#F7FAFC', border:'1px solid #CBD5E0', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px', fontSize:'0.82rem' }}>
+          <div style={{ fontWeight:700, color:'#2D3748', marginBottom:'6px' }}>
+            🔎 Diagnóstico Pagos CxP — desglose de las {diag.totalRows} facturas
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'8px', color:'#4A5568' }}>
+            <div>📊 <strong>Total CxP en BD:</strong> {fC(diag.totalMonto)}</div>
+            <div>🔴 <strong>Vencidas (caen en S1):</strong> {fC(diag.vencidasMonto)} <span style={{ color:'#718096' }}>({diag.vencidasN} fact.)</span></div>
+            <div>🟡 <strong>Vencen en próx. 8 sem:</strong> {fC(diag.horizonteMonto)} <span style={{ color:'#718096' }}>({diag.horizonteN} fact.)</span></div>
+            <div>🟢 <strong>Vencen después de 8 sem:</strong> {fC(diag.futuroMonto)} <span style={{ color:'#718096' }}>({diag.futuroN} fact. — fuera del horizonte)</span></div>
+            <div style={{ color: diag.sinFechaN > 0 ? '#C53030' : '#4A5568' }}>
+              ⚠️ <strong>Sin fecha válida (fallback):</strong> {fC(diag.sinFechaMonto)} <span style={{ color:'#718096' }}>({diag.sinFechaN} fact.)</span>
+            </div>
+            <div style={{ color:'#2B6CB0' }}>
+              ✅ <strong>Total proyectado en 8 sem:</strong> {fC(totalProyectado)}
+            </div>
+          </div>
+          {diag.sinFechaN > 0 && (
+            <div style={{ marginTop:'8px', fontSize:'0.76rem', color:'#C53030' }}>
+              Hay {diag.sinFechaN} factura(s) sin fecha_vencimiento parseable — se distribuyen por buckets de antigüedad como fallback.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Sección 5: Tabla Detalle ──────────────────────────── */}
       <div style={secH}>Tabla Detalle por Semana</div>
