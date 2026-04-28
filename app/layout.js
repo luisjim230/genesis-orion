@@ -1,6 +1,7 @@
 import { Rubik } from 'next/font/google';
 import Sidebar from './sidebar';
 import MobileNav from './mobile-nav';
+import GA4Script from './components/GA4Script';
 import './globals.css';
 
 const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
@@ -30,6 +31,7 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <GA4Script />
       </head>
       <body className={rubik.className} style={{
         margin: 0,
