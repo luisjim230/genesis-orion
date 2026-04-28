@@ -25,6 +25,7 @@ const CACHE_TTL_SECONDS = {
   traffic_sources:       15 * 60,
   conversions:           10 * 60,
   campaigns_performance: 15 * 60,
+  device_breakdown:      30 * 60,
   internal_team_activity: 10 * 60,
 };
 
@@ -261,6 +262,29 @@ async function fetchCampaigns(client, property, range, traffic) {
   }));
 }
 
+async function fetchDeviceBreakdown(client, property, range, traffic) {
+  const filter = buildTrafficFilter(traffic);
+  const dr = parseDateRange(range);
+  const [resp] = await client.runReport({
+    property,
+    dateRanges: [dr],
+    dimensions: [{ name: 'deviceCategory' }],
+    metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'screenPageViews' }, { name: 'engagementRate' }],
+    ...(filter ? { dimensionFilter: filter } : {}),
+  });
+  const rows = rowsToObjects(resp).map(r => ({
+    device: r.deviceCategory || 'unknown',
+    sessions: Number(r.sessions) || 0,
+    users: Number(r.totalUsers) || 0,
+    pageviews: Number(r.screenPageViews) || 0,
+    engagement_rate: Number(r.engagementRate) || 0,
+  }));
+  const totalSessions = rows.reduce((s, x) => s + x.sessions, 0);
+  rows.forEach(x => { x.pct = totalSessions ? (x.sessions / totalSessions) * 100 : 0; });
+  rows.sort((a, b) => b.sessions - a.sessions);
+  return { breakdown: rows, total_sessions: totalSessions };
+}
+
 async function fetchRealtime(client, property, traffic) {
   // GA4 Realtime API NO soporta dimensiones custom como customEvent:traffic_type.
   // Por lo tanto, ignoramos `traffic` aquí y devolvemos siempre el total.
@@ -430,6 +454,7 @@ export async function GET(req) {
         case 'traffic_sources':        return fetchTrafficSources(client, property, date_range, filter);
         case 'conversions':            return fetchConversions(client, property, date_range, filter);
         case 'campaigns_performance':  return fetchCampaigns(client, property, date_range, filter);
+        case 'device_breakdown':       return fetchDeviceBreakdown(client, property, date_range, filter);
         case 'internal_team_activity': return fetchInternalTeamActivity(client, property, date_range);
         default: throw new Error(`metric_type desconocido: ${metric_type}`);
       }

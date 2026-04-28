@@ -342,11 +342,65 @@ function td() {
   return { padding: '10px 12px', color: 'rgba(0,0,0,0.78)' };
 }
 
+function DeviceBreakdownSection({ dateRange }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    ga4('device_breakdown', dateRange).then(d => { if (!cancelled) setData(d); }).catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [dateRange]);
+
+  const DEVICE_META = {
+    mobile:  { label: 'Móvil',     emoji: '📱', color: BLUE },
+    desktop: { label: 'Escritorio', emoji: '💻', color: GOLD },
+    tablet:  { label: 'Tablet',     emoji: '📱', color: GREEN },
+    smart_tv: { label: 'Smart TV',  emoji: '📺', color: AMBER },
+  };
+
+  return (
+    <div style={S.card}>
+      <div style={S.sectionTitle}>📱 Móvil vs 💻 Escritorio</div>
+      <div style={S.sectionCap}>Cómo accede tu audiencia. El % de mobile suele dictar las prioridades de UX y ads.</div>
+      {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
+      {!data ? (
+        <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
+      ) : (data.breakdown || []).length === 0 ? (
+        <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>Sin datos en este período.</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {(data.breakdown || []).map((row) => {
+            const meta = DEVICE_META[row.device] || { label: row.device, emoji: '📊', color: 'rgba(0,0,0,0.5)' };
+            return (
+              <div key={row.device} style={{ ...S.metric, borderLeft: `4px solid ${meta.color}` }}>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                  {meta.emoji} {meta.label}
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: 'rgba(0,0,0,0.85)', marginTop: 6 }}>
+                  {row.pct.toFixed(1)}%
+                </div>
+                <div style={{ fontSize: '0.82rem', color: 'rgba(0,0,0,0.55)', marginTop: 4 }}>
+                  {fmtInt(row.sessions)} sesiones · {fmtInt(row.users)} usuarios
+                </div>
+                <div style={{ marginTop: 8, height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${row.pct}%`, height: '100%', background: meta.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({ dateRange }) {
   return (
     <div>
       <LiveSection dateRange={dateRange} />
       <SummarySection dateRange={dateRange} />
+      <DeviceBreakdownSection dateRange={dateRange} />
       <TopProductsSection dateRange={dateRange} />
       <TrafficSourcesSection dateRange={dateRange} />
       <ConversionsSection dateRange={dateRange} />

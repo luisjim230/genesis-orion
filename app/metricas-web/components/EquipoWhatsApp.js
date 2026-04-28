@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { S, GOLD, GREEN, RED, BLUE, TEAL, fmtInt, fmtPct } from './styles';
+import { S, GOLD, GREEN, RED, BLUE, TEAL, AMBER, fmtInt, fmtPct } from './styles';
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
@@ -164,10 +164,140 @@ export default function EquipoWhatsApp({ dateRange }) {
             <div style={S.sectionCap}>Útil para staffing y para saber en qué momentos se concentra la demanda WhatsApp.</div>
             <Heatmap matrix={data.heatmap} />
           </div>
+
+          <OpportunitiesSection dateRange={dateRange} />
         </>
       ) : !error && (
         <div style={S.card}><div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Consultando GA4...</div></div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Sección "Demanda WhatsApp NO convertida":
+// Cruza GA4 (consultas internas del equipo) con NEO (ventas reales).
+// Muestra productos consultados muchas veces pero vendidos poco/nada.
+// ──────────────────────────────────────────────────────────────────────────
+function OpportunitiesSection({ dateRange }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [onlyZeroSales, setOnlyZeroSales] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/metricas-web/whatsapp-opportunities?date_range=${dateRange}`)
+      .then(r => r.json())
+      .then(j => {
+        if (cancelled) return;
+        if (j?.error) { setError(j.error); setData(null); }
+        else { setData(j); setError(null); }
+        setLoading(false);
+      })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [dateRange]);
+
+  if (loading) {
+    return (
+      <div style={S.card}>
+        <div style={S.sectionTitle}>💡 Demanda WhatsApp NO convertida</div>
+        <div style={S.sectionCap}>Cruzando consultas del equipo (GA4) con ventas reales (NEO)...</div>
+        <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={S.card}>
+        <div style={S.sectionTitle}>💡 Demanda WhatsApp NO convertida</div>
+        <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>
+      </div>
+    );
+  }
+  if (data?.filter_fallback || (data?.data?.length || 0) === 0) {
+    return (
+      <div style={S.card}>
+        <div style={S.sectionTitle}>💡 Demanda WhatsApp NO convertida</div>
+        <div style={{ background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.4)', color: '#7a5d10', padding: '10px 14px', borderRadius: 10, fontSize: '0.85rem' }}>
+          {data?.filter_fallback
+            ? '⏳ La dimensión traffic_type todavía está propagándose en GA4. Esta sección va a empezar a tener datos en cuanto Google la reconozca (hasta 24h post-registro) y el equipo navegue el sitio.'
+            : 'Sin actividad interna registrada en este período. Cuando los empleados marquen sus dispositivos como internos y empiecen a consultar productos, aparecen acá.'}
+        </div>
+      </div>
+    );
+  }
+
+  const rows = data.data.filter(r => onlyZeroSales ? r.units_sold === 0 : true);
+  const top10 = rows.slice(0, 30);
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <div style={S.sectionTitle}>💡 Demanda WhatsApp NO convertida</div>
+          <div style={S.sectionCap}>
+            Productos que el equipo consulta mucho pero se venden poco. Top {top10.length} ordenados por <strong>oportunidad</strong> (consultas / ventas).
+          </div>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'rgba(0,0,0,0.6)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={onlyZeroSales} onChange={e => setOnlyZeroSales(e.target.checked)} />
+          Solo productos con 0 ventas
+        </label>
+      </div>
+
+      <div style={{ overflowX: 'auto', marginTop: 12 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
+          <thead>
+            <tr style={{ background: 'rgba(0,0,0,0.04)' }}>
+              <th style={th()}>#</th>
+              <th style={th()}>Producto</th>
+              <th style={th()}>Marca</th>
+              <th style={{ ...th(), textAlign: 'right' }}>Consultas</th>
+              <th style={{ ...th(), textAlign: 'right' }}>Vendidos</th>
+              <th style={{ ...th(), textAlign: 'right' }}>Stock</th>
+              <th style={{ ...th(), textAlign: 'right' }}>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {top10.map((r, i) => {
+              const isHotOpp = r.opportunity_score >= 5 && r.consultas >= 5;
+              const noStock = r.existencias <= 0;
+              const noSales = r.units_sold === 0;
+              return (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', background: isHotOpp ? 'rgba(255,193,7,0.06)' : 'transparent' }}>
+                  <td style={td()}>{i + 1}</td>
+                  <td style={td()}>
+                    <a href={`https://depositojimenezcr.com${r.ga4_path}`} target="_blank" rel="noreferrer" style={{ color: 'rgba(0,0,0,0.85)', textDecoration: 'none', fontWeight: 500 }}>
+                      {r.product_name}
+                    </a>
+                    <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.4)', marginTop: 2 }}>
+                      cód: {r.codigo_interno}{r.categoria ? ` · ${r.categoria}` : ''}
+                    </div>
+                  </td>
+                  <td style={td()}>{r.marca || <span style={{ color: 'rgba(0,0,0,0.4)' }}>—</span>}</td>
+                  <td style={{ ...td(), textAlign: 'right', fontWeight: 700 }}>{fmtInt(r.consultas)}</td>
+                  <td style={{ ...td(), textAlign: 'right', fontWeight: 700, color: noSales ? RED : GREEN }}>
+                    {fmtInt(r.units_sold)}
+                  </td>
+                  <td style={{ ...td(), textAlign: 'right', color: noStock ? RED : 'rgba(0,0,0,0.7)', fontWeight: noStock ? 700 : 400 }}>
+                    {fmtInt(r.existencias)}{noStock && r.consultas > 0 ? ' ⚠️' : ''}
+                  </td>
+                  <td style={{ ...td(), textAlign: 'right', fontWeight: 800, color: isHotOpp ? AMBER : 'rgba(0,0,0,0.6)' }}>
+                    {r.opportunity_score.toFixed(1)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 12, fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', lineHeight: 1.5 }}>
+        💡 <strong>Cómo leer:</strong> filas amarillas son oportunidades calientes (5+ consultas, score alto).
+        Stock con ⚠️ = consultado pero sin existencias. Score = consultas ÷ (ventas + 1) — cuanto más alto, peor convierte.
+      </div>
     </div>
   );
 }
