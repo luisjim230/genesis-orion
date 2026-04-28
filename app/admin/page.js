@@ -24,6 +24,7 @@ const MODULOS = [
   { key:'kronos',       label:'Kronos',          emoji:'⚡' },
   { key:'contenedores', label:'Contenedores',    emoji:'🚢' },
   { key:'mercado',      label:'Mercado',         emoji:'💱' },
+  { key:'metricas-web', label:'Métricas Web',    emoji:'📊' },
   { key:'ponderacion',  label:'Ponderación',     emoji:'⚖️' },
   { key:'comercial',    label:'Comercial / Ventas', emoji:'💼' },
   { key:'reportes',     label:'Reportes',        emoji:'📊' },
