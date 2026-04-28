@@ -10,6 +10,7 @@
     "seed:tlc": "node scripts/seed-tlc-partidas.mjs"
   },
   "dependencies": {
+    "@google-analytics/data": "^5.2.1",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.98.0",
     "exceljs": "^4.4.0",
