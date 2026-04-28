@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/metricas-web/alerts/daily",
+      "schedule": "0 15 * * *"
+    }
+  ]
+}

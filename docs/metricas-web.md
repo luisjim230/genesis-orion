@@ -44,6 +44,9 @@ Definir en Vercel (y en `.env.local` para desarrollo):
 | `GA4_MEASUREMENT_ID` | `G-237EPSVR3Z` | Tag de GA4 (ya configurado en el sitio). |
 | `GA4_MEASUREMENT_API_SECRET` | `jnTUBYNNRO2xlLAs71hg_A` | Secret de Measurement Protocol. Se usa solo en `/marcar-interno`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | (ya existe) | Necesaria para el caché y endpoints administrativos. |
+| `TELEGRAM_BOT_TOKEN` | (ya existe del módulo de tareas) | Para alertas diarias. Usa el mismo bot que `send_daily_tasks.mjs`. |
+| `TELEGRAM_CHAT_ID_METRICAS` | id del chat de Telegram para alertas de Métricas Web | Si no está, cae a `TELEGRAM_CHAT_ID`. |
+| `CRON_SECRET` | string aleatorio | Token que valida que la llamada al endpoint de alertas viene de Vercel Cron. Generar con `openssl rand -hex 32`. |
 
 #### Cómo pasar el JSON de service account a Vercel
 
