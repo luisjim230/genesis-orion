@@ -66,13 +66,25 @@ export async function POST(req) {
     }
     if (!inserted) return NextResponse.json({ error: 'no fue posible generar slug único' }, { status: 500 });
 
-    const origin = req.headers.get('x-forwarded-host')
-      ? `https://${req.headers.get('x-forwarded-host')}`
-      : new URL(req.url).origin;
+    // Construcción del short_url:
+    // - Por default, dominio del acortador go.depositojimenezcr.com (CNAME en Vercel).
+    // - Si por algún motivo SHORTENER_DOMAIN no está configurado, usamos el host de
+    //   la request actual (típicamente sol.depositojimenez.com con prefijo /s/).
+    //   Esto mantiene compatibilidad histórica con cualquier consumidor previo.
+    const shortenerDomain = (process.env.SHORTENER_DOMAIN || 'go.depositojimenezcr.com').trim();
+    let short_url;
+    if (shortenerDomain) {
+      short_url = `https://${shortenerDomain}/${inserted.slug}`;
+    } else {
+      const origin = req.headers.get('x-forwarded-host')
+        ? `https://${req.headers.get('x-forwarded-host')}`
+        : new URL(req.url).origin;
+      short_url = `${origin}/s/${inserted.slug}`;
+    }
     return NextResponse.json({
       ok: true,
       slug: inserted.slug,
-      short_url: `${origin}/s/${inserted.slug}`,
+      short_url,
       target_url: inserted.target_url,
     });
   } catch (e) {
