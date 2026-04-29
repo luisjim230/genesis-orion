@@ -445,9 +445,51 @@ function PubTypeRadio({ value, current, onChange, label, desc }) {
 // ──────────────────────────────────────────────────────────────────────────
 // Resultados (Paso 6 redesign)
 // ──────────────────────────────────────────────────────────────────────────
+// Metadata de cada tipo: dónde se pega el link y cómo se ve la card grande.
+const MEDIUM_GUIDE = {
+  organico: {
+    title: '📢 PARA POST ORGÁNICO',
+    pasteHint: 'Caption del post / descripción / comentarios',
+    bgGradient: 'linear-gradient(135deg, #2e7d4f 0%, #1f5e3a 100%)',
+    bg: 'rgba(46,125,79,0.06)',
+    border: 'rgba(46,125,79,0.4)',
+    badgeColor: '#2e7d4f',
+    sub: 'Pegá estos links en posts/reels/tiktoks normales. NO los uses para anuncios pagados.',
+  },
+  pagado: {
+    title: '💰 PARA META ADS / TIKTOK ADS',
+    pasteHint: 'Campo "Destination URL" del anuncio',
+    bgGradient: 'linear-gradient(135deg, #c8882b 0%, #a06a1f 100%)',
+    bg: 'rgba(200,136,43,0.08)',
+    border: 'rgba(200,136,43,0.4)',
+    badgeColor: '#c8882b',
+    sub: 'Pegá estos links solo cuando creés un anuncio pagado en Meta o TikTok. NO los uses en posts orgánicos.',
+  },
+  bio: {
+    title: '🔗 PARA LINK EN BIO',
+    pasteHint: 'Linktree, Beacons, o bio de Instagram/TikTok',
+    bgGradient: 'linear-gradient(135deg, #3d8ef8 0%, #2563b8 100%)',
+    bg: 'rgba(61,142,248,0.08)',
+    border: 'rgba(61,142,248,0.4)',
+    badgeColor: '#3d8ef8',
+    sub: 'Pegá estos links en tu Linktree o en la bio del perfil.',
+  },
+  historia: {
+    title: '✨ PARA HISTORIA / STORY',
+    pasteHint: 'Sticker de link de la story',
+    bgGradient: 'linear-gradient(135deg, #9b87f5 0%, #7558d8 100%)',
+    bg: 'rgba(155,135,245,0.08)',
+    border: 'rgba(155,135,245,0.4)',
+    badgeColor: '#9b87f5',
+    sub: 'Pegá estos links en el sticker de link de tus stories.',
+  },
+};
+
 function ResultsView({ result, sources, mediums, onReset }) {
-  const [view, setView] = useState('por-red'); // por-red | por-tipo
-  const [bulkCopied, setBulkCopied] = useState(null); // 'organicos' | 'pagados' | 'todos'
+  // Default a "por-tipo" porque es la vista accionable: te dice EXACTO dónde
+  // pegar cada link (post orgánico vs anuncio pagado).
+  const [view, setView] = useState('por-tipo');
+  const [bulkCopied, setBulkCopied] = useState(null);
 
   const items = result.items.filter(i => !i.error);
   const errors = result.items.filter(i => i.error);
@@ -563,20 +605,14 @@ function ViewBySource({ items, sources, sourceMeta, mediumMeta }) {
 }
 
 function ViewByMedium({ items, mediums, sourceMeta, mediumMeta }) {
-  const labels = {
-    organico: { title: '🌱 Para usar YA — Orgánicos', color: GREEN },
-    pagado:   { title: '💰 Para cuando pauteés — Pagados', color: '#c8882b' },
-    bio:      { title: '🔗 Link en Bio', color: BLUE },
-    historia: { title: '✨ Historia / Story', color: '#9b87f5' },
-  };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {mediums.map(m => {
         const rows = items.filter(i => i.medium === m);
         if (rows.length === 0) return null;
-        const meta = labels[m] || { title: m, color: '#666' };
+        const guide = MEDIUM_GUIDE[m];
         return (
-          <CollapsibleCard key={m} title={meta.title} accent={meta.color} count={rows.length}>
+          <MediumGuideCard key={m} guide={guide} mediumKey={m} count={rows.length}>
             {rows.map((it, idx) => {
               const sm = sourceMeta(it.source);
               return (
@@ -585,16 +621,52 @@ function ViewByMedium({ items, mediums, sourceMeta, mediumMeta }) {
                   item={it}
                   mediumMeta={mediumMeta}
                   customLabel={`${sm?.emoji || '📊'} ${sm?.label || it.source}`}
+                  pasteHint={guide?.pasteHint}
+                  hintColor={guide?.badgeColor}
                 />
               );
             })}
-          </CollapsibleCard>
+          </MediumGuideCard>
         );
       })}
     </div>
   );
 }
 
+// Card grande con banner de color saturado arriba y guía explícita de uso.
+// Reemplaza al CollapsibleCard cuando estamos en vista "Por tipo".
+function MediumGuideCard({ guide, mediumKey, count, children }) {
+  if (!guide) {
+    return <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: 14 }}>{children}</div>;
+  }
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: `0 4px 20px ${guide.border}` }}>
+      <div style={{
+        background: guide.bgGradient,
+        color: '#fff',
+        padding: '14px 18px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+      }}>
+        <div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '0.04em' }}>{guide.title}</div>
+          <div style={{ fontSize: '0.82rem', opacity: 0.92, marginTop: 4, lineHeight: 1.4, maxWidth: 600 }}>{guide.sub}</div>
+        </div>
+        <span style={{ background: 'rgba(255,255,255,0.22)', padding: '4px 12px', borderRadius: 14, fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+          {count} link{count !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div style={{ padding: '4px 18px 14px' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// (Vista "Por red social" sigue usando CollapsibleCard como antes.)
 function CollapsibleCard({ title, accent, count, children }) {
   const [open, setOpen] = useState(true);
   return (
@@ -611,11 +683,10 @@ function CollapsibleCard({ title, accent, count, children }) {
   );
 }
 
-function LinkRow({ item, mediumMeta, customLabel }) {
+function LinkRow({ item, mediumMeta, customLabel, pasteHint, hintColor }) {
   const [copied, setCopied] = useState(false);
   const [showLong, setShowLong] = useState(false);
   const meta = mediumMeta(item.medium);
-  const label = customLabel || meta?.label || item.medium;
   const link = item.shortUrl || item.longUrl;
 
   async function copy() {
@@ -653,6 +724,13 @@ function LinkRow({ item, mediumMeta, customLabel }) {
           {copied ? '✓ Copiado' : '📋 Copiar'}
         </button>
       </div>
+      {pasteHint && (
+        <div style={{ marginTop: 6, fontSize: '0.78rem', color: hintColor || 'rgba(0,0,0,0.55)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '0.85rem' }}>→</span>
+          <span style={{ color: 'rgba(0,0,0,0.55)', fontWeight: 400 }}>Pegar en:</span>
+          <span>{pasteHint}</span>
+        </div>
+      )}
       {item.shortUrl && (
         <div style={{ marginTop: 4 }}>
           <span onClick={() => setShowLong(s => !s)} style={{ fontSize: '0.72rem', color: BLUE, cursor: 'pointer', textDecoration: 'underline' }}>
