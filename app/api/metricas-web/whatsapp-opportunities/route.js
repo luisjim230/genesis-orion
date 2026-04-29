@@ -54,13 +54,20 @@ export async function GET(req) {
     // 1) Pedimos a GA4 los productos consultados por el equipo (traffic_filter=internal).
     const dr = parseDateRange(date_range);
     const internalFilter = buildTrafficFilter('internal');
+    // Excluye SOL — solo cuenta navegación en el sitio público.
+    const publicHostFilter = {
+      filter: {
+        fieldName: 'hostName',
+        stringFilter: { matchType: 'CONTAINS', value: 'depositojimenezcr.com', caseSensitive: false },
+      },
+    };
     const productFilter = {
       filter: {
         fieldName: 'pagePath',
         stringFilter: { matchType: 'CONTAINS', value: '/products/', caseSensitive: false },
       },
     };
-    const dimensionFilter = { andGroup: { expressions: [internalFilter, productFilter] } };
+    const dimensionFilter = { andGroup: { expressions: [internalFilter, publicHostFilter, productFilter] } };
 
     let topInternal = [];
     let filterFallback = false;

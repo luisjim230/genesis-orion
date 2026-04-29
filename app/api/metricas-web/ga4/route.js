@@ -314,19 +314,30 @@ async function fetchRealtime(client, property, traffic) {
 }
 
 async function fetchInternalTeamActivity(client, property, range) {
-  // Solo tiene sentido con traffic_filter=internal — el caller debe forzarlo.
+  // Filtros aplicados a TODAS las queries de esta tab:
+  // 1) traffic_type=internal → solo el equipo (no clientes).
+  // 2) hostName contiene "depositojimenezcr.com" → solo el sitio público,
+  //    excluye el tráfico de SOL (sol.depositojimenez.com) que sería ruido —
+  //    nos importa qué consulta el equipo en el e-commerce, no su uso de SOL.
   const filter = buildTrafficFilter('internal');
+  const publicHostFilter = {
+    filter: {
+      fieldName: 'hostName',
+      stringFilter: { matchType: 'CONTAINS', value: 'depositojimenezcr.com', caseSensitive: false },
+    },
+  };
+  const baseFilter = { andGroup: { expressions: [filter, publicHostFilter] } };
   const dr = parseDateRange(range);
   const prev = getPreviousRange(range);
 
-  // Top productos consultados por el equipo.
+  // Top productos consultados por el equipo (en el sitio público).
   const productFilter = {
     filter: {
       fieldName: 'pagePath',
       stringFilter: { matchType: 'CONTAINS', value: '/products/', caseSensitive: false },
     },
   };
-  const dimensionFilter = { andGroup: { expressions: [filter, productFilter] } };
+  const dimensionFilter = { andGroup: { expressions: [filter, publicHostFilter, productFilter] } };
 
   const [topResp] = await client.runReport({
     property,
@@ -367,13 +378,13 @@ async function fetchInternalTeamActivity(client, property, range) {
     x.previous_views = before;
   });
 
-  // Heatmap por hora del día y día de la semana.
+  // Heatmap por hora del día y día de la semana — solo sitio público.
   const [heatResp] = await client.runReport({
     property,
     dateRanges: [dr],
     dimensions: [{ name: 'dayOfWeek' }, { name: 'hour' }],
     metrics: [{ name: 'sessions' }],
-    dimensionFilter: filter,
+    dimensionFilter: baseFilter,
   });
   const heatmap = rowsToObjects(heatResp).map(r => ({
     day_of_week: Number(r.dayOfWeek), // 0=domingo
@@ -381,12 +392,12 @@ async function fetchInternalTeamActivity(client, property, range) {
     sessions: Number(r.sessions) || 0,
   }));
 
-  // Resumen interno.
+  // Resumen interno — solo sitio público (excluye uso de SOL).
   const [sumResp] = await client.runReport({
     property,
     dateRanges: [dr],
     metrics: [{ name: 'sessions' }, { name: 'screenPageViews' }, { name: 'totalUsers' }],
-    dimensionFilter: filter,
+    dimensionFilter: baseFilter,
   });
   const sm = (sumResp.rows?.[0]?.metricValues || []).map(v => Number(v.value) || 0);
   const totalSessions = sm[0] || 0;
