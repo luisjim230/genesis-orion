@@ -103,12 +103,26 @@ export default function EquipoWhatsApp({ dateRange }) {
 
       {error && <div style={{ ...S.card, color: RED }}>⚠️ {error}</div>}
 
+      {data && data.summary.total_searches === 0 && (
+        <div style={{ ...S.card, background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.4)' }}>
+          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a5d10', marginBottom: 6 }}>⚠️ Aún no hay datos en esta tab</div>
+          <div style={{ fontSize: '0.85rem', color: '#7a5d10', lineHeight: 1.5 }}>
+            Para que aparezcan los productos consultados por el equipo:
+            <ol style={{ marginTop: 8, marginBottom: 4, paddingLeft: 20 }}>
+              <li>Cada empleado abre <a href="/marcar-interno" target="_blank" rel="noreferrer" style={{ color: '#0066cc', textDecoration: 'underline' }}>sol.depositojimenez.com/marcar-interno</a> en su navegador y completa el formulario.</li>
+              <li>Después navega <strong>depositojimenezcr.com</strong> normalmente para responder consultas de WhatsApp.</li>
+            </ol>
+            Las visitas en <strong>SOL</strong> (este sistema interno) NO cuentan acá — solo navegación al sitio público desde dispositivos marcados.
+          </div>
+        </div>
+      )}
+
       {data ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <MetricCard label="Búsquedas del equipo" value={fmtInt(data.summary.total_searches)} sub="sesiones internas en el período" />
+            <MetricCard label="Consultas al sitio" value={fmtInt(data.summary.total_searches)} sub="sesiones internas en sitio público" />
             <MetricCard label="Productos únicos" value={fmtInt(data.summary.unique_products)} sub="distintos consultados" color={GOLD} />
-            <MetricCard label="Promedio por día" value={data.summary.avg_per_day.toFixed(1)} sub="búsquedas internas" color={BLUE} />
+            <MetricCard label="Promedio por día" value={data.summary.avg_per_day.toFixed(1)} sub="consultas internas/día" color={BLUE} />
             <MetricCard label="Hora pico" value={data.summary.peak_hour !== null ? `${data.summary.peak_hour}:00` : '—'} sub="del día con más actividad" color={GREEN} />
           </div>
 
