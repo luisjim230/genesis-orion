@@ -19,7 +19,7 @@ export async function middleware(req) {
   );
   const { data: { session } } = await supabase.auth.getSession();
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.startsWith('/marcar-interno')) return res;
+  if (pathname.startsWith('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.startsWith('/marcar-interno') || pathname.startsWith('/s/')) return res;
   if (!session) return NextResponse.redirect(new URL('/login', req.url));
   return res;
 }
