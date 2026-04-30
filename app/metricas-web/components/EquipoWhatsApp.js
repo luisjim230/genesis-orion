@@ -16,7 +16,7 @@ function Heatmap({ matrix }) {
   // matrix: array de { day_of_week (0=dom), hour (0-23), sessions }
   const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
   let max = 0;
-  matrix.forEach(c => {
+  (matrix || []).forEach(c => {
     if (c.day_of_week >= 0 && c.day_of_week < 7 && c.hour >= 0 && c.hour < 24) {
       grid[c.day_of_week][c.hour] = c.sessions;
       if (c.sessions > max) max = c.sessions;
@@ -84,10 +84,16 @@ function trendBadge(t) {
 //   B) GA4 ve sesiones del sitio pero 0 internas → Nidux no manda traffic_type.
 //   C) Hay sesiones internas pero nadie tocó /products/ → equipo no abrió fichas.
 function DiagnosticBanner({ summary }) {
-  const internal = summary.total_searches || 0;
-  const publicTotal = summary.public_total_sessions || 0;
-  const publicProducts = summary.public_product_sessions || 0;
-  const productsConsulted = summary.unique_products || 0;
+  if (!summary) return null;
+  const internal = Number(summary.total_searches) || 0;
+  const publicTotal = Number(summary.public_total_sessions) || 0;
+  const publicProducts = Number(summary.public_product_sessions) || 0;
+  const productsConsulted = Number(summary.unique_products) || 0;
+  const internalPct = Number(summary.internal_pct) || 0;
+  // Si el caché es de antes del deploy de hoy, no tiene los campos de diagnóstico.
+  // En ese caso no mostramos banner — esperamos a que se refresque el caché.
+  const hasDiagnosticData = summary.public_total_sessions !== undefined;
+  if (!hasDiagnosticData) return null;
 
   // Caso A: GA4 no detecta ni el sitio público.
   if (publicTotal === 0 && internal === 0) {
@@ -158,7 +164,7 @@ function DiagnosticBanner({ summary }) {
   return (
     <div style={{ ...S.card, background: 'rgba(46,125,79,0.06)', border: '1px solid rgba(46,125,79,0.25)', padding: '10px 14px' }}>
       <div style={{ fontSize: '0.85rem', color: '#1f5e3a', lineHeight: 1.5 }}>
-        ✓ Configuración OK — <strong>{summary.internal_pct.toFixed(1)}%</strong> del tráfico del sitio se detecta
+        ✓ Configuración OK — <strong>{internalPct.toFixed(1)}%</strong> del tráfico del sitio se detecta
         como equipo interno ({fmtInt(internal)} de {fmtInt(publicTotal)} sesiones).
       </div>
     </div>
@@ -195,10 +201,10 @@ export default function EquipoWhatsApp({ dateRange }) {
       {data ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <MetricCard label="Consultas al sitio" value={fmtInt(data.summary.total_searches)} sub="sesiones internas en sitio público" />
-            <MetricCard label="Productos únicos" value={fmtInt(data.summary.unique_products)} sub="distintos consultados" color={GOLD} />
-            <MetricCard label="Promedio por día" value={data.summary.avg_per_day.toFixed(1)} sub="consultas internas/día" color={BLUE} />
-            <MetricCard label="Hora pico" value={data.summary.peak_hour !== null ? `${data.summary.peak_hour}:00` : '—'} sub="del día con más actividad" color={GREEN} />
+            <MetricCard label="Consultas al sitio" value={fmtInt(data.summary?.total_searches)} sub="sesiones internas en sitio público" />
+            <MetricCard label="Productos únicos" value={fmtInt(data.summary?.unique_products)} sub="distintos consultados" color={GOLD} />
+            <MetricCard label="Promedio por día" value={(Number(data.summary?.avg_per_day) || 0).toFixed(1)} sub="consultas internas/día" color={BLUE} />
+            <MetricCard label="Hora pico" value={data.summary?.peak_hour != null ? `${data.summary.peak_hour}:00` : '—'} sub="del día con más actividad" color={GREEN} />
           </div>
 
           <div style={S.card}>
@@ -212,7 +218,7 @@ export default function EquipoWhatsApp({ dateRange }) {
                 Mostrar solo no convertidos (próximamente)
               </label>
             </div>
-            {data.top_products.length === 0 ? (
+            {(data.top_products || []).length === 0 ? (
               <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem', marginTop: 12 }}>
                 Sin actividad interna registrada todavía. Cuando los empleados marquen sus dispositivos como internos y naveguen el sitio, aparecerá acá.
               </div>
@@ -229,7 +235,7 @@ export default function EquipoWhatsApp({ dateRange }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.top_products.map((p, i) => (
+                    {(data.top_products || []).map((p, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                         <td style={td()}>{i + 1}</td>
                         <td style={td()}>
@@ -238,7 +244,7 @@ export default function EquipoWhatsApp({ dateRange }) {
                           </a>
                         </td>
                         <td style={{ ...td(), textAlign: 'right', fontWeight: 700 }}>{fmtInt(p.views)}</td>
-                        <td style={{ ...td(), textAlign: 'right', color: 'rgba(0,0,0,0.55)' }}>{p.pct_total.toFixed(1)}%</td>
+                        <td style={{ ...td(), textAlign: 'right', color: 'rgba(0,0,0,0.55)' }}>{(Number(p.pct_total) || 0).toFixed(1)}%</td>
                         <td style={{ ...td(), textAlign: 'right' }}>{trendBadge(p.trend)}</td>
                       </tr>
                     ))}
