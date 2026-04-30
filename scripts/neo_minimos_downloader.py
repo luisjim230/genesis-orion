@@ -71,6 +71,62 @@ def supa_request(method, path, data=None):
         return None
 
 
+def supa_get_codigos_rojimo():
+    """Trae todos los codigo_interno de neo_lista_items (catálogo maestro ROJIMO).
+    Pagina de 1000 en 1000 porque PostgREST limita la respuesta."""
+    codigos = set()
+    offset = 0
+    PAGE = 1000
+    while True:
+        url = f"{SUPA_URL}/rest/v1/neo_lista_items?select=codigo_interno"
+        req = urllib.request.Request(url)
+        req.add_header("apikey", SUPA_KEY)
+        req.add_header("Authorization", f"Bearer {SUPA_KEY}")
+        req.add_header("Range-Unit", "items")
+        req.add_header("Range", f"{offset}-{offset + PAGE - 1}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                rows = json.loads(r.read())
+        except Exception as e:
+            log.warning(f"No pude bajar neo_lista_items para validar: {e}")
+            return None
+        if not rows:
+            break
+        for row in rows:
+            c = row.get("codigo_interno")
+            if c:
+                codigos.add(str(c).strip())
+        if len(rows) < PAGE:
+            break
+        offset += PAGE
+    return codigos
+
+
+def validar_es_rojimo(df):
+    """Garantía contra cargar otra empresa por error.
+    Cruza los códigos del Excel contra neo_lista_items (catálogo maestro ROJIMO).
+    Devuelve (ok: bool, mensaje: str)."""
+    codigos_excel = {str(c).strip() for c in df["codigo"].dropna().tolist()}
+    if not codigos_excel:
+        return False, "Excel sin códigos"
+
+    codigos_rojimo = supa_get_codigos_rojimo()
+    if codigos_rojimo is None:
+        log.warning("Validación de empresa SALTADA (no pude leer neo_lista_items)")
+        return True, "validación saltada"
+    if len(codigos_rojimo) < 500:
+        log.warning(f"neo_lista_items tiene solo {len(codigos_rojimo)} códigos — validación saltada")
+        return True, "validación saltada"
+
+    matches = len(codigos_excel & codigos_rojimo)
+    pct = matches / len(codigos_excel) * 100
+    UMBRAL = 40.0
+    msg = f"{matches:,}/{len(codigos_excel):,} códigos en catálogo ROJIMO = {pct:.1f}% (umbral {UMBRAL:.0f}%)"
+    if pct < UMBRAL:
+        return False, f"DATA NO ES DE ROJIMO — {msg}"
+    return True, msg
+
+
 def subir_a_supabase(excel_path):
     """
     Lee el Excel, borra los datos anteriores e inserta el snapshot nuevo.
@@ -153,6 +209,13 @@ def subir_a_supabase(excel_path):
     # ── Seguridad: si el archivo parece incompleto, no tocar la BD ──
     if total < 100:
         log.error(f"❌ Solo {total} filas en el Excel — no se toca Supabase (mínimo esperado: 100)")
+        return False
+
+    # ── Seguridad: confirmar que la data es de ROJIMO (no de otra empresa) ──
+    ok_empresa, msg = validar_es_rojimo(df)
+    log.info(f"Validación empresa: {msg}")
+    if not ok_empresa:
+        log.error(f"❌ ABORTADO — {msg}. Revisar que NEO esté en Corporación Rojimo S.A. (984).")
         return False
 
     # ── Borrar snapshot anterior (igual que hace /api/subir-inventario) ──
