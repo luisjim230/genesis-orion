@@ -1,0 +1,32 @@
+name: SOL — Alerta de stock bajo
+
+on:
+  schedule:
+    # 9:30 AM CR (15:30 UTC) y 4:30 PM CR (22:30 UTC)
+    # Después de cada sync NEO de las 9am y 4pm.
+    # Lunes a Sábado (domingo se omite).
+    - cron: '30 15 * * 1-6'
+    - cron: '30 22 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check stock and send alert if below threshold
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/check_stock_alert.mjs
