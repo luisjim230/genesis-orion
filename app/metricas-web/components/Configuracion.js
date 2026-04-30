@@ -10,12 +10,51 @@ function fmtDate(s) {
   catch { return s; }
 }
 
+// Snippet que va en el header del sitio Nidux ANTES del tag de GA4. Estrategia
+// dual para máxima robustez:
+//   1) gtag('set'): aplica traffic_type=internal a TODOS los eventos siguientes.
+//      Funciona si Nidux usa gtag.js (la mayoría de instalaciones GA4 estándar).
+//   2) URL parameter: empuja ?traffic_type=internal a la URL. Permite que GA4
+//      detecte el flag con una "Internal Traffic Rule" basada en page_location.
+// Si el navegador NO está marcado como interno, el snippet no hace nada.
+const NIDUX_SNIPPET = `<!-- Detector de tráfico interno Depósito Jiménez (SOL) -->
+<script>
+(function(){
+  try {
+    var isInternal = false;
+    try {
+      isInternal = localStorage.getItem('dj_internal_traffic') === 'true';
+      if (!isInternal) {
+        isInternal = /(?:^|; )dj_internal_traffic=true/.test(document.cookie);
+      }
+    } catch(e) {}
+    if (!isInternal) return;
+
+    // 1) gtag('set'): aplica el flag a todos los eventos GA4 siguientes.
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('set', 'user_properties', { traffic_type: 'internal' });
+    gtag('set', { traffic_type: 'internal' });
+
+    // 2) Backup: forzar ?traffic_type=internal en la URL para que GA4 lo
+    //    detecte vía Internal Traffic Rule (Admin > Data Streams > Configure
+    //    tag settings > Define internal traffic).
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('traffic_type') !== 'internal') {
+      url.searchParams.set('traffic_type', 'internal');
+      history.replaceState(null, '', url.toString());
+    }
+  } catch(e) {}
+})();
+</script>`;
+
 export default function Configuracion() {
   const [statusGA4, setStatusGA4] = useState({ loading: true });
   const [campaigns, setCampaigns] = useState([]);
   const [devices, setDevices] = useState([]);
   const [clearing, setClearing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
 
   async function loadAll() {
     // Status GA4: pegamos al endpoint con un metric_type ligero.
@@ -73,6 +112,12 @@ export default function Configuracion() {
     setTimeout(() => setCopiedLink(false), 1800);
   }
 
+  async function copySnippet() {
+    await navigator.clipboard.writeText(NIDUX_SNIPPET);
+    setCopiedSnippet(true);
+    setTimeout(() => setCopiedSnippet(false), 1800);
+  }
+
   return (
     <div>
       <div style={S.card}>
@@ -110,6 +155,36 @@ export default function Configuracion() {
         </div>
         <div style={{ marginTop: 10, fontFamily: 'monospace', fontSize: '0.85rem', background: 'rgba(0,0,0,0.04)', padding: 10, borderRadius: 8, color: 'rgba(0,0,0,0.7)' }}>
           {typeof window !== 'undefined' ? `${window.location.origin}/marcar-interno` : '/marcar-interno'}
+        </div>
+      </div>
+
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={S.sectionTitle}>🧩 Snippet para Nidux (depositojimenezcr.com)</div>
+            <div style={S.sectionCap}>
+              Sin esto, Nidux no manda <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 4px', borderRadius: 3 }}>traffic_type=internal</code> a GA4 y la tab Equipo WhatsApp queda vacía.
+              Pegá este código en el panel admin de Nidux <strong>antes</strong> del tag de Google Analytics.
+            </div>
+          </div>
+          <button onClick={copySnippet} style={{ ...S.btnPrimary, background: copiedSnippet ? `linear-gradient(135deg, ${GREEN}, #1f5e3a)` : S.btnPrimary.background }}>
+            {copiedSnippet ? '✓ Copiado' : '📋 Copiar snippet'}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, fontFamily: 'monospace', fontSize: '0.78rem', background: 'rgba(0,0,0,0.04)', padding: 12, borderRadius: 8, color: 'rgba(0,0,0,0.75)', whiteSpace: 'pre-wrap', overflowX: 'auto', maxHeight: 280, overflowY: 'auto' }}>
+          {NIDUX_SNIPPET}
+        </div>
+        <div style={{ marginTop: 12, fontSize: '0.82rem', color: 'rgba(0,0,0,0.6)', lineHeight: 1.6 }}>
+          <strong>Pasos en Nidux:</strong>
+          <ol style={{ marginTop: 6, marginBottom: 4, paddingLeft: 22 }}>
+            <li>Entrar al admin de Nidux → <em>Configuración</em> → <em>Scripts personalizados / Header</em>.</li>
+            <li>Pegar el snippet de arriba <strong>antes</strong> del tag <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 4px', borderRadius: 3 }}>gtag/js?id=G-237EPSVR3Z</code>.</li>
+            <li>Guardar y publicar.</li>
+            <li>Volver a esta tab al rato — el banner de la tab <strong>Equipo WhatsApp</strong> tiene que pasar de rojo a verde.</li>
+          </ol>
+          <strong>Backup en GA4 (recomendado por si Nidux no respeta el script):</strong> Admin → Data Streams →
+          el stream del sitio → Configure tag settings → <em>Define internal traffic</em> → crear regla:
+          <em> Match: traffic_type contains internal</em>. Eso hace que GA4 detecte el flag aunque Nidux ignore el snippet.
         </div>
       </div>
 

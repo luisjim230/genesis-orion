@@ -173,16 +173,26 @@ async function fetchTrafficSources(client, property, range, traffic) {
 async function fetchConversions(client, property, range, traffic) {
   const filter = buildTrafficFilter(traffic);
   const dr = parseDateRange(range);
-  // Filtramos por nombre de evento (add_to_cart | begin_checkout | purchase).
+  // Filtramos por nombre de evento (add_to_cart | begin_checkout | purchase) Y exigimos
+  // que vengan del hostname del sitio público (depositojimenezcr.com). Esto evita contar:
+  //   1) eventos disparados desde SOL (sol.depositojimenez.com),
+  //   2) datos importados a GA4 desde sistemas offline (POS, ERP) que no tienen hostName web.
   const eventFilter = {
     filter: {
       fieldName: 'eventName',
       inListFilter: { values: ['add_to_cart', 'begin_checkout', 'purchase'], caseSensitive: false },
     },
   };
-  const dimensionFilter = filter
-    ? { andGroup: { expressions: [filter, eventFilter] } }
-    : eventFilter;
+  const publicHostFilter = {
+    filter: {
+      fieldName: 'hostName',
+      stringFilter: { matchType: 'CONTAINS', value: 'depositojimenezcr.com', caseSensitive: false },
+    },
+  };
+  const expressions = [eventFilter, publicHostFilter];
+  if (filter) expressions.unshift(filter);
+  const dimensionFilter = { andGroup: { expressions } };
+
   const [resp] = await client.runReport({
     property,
     dateRanges: [dr],
@@ -200,19 +210,11 @@ async function fetchConversions(client, property, range, traffic) {
   rows.forEach(r => {
     const ev = r.eventName;
     if (ev in byEvent) byEvent[ev] = Number(r.eventCount) || 0;
+    // Revenue = SUMA del eventValue de los eventos `purchase` reales del sitio.
+    // Deliberadamente NO usamos la métrica `totalRevenue` de GA4 porque puede incluir
+    // ingresos importados offline que no representan compras hechas en la web.
     if (ev === 'purchase') revenue += Number(r.eventValue) || 0;
   });
-  // Intento adicional con métricas estándar e-commerce (totalRevenue / purchaseRevenue).
-  try {
-    const [resp2] = await client.runReport({
-      property,
-      dateRanges: [dr],
-      metrics: [{ name: 'totalRevenue' }, { name: 'transactions' }],
-      ...(filter ? { dimensionFilter: filter } : {}),
-    });
-    const m = (resp2.rows?.[0]?.metricValues || []).map(v => Number(v.value) || 0);
-    if (m[0]) revenue = m[0];
-  } catch { /* prop sin e-commerce: ignorar */ }
   return { ...byEvent, revenue };
 }
 
@@ -327,6 +329,10 @@ async function fetchInternalTeamActivity(client, property, range) {
     },
   };
   const baseFilter = { andGroup: { expressions: [filter, publicHostFilter] } };
+  // Filtro auxiliar para diagnóstico: solo hostname público, SIN filtrar por traffic_type.
+  // Sirve para detectar el caso en que GA4 ve sesiones del sitio pero ninguna queda
+  // marcada como interna (=> Nidux no está mandando el flag).
+  const publicOnlyFilter = publicHostFilter;
   const dr = parseDateRange(range);
   const prev = getPreviousRange(range);
 
@@ -413,6 +419,37 @@ async function fetchInternalTeamActivity(client, property, range) {
     'today':1,'yesterday':1,'7d':7,'14d':14,'28d':28,'30d':30,'90d':90,'this_month':30,
   }[String(range || '7d').toLowerCase()] || 7;
 
+  // Diagnóstico: cuántas sesiones totales tuvo el sitio público en este período
+  // (sin filtrar por internal). Permite detectar configuración rota de Nidux:
+  // si hay muchas sesiones en el sitio pero 0 internas, el snippet no está corriendo.
+  let publicTotalSessions = 0;
+  let publicProductSessions = 0;
+  try {
+    const [pubResp] = await client.runReport({
+      property,
+      dateRanges: [dr],
+      metrics: [{ name: 'sessions' }],
+      dimensionFilter: publicOnlyFilter,
+    });
+    publicTotalSessions = Number(pubResp.rows?.[0]?.metricValues?.[0]?.value) || 0;
+
+    // Sesiones públicas que tocaron alguna /products/ — sin filtrar por internal.
+    const [pubProdResp] = await client.runReport({
+      property,
+      dateRanges: [dr],
+      metrics: [{ name: 'sessions' }],
+      dimensionFilter: {
+        andGroup: {
+          expressions: [
+            publicOnlyFilter,
+            { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'CONTAINS', value: '/products/', caseSensitive: false } } },
+          ],
+        },
+      },
+    });
+    publicProductSessions = Number(pubProdResp.rows?.[0]?.metricValues?.[0]?.value) || 0;
+  } catch { /* si falla, dejamos en 0 */ }
+
   return {
     summary: {
       total_searches: totalSessions,
@@ -420,6 +457,10 @@ async function fetchInternalTeamActivity(client, property, range) {
       unique_products: top.length,
       avg_per_day: days ? totalSessions / days : 0,
       peak_hour: peakHour ? Number(peakHour[0]) : null,
+      // Diagnóstico para detectar config rota.
+      public_total_sessions: publicTotalSessions,
+      public_product_sessions: publicProductSessions,
+      internal_pct: publicTotalSessions ? (totalSessions / publicTotalSessions) * 100 : 0,
     },
     top_products: top,
     heatmap,
