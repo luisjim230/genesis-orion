@@ -173,25 +173,19 @@ async function fetchTrafficSources(client, property, range, traffic) {
 async function fetchConversions(client, property, range, traffic) {
   const filter = buildTrafficFilter(traffic);
   const dr = parseDateRange(range);
-  // Filtramos por nombre de evento (add_to_cart | begin_checkout | purchase) Y exigimos
-  // que vengan del hostname del sitio público (depositojimenezcr.com). Esto evita contar:
-  //   1) eventos disparados desde SOL (sol.depositojimenez.com),
-  //   2) datos importados a GA4 desde sistemas offline (POS, ERP) que no tienen hostName web.
+  // Nota: no filtramos por hostName porque el checkout de Nidux suele correr en
+  // un subdominio propio (ej: checkout.nidux.com). Los eventos `purchase` se
+  // disparan ahí, no en depositojimenezcr.com. Confiamos en que GA4 solo recibe
+  // estos eventos del flujo web — NEO (POS) no manda nada a GA4.
   const eventFilter = {
     filter: {
       fieldName: 'eventName',
       inListFilter: { values: ['add_to_cart', 'begin_checkout', 'purchase'], caseSensitive: false },
     },
   };
-  const publicHostFilter = {
-    filter: {
-      fieldName: 'hostName',
-      stringFilter: { matchType: 'CONTAINS', value: 'depositojimenezcr.com', caseSensitive: false },
-    },
-  };
-  const expressions = [eventFilter, publicHostFilter];
-  if (filter) expressions.unshift(filter);
-  const dimensionFilter = { andGroup: { expressions } };
+  const dimensionFilter = filter
+    ? { andGroup: { expressions: [filter, eventFilter] } }
+    : eventFilter;
 
   const [resp] = await client.runReport({
     property,
@@ -210,11 +204,20 @@ async function fetchConversions(client, property, range, traffic) {
   rows.forEach(r => {
     const ev = r.eventName;
     if (ev in byEvent) byEvent[ev] = Number(r.eventCount) || 0;
-    // Revenue = SUMA del eventValue de los eventos `purchase` reales del sitio.
-    // Deliberadamente NO usamos la métrica `totalRevenue` de GA4 porque puede incluir
-    // ingresos importados offline que no representan compras hechas en la web.
     if (ev === 'purchase') revenue += Number(r.eventValue) || 0;
   });
+  // Si la propiedad tiene e-commerce, totalRevenue suele ser más preciso
+  // que sumar eventValue (incluye refunds, items con descuento, etc.).
+  try {
+    const [resp2] = await client.runReport({
+      property,
+      dateRanges: [dr],
+      metrics: [{ name: 'totalRevenue' }, { name: 'transactions' }],
+      ...(filter ? { dimensionFilter: filter } : {}),
+    });
+    const m = (resp2.rows?.[0]?.metricValues || []).map(v => Number(v.value) || 0);
+    if (m[0]) revenue = m[0];
+  } catch { /* prop sin e-commerce: ignorar */ }
   return { ...byEvent, revenue };
 }
 

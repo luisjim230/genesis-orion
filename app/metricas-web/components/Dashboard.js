@@ -268,9 +268,8 @@ function ConversionsSection({ dateRange }) {
     <div style={S.card}>
       <div style={S.sectionTitle}>🎯 Conversiones del sitio</div>
       <div style={S.sectionCap}>
-        Solo cuenta eventos disparados por el sitio depositojimenezcr.com (cuando un cliente agrega al carrito,
-        inicia checkout o completa la compra <em>en la web</em>). Las ventas en local físico, por teléfono o
-        WhatsApp <strong>no aparecen acá</strong> — para esas, ver NEO.
+        Compras hechas <em>online</em> a través del checkout de Nidux. Las ventas en local físico,
+        por teléfono o WhatsApp <strong>no aparecen acá</strong> — para esas, ver NEO.
       </div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
       <FallbackBanner data={data} />
