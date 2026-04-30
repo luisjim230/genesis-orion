@@ -89,6 +89,7 @@ function DiagnosticBanner({ summary }) {
   const publicTotal = Number(summary.public_total_sessions) || 0;
   const publicProducts = Number(summary.public_product_sessions) || 0;
   const productsConsulted = Number(summary.unique_products) || 0;
+  const searchesConsulted = Number(summary.unique_search_terms) || 0;
   const internalPct = Number(summary.internal_pct) || 0;
   // Si el caché es de antes del deploy de hoy, no tiene los campos de diagnóstico.
   // En ese caso no mostramos banner — esperamos a que se refresque el caché.
@@ -130,18 +131,19 @@ function DiagnosticBanner({ summary }) {
     );
   }
 
-  // Caso C: hay internas pero nadie tocó productos.
-  if (internal > 0 && productsConsulted === 0 && publicProducts > 0) {
+  // Caso C: hay internas pero NI búsquedas NI productos. Raro — significa que
+  // el equipo solo navegó home o categorías, sin buscar nada ni abrir fichas.
+  if (internal > 0 && productsConsulted === 0 && searchesConsulted === 0 && publicProducts > 0) {
     return (
       <div style={{ ...S.card, background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.4)' }}>
         <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a5d10', marginBottom: 6 }}>
-          ⚠️ {fmtInt(internal)} sesiones internas — pero ninguna abrió ficha de producto
+          ⚠️ {fmtInt(internal)} sesiones internas — pero ni búsquedas ni fichas de producto
         </div>
         <div style={{ fontSize: '0.85rem', color: '#7a5d10', lineHeight: 1.5 }}>
-          El equipo entró al sitio pero solo navegó la home/categorías. Para que aparezcan acá los productos
-          consultados, el empleado tiene que abrir <strong>la URL específica del producto</strong>{' '}
-          (ej: <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 4px', borderRadius: 3 }}>depositojimenezcr.com/products/5410/...</code>).
-          En cambio el sitio público sí recibió {fmtInt(publicProducts)} sesiones de clientes en fichas de producto.
+          El equipo entró al sitio pero solo navegó home/categorías, sin usar el buscador ni abrir
+          fichas individuales. Para que aparezcan datos útiles acá, el empleado tiene que usar
+          el buscador de Nidux (lo que más sirve para captar la pregunta del cliente WhatsApp) o
+          abrir la URL directa de un producto.
         </div>
       </div>
     );
@@ -200,18 +202,23 @@ export default function EquipoWhatsApp({ dateRange }) {
 
       {data ? (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <MetricCard label="Consultas al sitio" value={fmtInt(data.summary?.total_searches)} sub="sesiones internas en sitio público" />
-            <MetricCard label="Productos únicos" value={fmtInt(data.summary?.unique_products)} sub="distintos consultados" color={GOLD} />
-            <MetricCard label="Promedio por día" value={(Number(data.summary?.avg_per_day) || 0).toFixed(1)} sub="consultas internas/día" color={BLUE} />
-            <MetricCard label="Hora pico" value={data.summary?.peak_hour != null ? `${data.summary.peak_hour}:00` : '—'} sub="del día con más actividad" color={GREEN} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+            <MetricCard label="Consultas al sitio" value={fmtInt(data.summary?.total_searches)} sub="sesiones internas" />
+            <MetricCard label="🔍 Búsquedas" value={fmtInt(data.summary?.unique_search_terms)} sub="términos distintos buscados" color={TEAL} />
+            <MetricCard label="📦 Fichas abiertas" value={fmtInt(data.summary?.unique_products)} sub="productos distintos" color={GOLD} />
+            <MetricCard label="Promedio por día" value={(Number(data.summary?.avg_per_day) || 0).toFixed(1)} sub="consultas/día" color={BLUE} />
+            <MetricCard label="Hora pico" value={data.summary?.peak_hour != null ? `${data.summary.peak_hour}:00` : '—'} sub="día con más actividad" color={GREEN} />
           </div>
 
           <div style={S.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <div style={S.sectionTitle}>🔎 Top 30 productos consultados por el equipo</div>
-                <div style={S.sectionCap}>Ordenados por veces consultados. Cruzá con NEO para detectar consultas no convertidas.</div>
+                <div style={S.sectionTitle}>📦 Top 30 fichas de producto abiertas por el equipo</div>
+                <div style={S.sectionCap}>
+                  Solo cuenta cuando el empleado abre la <strong>URL específica</strong> del producto
+                  (<code style={{ background: 'rgba(0,0,0,0.05)', padding: '0 4px', borderRadius: 3 }}>/products/...</code>).
+                  Para ver términos buscados sin abrir ficha, mirá la sección Top búsquedas abajo.
+                </div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'rgba(0,0,0,0.6)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={filterUnsold} onChange={e => setFilterUnsold(e.target.checked)} />
@@ -246,6 +253,55 @@ export default function EquipoWhatsApp({ dateRange }) {
                         <td style={{ ...td(), textAlign: 'right', fontWeight: 700 }}>{fmtInt(p.views)}</td>
                         <td style={{ ...td(), textAlign: 'right', color: 'rgba(0,0,0,0.55)' }}>{(Number(p.pct_total) || 0).toFixed(1)}%</td>
                         <td style={{ ...td(), textAlign: 'right' }}>{trendBadge(p.trend)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div style={S.card}>
+            <div style={S.sectionTitle}>🔍 Top 30 búsquedas del equipo</div>
+            <div style={S.sectionCap}>
+              Términos que el equipo escribió en el buscador del sitio para responder consultas WhatsApp.
+              Esta es la <strong>señal más directa</strong> de qué está preguntando el mercado: cada búsqueda = una pregunta real.
+            </div>
+            {(data.top_searches || []).length === 0 ? (
+              <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem', marginTop: 12 }}>
+                Todavía no hay búsquedas internas registradas. Cuando el equipo use el buscador de
+                <strong> depositojimenezcr.com</strong> (URLs tipo <code style={{ background: 'rgba(0,0,0,0.05)', padding: '0 4px', borderRadius: 3 }}>/advanced_search?buscar=...</code>),
+                aparecen acá los términos rankeados.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(0,0,0,0.04)' }}>
+                      <th style={th()}>#</th>
+                      <th style={th()}>Término buscado</th>
+                      <th style={{ ...th(), textAlign: 'right' }}>Veces</th>
+                      <th style={{ ...th(), textAlign: 'right' }}>Sesiones</th>
+                      <th style={{ ...th(), textAlign: 'right' }}>% del total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.top_searches || []).map((s, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                        <td style={td()}>{i + 1}</td>
+                        <td style={td()}>
+                          <a
+                            href={`https://depositojimenezcr.com/advanced_search?buscar=${encodeURIComponent(s.term)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: 'rgba(0,0,0,0.85)', textDecoration: 'none', fontWeight: 500 }}
+                          >
+                            {s.term}
+                          </a>
+                        </td>
+                        <td style={{ ...td(), textAlign: 'right', fontWeight: 700 }}>{fmtInt(s.views)}</td>
+                        <td style={{ ...td(), textAlign: 'right', color: 'rgba(0,0,0,0.55)' }}>{fmtInt(s.sessions)}</td>
+                        <td style={{ ...td(), textAlign: 'right', color: 'rgba(0,0,0,0.55)' }}>{(Number(s.pct_total) || 0).toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
