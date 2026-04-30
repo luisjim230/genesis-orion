@@ -453,11 +453,54 @@ async function fetchInternalTeamActivity(client, property, range) {
     publicProductSessions = Number(pubProdResp.rows?.[0]?.metricValues?.[0]?.value) || 0;
   } catch { /* si falla, dejamos en 0 */ }
 
+  // Top BÚSQUEDAS internas (acá está la señal real de demanda WhatsApp: el equipo
+  // entra al sitio y busca el término que el cliente le preguntó). Usamos
+  // pageLocation para tener acceso al `?buscar=...` que está en el query string.
+  const searchPathFilter = {
+    filter: {
+      fieldName: 'pagePath',
+      stringFilter: { matchType: 'CONTAINS', value: '/advanced_search', caseSensitive: false },
+    },
+  };
+  const searchDimensionFilter = { andGroup: { expressions: [filter, publicHostFilter, searchPathFilter] } };
+  let topSearches = [];
+  try {
+    const [searchResp] = await client.runReport({
+      property,
+      dateRanges: [dr],
+      dimensions: [{ name: 'pageLocation' }],
+      metrics: [{ name: 'screenPageViews' }, { name: 'sessions' }],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+      limit: 200, // levantamos 200 URLs y agrupamos por término después
+      dimensionFilter: searchDimensionFilter,
+    });
+    const grouped = {};
+    rowsToObjects(searchResp).forEach(r => {
+      const url = r.pageLocation || '';
+      const m = url.match(/[?&]buscar=([^&#]+)/i);
+      if (!m) return;
+      let term;
+      try { term = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim(); }
+      catch { term = m[1]; }
+      if (!term) return;
+      const key = term.toLowerCase();
+      if (!grouped[key]) grouped[key] = { term, views: 0, sessions: 0 };
+      grouped[key].views += Number(r.screenPageViews) || 0;
+      grouped[key].sessions += Number(r.sessions) || 0;
+    });
+    topSearches = Object.values(grouped)
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 30);
+    const totalSearchViews = topSearches.reduce((s, x) => s + x.views, 0);
+    topSearches.forEach(x => { x.pct_total = totalSearchViews ? (x.views / totalSearchViews) * 100 : 0; });
+  } catch { /* si falla, dejamos array vacío */ }
+
   return {
     summary: {
       total_searches: totalSessions,
       total_pageviews: totalPageviews,
       unique_products: top.length,
+      unique_search_terms: topSearches.length,
       avg_per_day: days ? totalSessions / days : 0,
       peak_hour: peakHour ? Number(peakHour[0]) : null,
       // Diagnóstico para detectar config rota.
@@ -466,6 +509,7 @@ async function fetchInternalTeamActivity(client, property, range) {
       internal_pct: publicTotalSessions ? (totalSessions / publicTotalSessions) * 100 : 0,
     },
     top_products: top,
+    top_searches: topSearches,
     heatmap,
   };
 }
