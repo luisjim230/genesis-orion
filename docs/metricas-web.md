@@ -94,51 +94,36 @@ en cada page load.
 
 ### En depositojimenezcr.com (Nidux)
 
-Hay dos opciones según lo que permita Nidux:
+> **El snippet exacto está en la tab Configuración del módulo, con botón "📋 Copiar snippet".**
+> Esa es la fuente de verdad. Acá explicamos qué hace y por qué.
 
-**Opción A — Snippet custom (preferida).** Pegá este bloque en el header del sitio Nidux,
-ANTES del tag de GA4:
+Pegá el snippet en el header del sitio Nidux, **antes** del tag de GA4. Hace dos cosas:
 
-```html
-<script>
-  (function(){
-    var isInternal = false;
-    try {
-      isInternal = localStorage.getItem('dj_internal_traffic') === 'true';
-      if (!isInternal) {
-        isInternal = /(?:^|; )dj_internal_traffic=true/.test(document.cookie);
-      }
-    } catch (e) {}
-    window.__dj_traffic_type = isInternal ? 'internal' : null;
-  })();
-</script>
-```
+1. **`gtag('set', { traffic_type: 'internal' })`** — aplica el parámetro a todos los eventos
+   GA4 que dispare Nidux después. Funciona para cualquier instalación gtag.js estándar
+   sin depender de modificar el `gtag('config')` que usa Nidux.
 
-Y luego en la inicialización de gtag:
+2. **URL parameter** — empuja `?traffic_type=internal` a la URL de la página actual usando
+   `history.replaceState`. Así, aunque Nidux no respete el `gtag('set')` (caso raro pero
+   posible si la página carga el script en otro orden), GA4 puede detectar el flag con una
+   *Internal Traffic Rule* basada en `page_location`.
 
-```html
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-237EPSVR3Z"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  var cfg = { send_page_view: true };
-  if (window.__dj_traffic_type === 'internal') cfg.traffic_type = 'internal';
-  gtag('config', 'G-237EPSVR3Z', cfg);
-</script>
-```
+Si el navegador no está marcado como interno, el snippet no hace nada y el visitante
+queda registrado como cliente externo normal.
 
-**Opción B — URL parameter.** Si Nidux no permite scripts:
-1. En `/marcar-interno`, después de marcar, redirigimos al usuario a
-   `https://depositojimenezcr.com/?traffic_type=internal` (ya hecho).
-2. En GA4 Admin > Data Streams > Web > Configure tag settings > Define internal traffic,
-   crear una regla "Match all of the following: Page URL contains `traffic_type=internal`".
-3. Esto sirve solo para esa primera visita post-marcado. Para visitas siguientes el flag se
-   mantiene en localStorage del navegador, pero como Nidux no lo lee, no se aplica.
+#### Backup GA4 — Internal Traffic Rule (recomendado)
 
-> **Decisión adoptada:** se usa la opción A si Nidux permite scripts. Si no, se cae a la B y
-> se le pide a los empleados que abran el sitio desde el botón "Ir al sitio" de
-> `/marcar-interno` (ese botón inyecta el parámetro en URL). Documentar internamente cuál se eligió.
+Aunque pegues el snippet, configurá también esta regla en GA4 como red de seguridad:
+
+1. GA4 Admin → Data Streams → seleccionar el stream del sitio.
+2. Configure tag settings → *Define internal traffic*.
+3. Crear regla:
+   - **Match type**: `traffic_type` *contains* `internal`
+   - **Value**: `internal`
+4. Guardar.
+
+Esa regla garantiza que cualquier sesión con `traffic_type=internal` en la URL o en los
+parámetros queda marcada como interna por GA4 — sin depender del snippet.
 
 ## Procedimiento para que un empleado marque su dispositivo
 

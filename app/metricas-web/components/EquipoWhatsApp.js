@@ -78,6 +78,93 @@ function trendBadge(t) {
   return <span style={{ color: 'rgba(0,0,0,0.4)' }}>→ estable</span>;
 }
 
+// Banner de diagnóstico que explica por qué no hay datos cuando los hay en el
+// sitio público pero ninguno marcado como interno. Cubre 3 casos:
+//   A) GA4 no ve NADA del sitio (raro: GA4_PROPERTY_ID mal o el sitio no manda).
+//   B) GA4 ve sesiones del sitio pero 0 internas → Nidux no manda traffic_type.
+//   C) Hay sesiones internas pero nadie tocó /products/ → equipo no abrió fichas.
+function DiagnosticBanner({ summary }) {
+  const internal = summary.total_searches || 0;
+  const publicTotal = summary.public_total_sessions || 0;
+  const publicProducts = summary.public_product_sessions || 0;
+  const productsConsulted = summary.unique_products || 0;
+
+  // Caso A: GA4 no detecta ni el sitio público.
+  if (publicTotal === 0 && internal === 0) {
+    return (
+      <div style={{ ...S.card, background: 'rgba(192,64,64,0.08)', border: '1px solid rgba(192,64,64,0.3)' }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a1d1d', marginBottom: 6 }}>🚨 GA4 no detecta tráfico del sitio público</div>
+        <div style={{ fontSize: '0.85rem', color: '#7a1d1d', lineHeight: 1.5 }}>
+          GA4 no está recibiendo eventos desde <strong>depositojimenezcr.com</strong> en este período.
+          Esto puede ser: GA4_PROPERTY_ID mal configurado, o que el tag G-237EPSVR3Z no esté activo en Nidux.
+          Verificar en GA4 → Realtime cuando alguien abra el sitio.
+        </div>
+      </div>
+    );
+  }
+
+  // Caso B: hay tráfico público pero 0 internas → snippet de Nidux no funciona.
+  if (publicTotal > 0 && internal === 0) {
+    return (
+      <div style={{ ...S.card, background: 'rgba(192,64,64,0.08)', border: '1px solid rgba(192,64,64,0.3)' }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a1d1d', marginBottom: 6 }}>
+          🚨 GA4 ve {fmtInt(publicTotal)} sesiones del sitio pero 0 marcadas como internas
+        </div>
+        <div style={{ fontSize: '0.85rem', color: '#7a1d1d', lineHeight: 1.5 }}>
+          Nidux no está mandando el flag <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 4px', borderRadius: 3 }}>traffic_type=internal</code>.
+          Las consultas del equipo se están contando como tráfico orgánico de clientes (eso te ensucia los datos).
+          <div style={{ marginTop: 8, padding: 10, background: 'rgba(255,255,255,0.5)', borderRadius: 8 }}>
+            <strong>Para arreglarlo:</strong> ir a la tab <strong>Configuración</strong> de este módulo → copiar el snippet
+            actualizado de Nidux → pegarlo en el panel admin de Nidux <strong>antes</strong> del tag de GA4 → guardar.
+            Después un empleado tiene que volver a abrir <a href="/marcar-interno" target="_blank" rel="noreferrer" style={{ color: '#0066cc' }}>/marcar-interno</a> para
+            re-aplicar el flag.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso C: hay internas pero nadie tocó productos.
+  if (internal > 0 && productsConsulted === 0 && publicProducts > 0) {
+    return (
+      <div style={{ ...S.card, background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.4)' }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a5d10', marginBottom: 6 }}>
+          ⚠️ {fmtInt(internal)} sesiones internas — pero ninguna abrió ficha de producto
+        </div>
+        <div style={{ fontSize: '0.85rem', color: '#7a5d10', lineHeight: 1.5 }}>
+          El equipo entró al sitio pero solo navegó la home/categorías. Para que aparezcan acá los productos
+          consultados, el empleado tiene que abrir <strong>la URL específica del producto</strong>{' '}
+          (ej: <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 4px', borderRadius: 3 }}>depositojimenezcr.com/products/5410/...</code>).
+          En cambio el sitio público sí recibió {fmtInt(publicProducts)} sesiones de clientes en fichas de producto.
+        </div>
+      </div>
+    );
+  }
+
+  // Caso especial: nada en absoluto (raro porque ya cubierto arriba).
+  if (internal === 0) {
+    return (
+      <div style={{ ...S.card, background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.4)' }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a5d10', marginBottom: 6 }}>⚠️ Aún no hay actividad interna</div>
+        <div style={{ fontSize: '0.85rem', color: '#7a5d10', lineHeight: 1.5 }}>
+          Cada empleado tiene que abrir <a href="/marcar-interno" target="_blank" rel="noreferrer" style={{ color: '#0066cc', textDecoration: 'underline' }}>sol.depositojimenez.com/marcar-interno</a> una
+          vez por navegador, y después navegar <strong>depositojimenezcr.com</strong> para que la actividad quede registrada acá.
+        </div>
+      </div>
+    );
+  }
+
+  // Todo bien: pequeño badge con el porcentaje interno detectado.
+  return (
+    <div style={{ ...S.card, background: 'rgba(46,125,79,0.06)', border: '1px solid rgba(46,125,79,0.25)', padding: '10px 14px' }}>
+      <div style={{ fontSize: '0.85rem', color: '#1f5e3a', lineHeight: 1.5 }}>
+        ✓ Configuración OK — <strong>{summary.internal_pct.toFixed(1)}%</strong> del tráfico del sitio se detecta
+        como equipo interno ({fmtInt(internal)} de {fmtInt(publicTotal)} sesiones).
+      </div>
+    </div>
+  );
+}
+
 export default function EquipoWhatsApp({ dateRange }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -103,19 +190,7 @@ export default function EquipoWhatsApp({ dateRange }) {
 
       {error && <div style={{ ...S.card, color: RED }}>⚠️ {error}</div>}
 
-      {data && data.summary.total_searches === 0 && (
-        <div style={{ ...S.card, background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.4)' }}>
-          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#7a5d10', marginBottom: 6 }}>⚠️ Aún no hay datos en esta tab</div>
-          <div style={{ fontSize: '0.85rem', color: '#7a5d10', lineHeight: 1.5 }}>
-            Para que aparezcan los productos consultados por el equipo:
-            <ol style={{ marginTop: 8, marginBottom: 4, paddingLeft: 20 }}>
-              <li>Cada empleado abre <a href="/marcar-interno" target="_blank" rel="noreferrer" style={{ color: '#0066cc', textDecoration: 'underline' }}>sol.depositojimenez.com/marcar-interno</a> en su navegador y completa el formulario.</li>
-              <li>Después navega <strong>depositojimenezcr.com</strong> normalmente para responder consultas de WhatsApp.</li>
-            </ol>
-            Las visitas en <strong>SOL</strong> (este sistema interno) NO cuentan acá — solo navegación al sitio público desde dispositivos marcados.
-          </div>
-        </div>
-      )}
+      {data && <DiagnosticBanner summary={data.summary} />}
 
       {data ? (
         <>

@@ -122,6 +122,11 @@ export const fmtSecs = (s) => {
 export const fmtUSD = (n) =>
   '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+// Formato de colones costarricenses para revenue/ventas (la propiedad GA4 está
+// configurada en CRC). Usamos el símbolo ₡ y locale es-CR.
+export const fmtCRC = (n) =>
+  '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
 export const SOURCE_OPTIONS = [
   { key: 'facebook',  label: 'Facebook',   color: '#1877F2', emoji: '📘' },
   { key: 'instagram', label: 'Instagram',  color: '#E1306C', emoji: '📷' },

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { S, GOLD, GREEN, RED, BLUE, AMBER, fmtInt, fmtPct, fmtSecs, fmtUSD } from './styles';
+import { S, GOLD, GREEN, RED, BLUE, AMBER, fmtInt, fmtPct, fmtSecs, fmtCRC } from './styles';
 
 async function ga4(metric_type, date_range, traffic_filter = 'external') {
   const params = new URLSearchParams({ metric_type, date_range, traffic_filter });
@@ -266,19 +266,32 @@ function ConversionsSection({ dateRange }) {
 
   return (
     <div style={S.card}>
-      <div style={S.sectionTitle}>🎯 Conversiones</div>
-      <div style={S.sectionCap}>Eventos clave del embudo de compra.</div>
+      <div style={S.sectionTitle}>🎯 Conversiones del sitio</div>
+      <div style={S.sectionCap}>
+        Solo cuenta eventos disparados por el sitio depositojimenezcr.com (cuando un cliente agrega al carrito,
+        inicia checkout o completa la compra <em>en la web</em>). Las ventas en local físico, por teléfono o
+        WhatsApp <strong>no aparecen acá</strong> — para esas, ver NEO.
+      </div>
       {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
       <FallbackBanner data={data} />
       {!data ? (
         <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <MetricCard label="🛒 Add to Cart" value={fmtInt(data.add_to_cart)} />
-          <MetricCard label="🧾 Iniciaron checkout" value={fmtInt(data.begin_checkout)} />
-          <MetricCard label="✅ Compras" value={fmtInt(data.purchase)} />
-          <MetricCard label="💰 Revenue" value={fmtUSD(data.revenue)} />
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <MetricCard label="🛒 Add to Cart" value={fmtInt(data.add_to_cart)} hint="agregaron al carrito en la web" />
+            <MetricCard label="🧾 Iniciaron checkout" value={fmtInt(data.begin_checkout)} hint="empezaron a pagar en la web" />
+            <MetricCard label="✅ Compras web" value={fmtInt(data.purchase)} hint="completadas en la web" />
+            <MetricCard label="💰 Ingresos web" value={fmtCRC(data.revenue)} hint="suma de compras web (colones)" />
+          </div>
+          {data.purchase === 0 && data.revenue > 0 && (
+            <div style={{ marginTop: 12, background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.4)', color: '#7a5d10', padding: '10px 14px', borderRadius: 10, fontSize: '0.82rem', lineHeight: 1.5 }}>
+              ⚠️ Hay revenue registrado pero 0 compras. Esto suele significar que GA4 está
+              recibiendo datos importados de otro sistema (POS, ERP) en lugar de eventos
+              <code style={{ background: 'rgba(0,0,0,0.05)', padding: '0 4px', borderRadius: 3 }}>purchase</code> reales del sitio. Revisar la fuente en GA4 Admin → Data Import.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
