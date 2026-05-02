@@ -575,8 +575,9 @@ export default function KronosTab({ calc, transitoMap }) {
                 <button onClick={() => setEditando(null)} style={{ padding: '3px 6px', background: '#eee', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.72rem' }}>✕</button>
               </div>
             ) : (
-              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 8); setEditNotas(lt?.notas || ''); setEditTipo(lt?.tipo || 'nacional'); }} style={{ fontSize: '0.72rem', color: 'var(--teal)', background: 'none', border: '1px solid var(--teal)', borderRadius: 6, cursor: 'pointer', padding: '3px 8px', whiteSpace: 'nowrap' }}>
-                ⏱ {lt?.lead_time_dias ? `${lt.lead_time_dias}d` : 'Lead time'}
+              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 8); setEditNotas(lt?.notas || ''); setEditTipo(lt?.tipo || 'nacional'); }} style={{ fontSize: '0.72rem', color: 'var(--teal)', background: 'none', border: '1px solid var(--teal)', borderRadius: 6, cursor: 'pointer', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span>⚙️</span>
+                <span>{lt?.lead_time_dias ? `Configurar (${lt.lead_time_dias}d)` : 'Configurar'}</span>
               </button>
             )}
           </div>
