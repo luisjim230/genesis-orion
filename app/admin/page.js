@@ -27,6 +27,8 @@ const MODULOS = [
   { key:'metricas-web', label:'Métricas Web',    emoji:'📊' },
   { key:'ponderacion',  label:'Ponderación',     emoji:'⚖️' },
   { key:'comercial',    label:'Comercial / Ventas', emoji:'💼' },
+  { key:'seguimiento-proformas', label:'Seguimiento de Proformas', emoji:'📋' },
+  { key:'aduana',       label:'Aduana · TLC China', emoji:'🛃' },
   { key:'reportes',     label:'Reportes',        emoji:'📊' },
   { key:'finanzas',     label:'Finanzas',        emoji:'💰' },
   { key:'cif',          label:'CIF',             emoji:'📦' },
@@ -50,7 +52,7 @@ const PERMISOS_ROL = {
   laura:     ['dashboard','cajas-aurora'],
   admin:     MODULOS.map(m => m.key),
   bodega:    ['dashboard','inventario','trazabilidad','rotacion','kronos','contenedores'],
-  ventas:    ['dashboard','trazabilidad','comercial','reportes'],
+  ventas:    ['dashboard','trazabilidad','comercial','seguimiento-proformas','reportes'],
   finanzas:  ['cajas-aurora','entregas','dashboard','contenedores','mercado','ponderacion','finanzas'],
   logistica: ['dashboard','contenedores','cif','mercado','reportes'],
 }
