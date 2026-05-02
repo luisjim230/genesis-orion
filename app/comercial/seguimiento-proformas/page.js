@@ -493,22 +493,132 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
   );
 }
 
-// ── Tab: Configuración ──────────────────────────────────────────────────────
+// ── Tab: Configuración (editable) ───────────────────────────────────────────
 function TabConfig() {
   const [tiers, setTiers] = useState(null);
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('hermes_config_tiers').select('*').order('orden');
-      setTiers(data || []);
-    })();
+  const [editId, setEditId] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
+  const [showNuevo, setShowNuevo] = useState(false);
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase.from('hermes_config_tiers').select('*').order('orden');
+    setTiers(data || []);
   }, []);
 
+  useEffect(() => { cargar(); }, [cargar]);
+
+  function flash(setter, msg, ms = 3000) {
+    setter(msg);
+    setTimeout(() => setter(null), ms);
+  }
+
+  function startEdit(t) {
+    setEditId(t.id);
+    setDraft({
+      nombre: t.nombre || '',
+      color_hex: t.color_hex || '#888888',
+      monto_min: t.monto_min ?? 0,
+      monto_max: t.monto_max ?? '',
+      seguimientos_req: t.seguimientos_req ?? 0,
+      sla_dias: Array.isArray(t.sla_dias) ? t.sla_dias.join(',') : '',
+      orden: t.orden ?? 0,
+    });
+    setErrMsg(null);
+  }
+
+  function cancelarEdit() {
+    setEditId(null);
+    setDraft(null);
+    setErrMsg(null);
+  }
+
+  function parseSlaDias(s) {
+    if (!s) return [];
+    return String(s).split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  }
+
+  async function guardarEdit(id) {
+    setErrMsg(null);
+    if (!draft.nombre.trim()) { setErrMsg('Nombre obligatorio.'); return; }
+    const update = {
+      nombre: draft.nombre.trim(),
+      color_hex: draft.color_hex,
+      monto_min: Number(draft.monto_min) || 0,
+      monto_max: draft.monto_max === '' || draft.monto_max === null ? null : Number(draft.monto_max),
+      seguimientos_req: parseInt(draft.seguimientos_req, 10) || 0,
+      sla_dias: parseSlaDias(draft.sla_dias),
+      orden: parseInt(draft.orden, 10) || 0,
+    };
+    const { error } = await supabase.from('hermes_config_tiers').update(update).eq('id', id);
+    if (error) { setErrMsg(error.message); return; }
+    cancelarEdit();
+    await cargar();
+    try { await supabase.rpc('refresh_hermes_panel'); } catch {}
+    flash(setOkMsg, '✓ Tier actualizado');
+  }
+
+  async function eliminar(t) {
+    if (!confirm(`¿Eliminar tier "${t.nombre}"? Las proformas en ese tier quedarán sin clasificar.`)) return;
+    const { error } = await supabase.from('hermes_config_tiers').delete().eq('id', t.id);
+    if (error) { flash(setErrMsg, error.message); return; }
+    await cargar();
+    try { await supabase.rpc('refresh_hermes_panel'); } catch {}
+    flash(setOkMsg, '✓ Tier eliminado');
+  }
+
+  async function crearNuevo() {
+    setErrMsg(null);
+    if (!draft.nombre.trim()) { setErrMsg('Nombre obligatorio.'); return; }
+    const insert = {
+      nombre: draft.nombre.trim(),
+      color_hex: draft.color_hex,
+      monto_min: Number(draft.monto_min) || 0,
+      monto_max: draft.monto_max === '' || draft.monto_max === null ? null : Number(draft.monto_max),
+      seguimientos_req: parseInt(draft.seguimientos_req, 10) || 0,
+      sla_dias: parseSlaDias(draft.sla_dias),
+      orden: parseInt(draft.orden, 10) || (tiers.length + 1),
+    };
+    const { error } = await supabase.from('hermes_config_tiers').insert(insert);
+    if (error) { setErrMsg(error.message); return; }
+    setShowNuevo(false);
+    setDraft(null);
+    await cargar();
+    try { await supabase.rpc('refresh_hermes_panel'); } catch {}
+    flash(setOkMsg, '✓ Tier creado');
+  }
+
+  function abrirNuevo() {
+    setShowNuevo(true);
+    setEditId(null);
+    setDraft({
+      nombre: '',
+      color_hex: '#888888',
+      monto_min: 0,
+      monto_max: '',
+      seguimientos_req: 1,
+      sla_dias: '3,7,14',
+      orden: (tiers?.length || 0) + 1,
+    });
+    setErrMsg(null);
+  }
+
   if (tiers === null) return <Spinner />;
+
+  const inputCell = { padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: '0.84rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' };
 
   return (
     <div>
       <div style={S.card}>
-        <h3 style={{ margin: '0 0 14px', fontSize: '1rem', fontWeight: 700, color: C.text }}>Configuración de tiers</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: C.text }}>Configuración de tiers</h3>
+          <button onClick={abrirNuevo} disabled={showNuevo || editId} style={S.btnPrimary}>+ Nuevo tier</button>
+        </div>
+
+        {okMsg && <div style={{ background: '#d1fae5', color: '#065f46', padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', marginBottom: 10 }}>{okMsg}</div>}
+        {errMsg && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', marginBottom: 10 }}>{errMsg}</div>}
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -516,12 +626,34 @@ function TabConfig() {
                 <th style={S.th}>Tier</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Monto Mín</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Monto Máx</th>
-                <th style={{ ...S.th, textAlign: 'center' }}>Seguimientos</th>
-                <th style={S.th}>SLA días</th>
+                <th style={{ ...S.th, textAlign: 'center' }}>Seguim.</th>
+                <th style={S.th}>SLA días (CSV)</th>
+                <th style={{ ...S.th, textAlign: 'center' }}>Orden</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {tiers.map(t => (
+              {tiers.map(t => editId === t.id ? (
+                <tr key={t.id} style={{ background: '#fff7e0' }}>
+                  <td style={S.td}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input type="color" value={draft.color_hex} onChange={e => setDraft({ ...draft, color_hex: e.target.value })}
+                        style={{ width: 32, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer' }} />
+                      <input value={draft.nombre} onChange={e => setDraft({ ...draft, nombre: e.target.value })}
+                        style={inputCell} placeholder="Nombre" />
+                    </div>
+                  </td>
+                  <td style={S.td}><input type="number" value={draft.monto_min} onChange={e => setDraft({ ...draft, monto_min: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} /></td>
+                  <td style={S.td}><input type="number" value={draft.monto_max} onChange={e => setDraft({ ...draft, monto_max: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} placeholder="∞" /></td>
+                  <td style={S.td}><input type="number" value={draft.seguimientos_req} onChange={e => setDraft({ ...draft, seguimientos_req: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
+                  <td style={S.td}><input value={draft.sla_dias} onChange={e => setDraft({ ...draft, sla_dias: e.target.value })} style={inputCell} placeholder="3,7,14" /></td>
+                  <td style={S.td}><input type="number" value={draft.orden} onChange={e => setDraft({ ...draft, orden: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
+                  <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => guardarEdit(t.id)} style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '0.78rem', marginRight: 4 }}>Guardar</button>
+                    <button onClick={cancelarEdit} style={{ ...S.btnGhost, padding: '5px 12px', fontSize: '0.78rem' }}>Cancelar</button>
+                  </td>
+                </tr>
+              ) : (
                 <tr key={t.id}>
                   <td style={S.td}><TierBadge nombre={t.nombre} color={t.color_hex} /></td>
                   <td style={{ ...S.td, textAlign: 'right', fontFamily: 'monospace' }}>{CRC(t.monto_min)}</td>
@@ -530,15 +662,44 @@ function TabConfig() {
                   </td>
                   <td style={{ ...S.td, textAlign: 'center', fontWeight: 700 }}>{t.seguimientos_req}</td>
                   <td style={{ ...S.td, fontFamily: 'monospace', color: C.muted }}>
-                    {Array.isArray(t.sla_dias) && t.sla_dias.length > 0 ? `[${t.sla_dias.join(', ')}]` : '—'}
+                    {Array.isArray(t.sla_dias) && t.sla_dias.length > 0 ? t.sla_dias.join(', ') : '—'}
+                  </td>
+                  <td style={{ ...S.td, textAlign: 'center' }}>{t.orden}</td>
+                  <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => startEdit(t)} disabled={!!editId || showNuevo}
+                      style={{ ...S.btnGhost, padding: '5px 12px', fontSize: '0.78rem', marginRight: 4 }}>Editar</button>
+                    <button onClick={() => eliminar(t)} disabled={!!editId || showNuevo}
+                      style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 8, padding: '5px 12px', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Eliminar</button>
                   </td>
                 </tr>
               ))}
+              {showNuevo && (
+                <tr style={{ background: '#e0f2fe' }}>
+                  <td style={S.td}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input type="color" value={draft.color_hex} onChange={e => setDraft({ ...draft, color_hex: e.target.value })}
+                        style={{ width: 32, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer' }} />
+                      <input value={draft.nombre} onChange={e => setDraft({ ...draft, nombre: e.target.value })}
+                        style={inputCell} placeholder="Nombre tier nuevo" />
+                    </div>
+                  </td>
+                  <td style={S.td}><input type="number" value={draft.monto_min} onChange={e => setDraft({ ...draft, monto_min: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} /></td>
+                  <td style={S.td}><input type="number" value={draft.monto_max} onChange={e => setDraft({ ...draft, monto_max: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} placeholder="∞" /></td>
+                  <td style={S.td}><input type="number" value={draft.seguimientos_req} onChange={e => setDraft({ ...draft, seguimientos_req: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
+                  <td style={S.td}><input value={draft.sla_dias} onChange={e => setDraft({ ...draft, sla_dias: e.target.value })} style={inputCell} placeholder="3,7,14" /></td>
+                  <td style={S.td}><input type="number" value={draft.orden} onChange={e => setDraft({ ...draft, orden: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
+                  <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={crearNuevo} style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '0.78rem', marginRight: 4 }}>Crear</button>
+                    <button onClick={() => { setShowNuevo(false); setDraft(null); setErrMsg(null); }}
+                      style={{ ...S.btnGhost, padding: '5px 12px', fontSize: '0.78rem' }}>Cancelar</button>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        <div style={{ marginTop: 12, fontSize: '0.78rem', color: C.muted }}>
-          Para editar tiers, modificar la tabla <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>hermes_config_tiers</code> en Supabase.
+        <div style={{ marginTop: 12, fontSize: '0.74rem', color: C.muted }}>
+          <strong>SLA días</strong>: cuántos días después de la proforma se debe hacer cada seguimiento. Ej. <code>3,7,14</code> = a los 3 días el primero, a los 7 el segundo, a los 14 el tercero. <strong>Monto Máx</strong> vacío = sin tope.
         </div>
       </div>
     </div>
@@ -556,6 +717,7 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
           <tr>
             <th style={S.th}>Estado</th>
             <th style={S.th}>#</th>
+            <th style={S.th}>Fecha</th>
             <th style={S.th}>Cliente</th>
             <th style={S.th}>Vendedor</th>
             <th style={S.th}>Tier</th>
@@ -576,6 +738,7 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
             >
               <td style={S.td}><SemaforoBadge semaforo={p.semaforo} /></td>
               <td style={{ ...S.td, fontFamily: 'monospace', fontWeight: 700 }}>{p.proforma}</td>
+              <td style={{ ...S.td, whiteSpace: 'nowrap', color: C.muted }}>{fmtFecha(p.fecha)}</td>
               <td style={{ ...S.td, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.cliente || ''}>
                 {p.cliente || '—'}
               </td>
@@ -600,12 +763,104 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
   );
 }
 
+// ── Podio de vendedores ─────────────────────────────────────────────────────
+function PodioVendedores({ filasGanadas, fechaDesde, fechaHasta }) {
+  const [segPorVendedor, setSegPorVendedor] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      let q = supabase.from('hermes_seguimientos').select('vendedor_realizo,fecha_realizado');
+      if (fechaDesde) q = q.gte('fecha_realizado', fechaDesde);
+      if (fechaHasta) q = q.lte('fecha_realizado', fechaHasta + 'T23:59:59');
+      const { data } = await q;
+      const map = {};
+      for (const r of (data || [])) {
+        const v = r.vendedor_realizo || 'Sin asignar';
+        map[v] = (map[v] || 0) + 1;
+      }
+      setSegPorVendedor(map);
+    })();
+  }, [fechaDesde, fechaHasta]);
+
+  const ganadasPorVendedor = useMemo(() => {
+    const map = {};
+    for (const f of (filasGanadas || [])) {
+      const v = f.vendedor || 'Sin asignar';
+      map[v] = (map[v] || 0) + 1;
+    }
+    return map;
+  }, [filasGanadas]);
+
+  const topSeguimientos = useMemo(() => {
+    if (!segPorVendedor) return null;
+    return Object.entries(segPorVendedor).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  }, [segPorVendedor]);
+
+  const topGanadas = useMemo(() => {
+    return Object.entries(ganadasPorVendedor).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  }, [ganadasPorVendedor]);
+
+  const MEDALLAS = ['🥇', '🥈', '🥉'];
+  const COLORES_PODIO = ['#d4af37', '#c0c0c0', '#cd7f32'];
+
+  function ListaPodio({ items, sufijo, vacio }) {
+    if (!items) return <div style={{ fontSize: '0.82rem', color: C.muted, padding: 8 }}>Cargando...</div>;
+    if (items.length === 0) return <div style={{ fontSize: '0.82rem', color: C.muted, padding: 8, fontStyle: 'italic' }}>{vacio}</div>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map(([nombre, cantidad], i) => (
+          <div key={nombre} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 12px', borderRadius: 10,
+            background: i === 0 ? 'rgba(212,175,55,0.10)' : 'rgba(255,255,255,0.5)',
+            border: i === 0 ? `1px solid rgba(212,175,55,0.4)` : '1px solid rgba(0,0,0,0.05)',
+          }}>
+            <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>{MEDALLAS[i]}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.88rem', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {nombre}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: COLORES_PODIO[i], fontWeight: 700 }}>
+                {cantidad.toLocaleString('es-CR')} {sufijo}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      ...S.card, marginBottom: 18,
+      background: 'linear-gradient(135deg, rgba(255,247,224,0.7), rgba(255,255,255,0.55))',
+      borderTop: `3px solid ${C.gold}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: '1.4rem' }}>🏆</span>
+        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: C.text }}>Podio de vendedores</h3>
+        <span style={{ fontSize: '0.72rem', color: C.muted, marginLeft: 'auto' }}>¡A competir sano!</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+        <div>
+          <div style={{ ...S.kicker, marginBottom: 8 }}>📞 Más seguimientos</div>
+          <ListaPodio items={topSeguimientos} sufijo="seguimientos" vacio="Sin seguimientos en el rango" />
+        </div>
+        <div>
+          <div style={{ ...S.kicker, marginBottom: 8 }}>💰 Más cotizaciones ganadas</div>
+          <ListaPodio items={topGanadas} sufijo="ganadas" vacio="Sin ganadas todavía" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ────────────────────────────────────────────────────────
 export default function SeguimientoProformas() {
   const { perfil, loading: authLoading, puedeVer } = useAuth();
   const [tab, setTab] = useState('abiertas');
   const [filas, setFilas] = useState(null);
-  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0 });
+  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' });
   const [drawerProf, setDrawerProf] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -653,6 +908,8 @@ export default function SeguimientoProformas() {
         const m = N(f.margen_pct);
         if (m < filtros.margenMin) return false;
       }
+      if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
+      if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
       return true;
     });
     arr.sort((a, b) => {
@@ -666,11 +923,15 @@ export default function SeguimientoProformas() {
 
   const filasGanadasFiltradas = useMemo(() => {
     if (!filasGanadas) return null;
-    let arr = filasGanadas;
-    if (filtros.vendedor) arr = arr.filter(f => f.vendedor === filtros.vendedor);
+    let arr = filasGanadas.filter(f => {
+      if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
+      if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
+      if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
+      return true;
+    });
     arr = [...arr].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     return arr;
-  }, [filasGanadas, filtros.vendedor]);
+  }, [filasGanadas, filtros]);
 
   // KPIs (sobre filasAbiertasFiltradas)
   const kpis = useMemo(() => {
@@ -722,6 +983,12 @@ export default function SeguimientoProformas() {
       {/* Tab: Abiertas */}
       {tab === 'abiertas' && (
         <div>
+          <PodioVendedores
+            filasGanadas={filasGanadasFiltradas}
+            fechaDesde={filtros.fechaDesde}
+            fechaHasta={filtros.fechaHasta}
+          />
+
           {/* KPIs */}
           <div style={{
             display: 'grid',
@@ -741,7 +1008,7 @@ export default function SeguimientoProformas() {
             background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
             borderRadius: 14, padding: 14, marginBottom: 18,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 14,
           }}>
             <div>
@@ -763,12 +1030,30 @@ export default function SeguimientoProformas() {
               </select>
             </div>
             <div>
+              <label style={S.label}>Fecha desde</label>
+              <input type="date" value={filtros.fechaDesde}
+                onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
+                style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Fecha hasta</label>
+              <input type="date" value={filtros.fechaHasta}
+                onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
+                style={S.input} />
+            </div>
+            <div>
               <label style={S.label}>Margen mínimo: {filtros.margenMin}%</label>
               <input type="range" min={0} max={50} step={5}
                 value={filtros.margenMin}
                 onChange={e => setFiltros({ ...filtros, margenMin: Number(e.target.value) })}
                 style={{ width: '100%' }} />
             </div>
+            {(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0) && (
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button onClick={() => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' })}
+                  style={S.btnGhost}>Limpiar filtros</button>
+              </div>
+            )}
           </div>
 
           <TablaProformas
@@ -786,7 +1071,7 @@ export default function SeguimientoProformas() {
             background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
             borderRadius: 14, padding: 14, marginBottom: 18,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 14,
           }}>
             <div>
@@ -797,6 +1082,24 @@ export default function SeguimientoProformas() {
                 {vendedoresUnicos.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
+            <div>
+              <label style={S.label}>Fecha desde</label>
+              <input type="date" value={filtros.fechaDesde}
+                onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
+                style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Fecha hasta</label>
+              <input type="date" value={filtros.fechaHasta}
+                onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
+                style={S.input} />
+            </div>
+            {(filtros.vendedor || filtros.fechaDesde || filtros.fechaHasta) && (
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button onClick={() => setFiltros({ ...filtros, vendedor: '', fechaDesde: '', fechaHasta: '' })}
+                  style={S.btnGhost}>Limpiar filtros</button>
+              </div>
+            )}
           </div>
           <TablaProformas
             datos={filasGanadasFiltradas}
