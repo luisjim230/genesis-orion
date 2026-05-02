@@ -493,6 +493,88 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
   );
 }
 
+// ── SLA Días Chips: editor visual de días ───────────────────────────────────
+function SlaDiasChips({ value, onChange }) {
+  const [nuevo, setNuevo] = useState('');
+  const dias = Array.isArray(value) ? value : [];
+
+  function agregar() {
+    const n = parseInt(nuevo, 10);
+    if (!n || n < 1 || n > 365) return;
+    if (dias.includes(n)) { setNuevo(''); return; }
+    const next = [...dias, n].sort((a, b) => a - b);
+    onChange(next);
+    setNuevo('');
+  }
+
+  function quitar(d) {
+    onChange(dias.filter(x => x !== d));
+  }
+
+  function presetTier(arr) {
+    onChange([...arr].sort((a, b) => a - b));
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+        {dias.length === 0 && (
+          <span style={{ fontSize: '0.78rem', color: C.muted, fontStyle: 'italic' }}>Sin días — agregá uno abajo</span>
+        )}
+        {dias.map(d => (
+          <span key={d} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'rgba(200,168,75,0.15)',
+            color: C.text, fontWeight: 700,
+            border: `1px solid ${C.gold}55`,
+            padding: '4px 4px 4px 10px', borderRadius: 999,
+            fontSize: '0.82rem',
+          }}>
+            día {d}
+            <button onClick={() => quitar(d)} title="Quitar"
+              style={{
+                background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: '50%',
+                width: 18, height: 18, cursor: 'pointer', fontSize: '0.85rem',
+                color: C.muted, lineHeight: 1, display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}>×</button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={nuevo}
+          onChange={e => setNuevo(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregar(); } }}
+          placeholder="día"
+          style={{ width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+        />
+        <button onClick={agregar} type="button"
+          style={{
+            background: C.gold, color: '#fff', border: 'none', borderRadius: 6,
+            padding: '5px 12px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700,
+          }}>+ Agregar</button>
+        <span style={{ fontSize: '0.7rem', color: C.muted, marginLeft: 6 }}>Presets:</span>
+        {[
+          { label: 'Plata', dias: [2, 7] },
+          { label: 'Oro', dias: [1, 4, 10] },
+          { label: 'Platino', dias: [1, 3, 7, 14] },
+        ].map(p => (
+          <button key={p.label} onClick={() => presetTier(p.dias)} type="button"
+            style={{
+              background: 'rgba(255,255,255,0.7)', color: C.text,
+              border: '1px solid #cbd5e1', borderRadius: 6,
+              padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer',
+            }}>{p.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Configuración (editable) ───────────────────────────────────────────
 function TabConfig() {
   const [tiers, setTiers] = useState(null);
@@ -522,7 +604,7 @@ function TabConfig() {
       monto_min: t.monto_min ?? 0,
       monto_max: t.monto_max ?? '',
       seguimientos_req: t.seguimientos_req ?? 0,
-      sla_dias: Array.isArray(t.sla_dias) ? t.sla_dias.join(',') : '',
+      sla_dias: Array.isArray(t.sla_dias) ? [...t.sla_dias] : [],
       orden: t.orden ?? 0,
     });
     setErrMsg(null);
@@ -534,21 +616,17 @@ function TabConfig() {
     setErrMsg(null);
   }
 
-  function parseSlaDias(s) {
-    if (!s) return [];
-    return String(s).split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n) && n > 0);
-  }
-
   async function guardarEdit(id) {
     setErrMsg(null);
     if (!draft.nombre.trim()) { setErrMsg('Nombre obligatorio.'); return; }
+    const slaDiasOrdenados = [...(draft.sla_dias || [])].sort((a, b) => a - b);
     const update = {
       nombre: draft.nombre.trim(),
       color_hex: draft.color_hex,
       monto_min: Number(draft.monto_min) || 0,
       monto_max: draft.monto_max === '' || draft.monto_max === null ? null : Number(draft.monto_max),
       seguimientos_req: parseInt(draft.seguimientos_req, 10) || 0,
-      sla_dias: parseSlaDias(draft.sla_dias),
+      sla_dias: slaDiasOrdenados,
       orden: parseInt(draft.orden, 10) || 0,
     };
     const { error } = await supabase.from('hermes_config_tiers').update(update).eq('id', id);
@@ -571,13 +649,14 @@ function TabConfig() {
   async function crearNuevo() {
     setErrMsg(null);
     if (!draft.nombre.trim()) { setErrMsg('Nombre obligatorio.'); return; }
+    const slaDiasOrdenados = [...(draft.sla_dias || [])].sort((a, b) => a - b);
     const insert = {
       nombre: draft.nombre.trim(),
       color_hex: draft.color_hex,
       monto_min: Number(draft.monto_min) || 0,
       monto_max: draft.monto_max === '' || draft.monto_max === null ? null : Number(draft.monto_max),
       seguimientos_req: parseInt(draft.seguimientos_req, 10) || 0,
-      sla_dias: parseSlaDias(draft.sla_dias),
+      sla_dias: slaDiasOrdenados,
       orden: parseInt(draft.orden, 10) || (tiers.length + 1),
     };
     const { error } = await supabase.from('hermes_config_tiers').insert(insert);
@@ -598,7 +677,7 @@ function TabConfig() {
       monto_min: 0,
       monto_max: '',
       seguimientos_req: 1,
-      sla_dias: '3,7,14',
+      sla_dias: [3, 7, 14],
       orden: (tiers?.length || 0) + 1,
     });
     setErrMsg(null);
@@ -627,7 +706,7 @@ function TabConfig() {
                 <th style={{ ...S.th, textAlign: 'right' }}>Monto Mín</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Monto Máx</th>
                 <th style={{ ...S.th, textAlign: 'center' }}>Seguim.</th>
-                <th style={S.th}>SLA días (CSV)</th>
+                <th style={S.th}>SLA días</th>
                 <th style={{ ...S.th, textAlign: 'center' }}>Orden</th>
                 <th style={{ ...S.th, textAlign: 'right' }}>Acciones</th>
               </tr>
@@ -646,7 +725,9 @@ function TabConfig() {
                   <td style={S.td}><input type="number" value={draft.monto_min} onChange={e => setDraft({ ...draft, monto_min: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} /></td>
                   <td style={S.td}><input type="number" value={draft.monto_max} onChange={e => setDraft({ ...draft, monto_max: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} placeholder="∞" /></td>
                   <td style={S.td}><input type="number" value={draft.seguimientos_req} onChange={e => setDraft({ ...draft, seguimientos_req: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
-                  <td style={S.td}><input value={draft.sla_dias} onChange={e => setDraft({ ...draft, sla_dias: e.target.value })} style={inputCell} placeholder="3,7,14" /></td>
+                  <td style={{ ...S.td, minWidth: 320 }}>
+                    <SlaDiasChips value={draft.sla_dias} onChange={dias => setDraft({ ...draft, sla_dias: dias })} />
+                  </td>
                   <td style={S.td}><input type="number" value={draft.orden} onChange={e => setDraft({ ...draft, orden: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
                   <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => guardarEdit(t.id)} style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '0.78rem', marginRight: 4 }}>Guardar</button>
@@ -686,7 +767,9 @@ function TabConfig() {
                   <td style={S.td}><input type="number" value={draft.monto_min} onChange={e => setDraft({ ...draft, monto_min: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} /></td>
                   <td style={S.td}><input type="number" value={draft.monto_max} onChange={e => setDraft({ ...draft, monto_max: e.target.value })} style={{ ...inputCell, textAlign: 'right' }} placeholder="∞" /></td>
                   <td style={S.td}><input type="number" value={draft.seguimientos_req} onChange={e => setDraft({ ...draft, seguimientos_req: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
-                  <td style={S.td}><input value={draft.sla_dias} onChange={e => setDraft({ ...draft, sla_dias: e.target.value })} style={inputCell} placeholder="3,7,14" /></td>
+                  <td style={{ ...S.td, minWidth: 320 }}>
+                    <SlaDiasChips value={draft.sla_dias} onChange={dias => setDraft({ ...draft, sla_dias: dias })} />
+                  </td>
                   <td style={S.td}><input type="number" value={draft.orden} onChange={e => setDraft({ ...draft, orden: e.target.value })} style={{ ...inputCell, textAlign: 'center' }} /></td>
                   <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={crearNuevo} style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '0.78rem', marginRight: 4 }}>Crear</button>
@@ -699,7 +782,7 @@ function TabConfig() {
           </table>
         </div>
         <div style={{ marginTop: 12, fontSize: '0.74rem', color: C.muted }}>
-          <strong>SLA días</strong>: cuántos días después de la proforma se debe hacer cada seguimiento. Ej. <code>3,7,14</code> = a los 3 días el primero, a los 7 el segundo, a los 14 el tercero. <strong>Monto Máx</strong> vacío = sin tope.
+          <strong>SLA días</strong>: cuántos días después de la proforma se debe hacer cada seguimiento. Ej. día 3, día 7, día 14 = el primer seguimiento a los 3 días, el segundo a los 7, el tercero a los 14. <strong>Monto Máx</strong> vacío = sin tope.
         </div>
       </div>
     </div>
