@@ -89,29 +89,42 @@ def supa_rpc(name, payload):
 
 
 def supa_upsert_sync_status(script_id, exitoso=True):
-    url = f"{SUPA_URL}/rest/v1/sync_status?on_conflict=id"
-    body = json.dumps([{
-        "id": script_id,
-        "ultima_sync": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "exitoso": exitoso,
-    }]).encode()
-    req = urllib.request.Request(url, data=body, method="POST")
+    ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    body = json.dumps({"ultima_sync": ahora, "exitoso": exitoso, "updated_at": ahora}).encode()
+    url = f"{SUPA_URL}/rest/v1/sync_status?id=eq.{script_id}"
+    req = urllib.request.Request(url, data=body, method="PATCH")
     req.add_header("apikey", SUPA_KEY)
     req.add_header("Authorization", f"Bearer {SUPA_KEY}")
     req.add_header("Content-Type", "application/json")
-    req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
+    req.add_header("Prefer", "return=minimal")
     try:
         urllib.request.urlopen(req, timeout=15)
+    except urllib.error.HTTPError as e:
+        # Si la fila no existe (404), insertarla
+        if e.code == 404:
+            ins = json.dumps([{"id": script_id, "ultima_sync": ahora, "exitoso": exitoso, "updated_at": ahora}]).encode()
+            req2 = urllib.request.Request(f"{SUPA_URL}/rest/v1/sync_status", data=ins, method="POST")
+            req2.add_header("apikey", SUPA_KEY)
+            req2.add_header("Authorization", f"Bearer {SUPA_KEY}")
+            req2.add_header("Content-Type", "application/json")
+            req2.add_header("Prefer", "return=minimal")
+            try:
+                urllib.request.urlopen(req2, timeout=15)
+            except Exception as e2:
+                log.warning(f"sync_status insert: {e2}")
+        else:
+            log.warning(f"sync_status: {e.code} {e.read().decode()[:200]}")
     except Exception as e:
         log.warning(f"sync_status: {e}")
 
 
 # ─── DESCARGA ─────────────────────────────────────────────────────────────────
 
-def rango_mes_actual():
-    """Devuelve (DDMMYYYY_inicio, DDMMYYYY_fin) del mes en curso."""
+def rango_30_dias():
+    """Devuelve (DDMMYYYY_inicio, DDMMYYYY_fin) — últimos 30 días corridos hasta hoy."""
+    from datetime import timedelta
     hoy = date.today()
-    f_ini = date(hoy.year, hoy.month, 1)
+    f_ini = hoy - timedelta(days=30)
     return f_ini.strftime("%d%m%Y"), hoy.strftime("%d%m%Y")
 
 
@@ -154,8 +167,8 @@ async def setear_fechas(iframe, f_inicio, f_fin):
 
 
 async def descargar():
-    f_inicio, f_fin = rango_mes_actual()
-    log.info(f"Mes actual: {f_inicio[:2]}/{f_inicio[2:4]}/{f_inicio[4:]} → {f_fin[:2]}/{f_fin[2:4]}/{f_fin[4:]}")
+    f_inicio, f_fin = rango_30_dias()
+    log.info(f"Últimos 30 días: {f_inicio[:2]}/{f_inicio[2:4]}/{f_inicio[4:]} → {f_fin[:2]}/{f_fin[2:4]}/{f_fin[4:]}")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -318,25 +331,27 @@ def parse_y_subir(excel_path):
             "territorio":    to_str(row.get(col("Territorio"))),
         })
 
+    from datetime import timedelta
     total = len(payload)
     hoy = date.today()
-    mes_actual = f"{hoy.year}-{str(hoy.month).zfill(2)}"
-    del_mes = sum(1 for f in fechas_vistas if f and f.startswith(mes_actual))
+    hace30 = (hoy - timedelta(days=30)).strftime("%Y-%m-%d")
+    hoy_str = hoy.strftime("%Y-%m-%d")
+    en_rango = sum(1 for f in fechas_vistas if f and hace30 <= f <= hoy_str)
 
     if total == 0:
         log.error("❌ Payload vacío")
-        alerta_telegram(f"⚠️ <b>Proformas (cabecera)</b>\nSin datos para {mes_actual}. Revisar NEO.")
+        alerta_telegram(f"⚠️ <b>Proformas (cabecera)</b>\nSin datos en los últimos 30 días. Revisar NEO.")
         return False
 
-    if del_mes == 0:
-        log.warning(f"⚠️ Hay {total} proformas pero ninguna del mes {mes_actual}")
-        alerta_telegram(f"⚠️ <b>Proformas (cabecera)</b>\n{total} filas pero ninguna del mes {mes_actual}.")
+    if en_rango == 0:
+        log.warning(f"⚠️ Hay {total} proformas pero ninguna en los últimos 30 días")
+        alerta_telegram(f"⚠️ <b>Proformas (cabecera)</b>\n{total} filas pero ninguna en los últimos 30 días.")
 
     if total < UMBRAL_MIN:
         log.warning(f"⚠️ Solo {total} proformas — sospechoso")
         alerta_telegram(f"⚠️ <b>Proformas (cabecera)</b>\nSolo {total} filas (umbral {UMBRAL_MIN}).")
 
-    log.info(f"Llamando RPC hermes_upsert_proformas_cabecera con {total} filas ({del_mes} del mes actual)...")
+    log.info(f"Llamando RPC hermes_upsert_proformas_cabecera con {total} filas ({en_rango} en últimos 30 días)...")
     res = supa_rpc("hermes_upsert_proformas_cabecera", payload)
     if not res:
         return False
