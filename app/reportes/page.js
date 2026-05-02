@@ -869,6 +869,10 @@ function TabSubir() {
           res.filas = rpcData?.filas_recibidas ?? payload.length;
           res.periodo = `Día ${new Date().toISOString().slice(0,10)}`;
 
+          const ahora = new Date().toISOString();
+          await supabase.from('sync_status').upsert({ id: tipo, ultima_sync: ahora, exitoso: true }, { onConflict: 'id' });
+          setSyncStatus(prev => ({ ...prev, [tipo]: { id: tipo, ultima_sync: ahora, exitoso: true } }));
+
           if (tipo === 'proformas_cabecera') {
             res.proformasMensaje = `${rpcData.filas_recibidas} proformas: ${rpcData.filas_insertadas} nuevas, ${rpcData.filas_actualizadas} actualizadas. ${rpcData.proformas_recien_facturadas} pasaron a facturadas.`;
           } else {
@@ -1080,12 +1084,15 @@ function TabSubir() {
                 ['🧾 Lista de ítems facturados',          '💼 Comercial · 📈 Proyección de inventario','items_facturados'],
                 ['👤 Informe de ventas por vendedor',     '💼 Comercial',                              'informe_ventas_vendedor'],
                 ['📒 Movimientos contables',              '📒 Contabilidad',                           'movimientos_contables'],
+                ['📝 Lista de proformas',                 '📋 Comercial · Seguimiento de Proformas',   'proformas_cabecera'],
+                ['📋 Lista de ítems proformados',         '📋 Comercial · Seguimiento de Proformas',   'proformas_items'],
               ].map(([r,a,key],i) => {
                 const s = syncStatus[key];
                 const fecha = s?.ultima_sync ? new Date(s.ultima_sync).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
                 const ok = s ? s.exitoso !== false : null;
                 const dot = ok === null ? '#888' : ok ? '#4ade80' : '#f87171';
                 const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados','informe_ventas_vendedor','movimientos_contables'].includes(key);
+                const manual = ['proformas_cabecera','proformas_items'].includes(key);
                 return (
                   <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
                     <td style={S.td}>{r}</td>
@@ -1105,6 +1112,9 @@ function TabSubir() {
                         >
                           {forzando[key] ? '✓ Solicitado' : '⟳ Forzar sync'}
                         </button>
+                      )}
+                      {manual && (
+                        <span style={{ color:'#888', fontSize:'0.72rem', fontStyle:'italic', whiteSpace:'nowrap' }}>Subir manualmente</span>
                       )}
                     </td>
                   </tr>
