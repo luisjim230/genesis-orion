@@ -117,6 +117,21 @@ const REPORTES = {
     titulo_valor:'__skip__',
     usar_categoria_parser: true,
   },
+  // ── Hermes / Seguimiento de Proformas ─────────────────────────────────────
+  proformas_cabecera: {
+    nombre:'Lista de proformas', emoji:'📝',
+    descripcion:'Cabecera de proformas (Seguimiento de Proformas).',
+    titulo_valor:'__skip__',
+    tabla_real:'hermes_proformas_cabecera',
+    modulos_destino:['seguimiento-proformas'],
+  },
+  proformas_items: {
+    nombre:'Lista de items proformados', emoji:'📋',
+    descripcion:'Líneas de proformas (Seguimiento de Proformas).',
+    titulo_valor:'__skip__',
+    tabla_real:'hermes_proformas_items',
+    modulos_destino:['seguimiento-proformas'],
+  },
   neo_ordenes_compra_estado:{
     nombre:'Lista de órdenes de compra', emoji:'📋',
     descripcion:'Estado de OC en NEO: Registrada/Aplicada/Anulada, Comprada Sí/Parcial/No.',
@@ -203,6 +218,11 @@ function detectarTipo(filas, nombreArchivo) {
       { patron: 'lista de items facturados',           tabla: 'neo_items_facturados' },
       { patron: 'items facturados',                    tabla: 'neo_items_facturados' },
       { patron: 'informe de ventas',                   tabla: '_informe_ventas_check' },
+      // Seguimiento de Proformas
+      { patron: 'lista de i tems proformados',         tabla: 'proformas_items' },
+      { patron: 'lista de items proformados',          tabla: 'proformas_items' },
+      { patron: 'items proformados',                   tabla: 'proformas_items' },
+      { patron: 'lista de proformas',                  tabla: 'proformas_cabecera' },
     ];
     for (const { patron, tabla } of mapaArchivo) {
       if (nomNorm.includes(patron)) {
@@ -702,6 +722,178 @@ function TabSubir() {
           continue;
         }
 
+        // proformas_cabecera / proformas_items: usar RPCs de Hermes (Seguimiento de Proformas)
+        if (tipo === 'proformas_cabecera' || tipo === 'proformas_items') {
+          // Re-leer con raw:true para conservar números y fechas
+          const wbR = XLSX.read(buf, { type:'array', dense:true });
+          const wsR = wbR.Sheets[wbR.SheetNames[0]];
+          const filasR = XLSX.utils.sheet_to_json(wsR, { header:1, defval:null, raw:true });
+          const headers = (filasR[1] || []).map(v => String(v||'').trim());
+          const dataRows = filasR.slice(2);
+
+          const idxOf = (label) => headers.findIndex(h => h.trim() === label.trim());
+          const toDate = (v) => {
+            if (v === null || v === undefined || v === '') return null;
+            if (typeof v === 'number') {
+              const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+              return isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+            }
+            if (v instanceof Date) {
+              return isNaN(v.getTime()) ? null : v.toISOString().slice(0,10);
+            }
+            const s = String(v).trim();
+            // ISO YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+            // DD/MM/YYYY
+            const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+            return null;
+          };
+          const toNum = (v, dflt = 0) => {
+            if (v === null || v === undefined || v === '') return dflt;
+            if (typeof v === 'number') return v;
+            const n = parseFloat(String(v).replace(/,/g,''));
+            return isNaN(n) ? dflt : n;
+          };
+          const toStr = (v) => {
+            if (v === null || v === undefined) return null;
+            const s = String(v).trim();
+            return s === '' ? null : s;
+          };
+          const toBool = (v) => {
+            const s = String(v||'').trim().toLowerCase();
+            return s === 'sí' || s === 'si' || s === 'true' || s === '1';
+          };
+
+          let payload = [];
+          let rpcName = '';
+          let proformasEnPayload = [];
+
+          if (tipo === 'proformas_cabecera') {
+            rpcName = 'hermes_upsert_proformas_cabecera';
+            const cols = {
+              numero: idxOf('Número'),
+              estado: idxOf('Estado'),
+              fecha: idxOf('Fecha'),
+              hora: idxOf('Hora'),
+              facturada: idxOf('Facturada'),
+              vendedor: idxOf('Vendedor'),
+              cliente: idxOf('Cliente'),
+              modo_entrega: idxOf('Modo de entrega'),
+              termino_pago: idxOf('Término de pago'),
+              observaciones: idxOf('Observaciones'),
+              total: idxOf('Total'),
+              moneda: idxOf('Moneda'),
+              territorio: idxOf('Territorio'),
+            };
+            for (const row of dataRows) {
+              if (!row || row.every(v => v === null || v === undefined || String(v).trim() === '')) continue;
+              const numero = toNum(row[cols.numero], null);
+              if (!numero) continue;
+              payload.push({
+                numero,
+                estado: toStr(row[cols.estado]),
+                fecha: toDate(row[cols.fecha]),
+                hora: toStr(row[cols.hora]),
+                facturada: toBool(row[cols.facturada]),
+                vendedor: toStr(row[cols.vendedor]),
+                cliente: toStr(row[cols.cliente]),
+                modo_entrega: toStr(row[cols.modo_entrega]),
+                termino_pago: toStr(row[cols.termino_pago]),
+                observaciones: toStr(row[cols.observaciones]),
+                total: toNum(row[cols.total]),
+                moneda: toStr(row[cols.moneda]) || 'CRC',
+                territorio: toStr(row[cols.territorio]),
+              });
+            }
+          } else {
+            rpcName = 'hermes_upsert_proformas_items';
+            const cols = {
+              proforma: idxOf('Proforma'),
+              fecha: idxOf('Fecha'),
+              vendedor: idxOf('Vendedor'),
+              codigo_cliente: idxOf('Código'),
+              cliente: idxOf('Cliente'),
+              codigo_interno: idxOf('Código interno'),
+              item: headers.findIndex(h => h.trim() === 'Ítem' || h.trim() === 'Item'),
+              cantidad: idxOf('Cantidad proformada'),
+              precio: idxOf('Precio unitario sin impuesto'),
+              descuento: idxOf('Descuento'),
+              impuestos: idxOf('Impuestos'),
+              total: idxOf('Total'),
+              observaciones: idxOf('Observaciones'),
+            };
+            for (const row of dataRows) {
+              if (!row || row.every(v => v === null || v === undefined || String(v).trim() === '')) continue;
+              const proforma = toNum(row[cols.proforma], null);
+              if (!proforma) continue;
+              const codigoInternoRaw = row[cols.codigo_interno];
+              const codigoInterno = codigoInternoRaw === null || codigoInternoRaw === undefined
+                ? null
+                : String(codigoInternoRaw).trim() || null;
+              const codigoClienteRaw = row[cols.codigo_cliente];
+              const codigoCliente = codigoClienteRaw === null || codigoClienteRaw === undefined
+                ? null
+                : String(codigoClienteRaw).trim() || null;
+              payload.push({
+                proforma,
+                fecha: toDate(row[cols.fecha]),
+                vendedor: toStr(row[cols.vendedor]),
+                codigo_cliente: codigoCliente,
+                cliente: toStr(row[cols.cliente]),
+                codigo_interno: codigoInterno,
+                item: toStr(row[cols.item]),
+                cantidad_proformada: toNum(row[cols.cantidad]),
+                precio_unitario_sin_imp: toNum(row[cols.precio]),
+                descuento: toNum(row[cols.descuento]),
+                impuestos: toNum(row[cols.impuestos]),
+                total_linea: toNum(row[cols.total]),
+                observaciones: toStr(row[cols.observaciones]),
+              });
+              proformasEnPayload.push(proforma);
+            }
+          }
+
+          if (payload.length === 0) {
+            res.estado = 'error';
+            res.error = 'No se encontraron filas de datos en el archivo.';
+            nuevos.push(res);
+            continue;
+          }
+
+          const { data: rpcData, error: rpcErr } = await supabase.rpc(rpcName, { payload });
+          if (rpcErr) throw new Error(rpcErr.message || 'Error en RPC ' + rpcName);
+
+          res.tipo = tipo;
+          res.estado = 'ok';
+          res.filas = rpcData?.filas_recibidas ?? payload.length;
+          res.periodo = `Día ${new Date().toISOString().slice(0,10)}`;
+
+          if (tipo === 'proformas_cabecera') {
+            res.proformasMensaje = `${rpcData.filas_recibidas} proformas: ${rpcData.filas_insertadas} nuevas, ${rpcData.filas_actualizadas} actualizadas. ${rpcData.proformas_recien_facturadas} pasaron a facturadas.`;
+          } else {
+            res.proformasMensaje = `${rpcData.filas_recibidas} líneas en ${rpcData.proformas_afectadas} proformas. (Las líneas anteriores de esas proformas fueron reemplazadas.)`;
+            // Warning suave: ¿hay items sin cabecera?
+            try {
+              const numerosUnicos = [...new Set(proformasEnPayload)];
+              if (numerosUnicos.length > 0) {
+                const { data: existentes } = await supabase
+                  .from('hermes_proformas_cabecera')
+                  .select('numero')
+                  .in('numero', numerosUnicos);
+                const setExist = new Set((existentes || []).map(r => Number(r.numero)));
+                const sinCabecera = numerosUnicos.filter(n => !setExist.has(Number(n)));
+                if (sinCabecera.length > 0) {
+                  res.proformasWarning = `⚠️ ${sinCabecera.length} proforma(s) sin cabecera todavía. Subí "Lista de proformas" para que aparezcan en el panel.`;
+                }
+              }
+            } catch (e) { console.warn('[Hermes] No se pudo verificar cabeceras:', e.message); }
+          }
+
+          nuevos.push(res);
+          continue;
+        }
+
         // informe de ventas por vendedor/categoría: usar API servidor (ExcelJS, maneja xml:space)
         if (tipo === 'neo_informe_ventas_vendedor' || tipo === 'neo_informe_ventas_categoria') {
           const fd = new FormData();
@@ -1054,11 +1246,19 @@ function TabSubir() {
                       <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px' }}>
                         {REPORTES[r.tipo]?.emoji} {REPORTES[r.tipo]?.nombre} · <strong style={{ color:'var(--text-primary)' }}>{r.periodo}</strong> ·{' '}
                         <strong style={{ color:'var(--text-primary)' }}>{r.filas.toLocaleString()}</strong> filas{r.filasTotales && r.filasTotales !== r.filas ? <span style={{color:'#e53e3e'}}> ({r.filasTotales} en archivo)</span> : ''}{' '}
-                        {r.esNuevoPeriodo
+                        {r.tipo === 'proformas_cabecera' || r.tipo === 'proformas_items'
+                          ? null
+                          : r.esNuevoPeriodo
                           ? <span style={{ background:'#c6f6d5', color:'#276749', borderRadius:4, padding:'1px 7px', fontSize:'0.72rem', fontWeight:700 }}>+ NUEVO PERÍODO</span>
                           : <span style={{ background:'#fef3c7', color:'#92400e', borderRadius:4, padding:'1px 7px', fontSize:'0.72rem', fontWeight:700 }}>↺ REEMPLAZADO</span>
                         }
                       </div>
+                      {r.proformasMensaje && (
+                        <div style={{ fontSize:'0.82rem', marginTop:6, color:'#276749' }}>{r.proformasMensaje}</div>
+                      )}
+                      {r.proformasWarning && (
+                        <div style={{ fontSize:'0.8rem', marginTop:6, color:'#92400e' }}>{r.proformasWarning}</div>
+                      )}
                       {r.matchTrazabilidad && (
                         <div style={{ fontSize:'0.8rem', marginTop:'6px', color: r.matchTrazabilidad.startsWith('⚠️') ? '#f6ad55' : '#68d391' }}>
                           {r.matchTrazabilidad}
@@ -1105,14 +1305,16 @@ function TabVerDatos() {
 
   const cargarResumen = useCallback(async () => {
     const res = {};
-    for (const tabla of Object.keys(REPORTES)) {
+    for (const [tabla, cfg] of Object.entries(REPORTES)) {
+      const realTable = cfg.tabla_real || tabla;
       try {
         // Obtener la fecha más reciente
-        const { data } = await supabase.from(tabla).select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending:false }).limit(1);
+        const selCols = cfg.tabla_real ? 'fecha_carga' : 'fecha_carga,periodo_reporte';
+        const { data } = await supabase.from(realTable).select(selCols).order('fecha_carga', { ascending:false }).limit(1);
         if (data?.[0]) {
           const fc = data[0].fecha_carga;
           // Contar cuántos registros tiene esa fecha_carga
-          const { count } = await supabase.from(tabla).select('*', { count:'exact', head:true }).eq('fecha_carga', fc);
+          const { count } = await supabase.from(realTable).select('*', { count:'exact', head:true }).eq('fecha_carga', fc);
           res[tabla] = { ...data[0], count };
         } else {
           res[tabla] = null;
@@ -1124,7 +1326,10 @@ function TabVerDatos() {
   }, []);
 
   const cargarFechas = useCallback(async (tabla) => {
-    const { data } = await supabase.from(tabla).select('fecha_carga,periodo_reporte').order('fecha_carga', { ascending:false });
+    const cfg = REPORTES[tabla];
+    const realTable = cfg?.tabla_real || tabla;
+    const selCols = cfg?.tabla_real ? 'fecha_carga' : 'fecha_carga,periodo_reporte';
+    const { data } = await supabase.from(realTable).select(selCols).order('fecha_carga', { ascending:false });
     const vistos = new Set(); const unicas = [];
     for (const row of (data||[])) {
       if (!vistos.has(row.fecha_carga)) { vistos.add(row.fecha_carga); unicas.push(row); }
@@ -1136,9 +1341,11 @@ function TabVerDatos() {
 
   const cargarDatos = useCallback(async (tabla, fecha) => {
     setCargando(true); setDatos([]); setBuscar('');
+    const cfg = REPORTES[tabla];
+    const realTable = cfg?.tabla_real || tabla;
     const PAGE = 1000; let todos = [], offset = 0;
     while (true) {
-      const { data } = await supabase.from(tabla).select('*').eq('fecha_carga', fecha).range(offset, offset+PAGE-1);
+      const { data } = await supabase.from(realTable).select('*').eq('fecha_carga', fecha).range(offset, offset+PAGE-1);
       if (!data || data.length === 0) break;
       todos = [...todos, ...data];
       if (data.length < PAGE) break;
