@@ -93,6 +93,8 @@ export default function KronosTab({ calc, transitoMap }) {
   const [tabActivo, setTabActivo] = useState('proveedor');
   const [sortPlana, setSortPlana] = useState({ col: '_urgencia_orden', dir: 'asc' });
   const [paginaPlana, setPaginaPlana] = useState(1);
+  const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [editTipo, setEditTipo] = useState('nacional');
   const PAGE_SIZE = 50;
 
   useEffect(() => {
@@ -199,15 +201,16 @@ export default function KronosTab({ calc, transitoMap }) {
 
   async function guardarLeadTime(proveedor) {
     const dias = parseInt(editVal) || 30;
+    const tipoFinal = editTipo === 'extranjero' ? 'extranjero' : 'nacional';
     setGuardando(true);
     try {
       await supabase.from('proveedores_leadtime').upsert({
-        proveedor, lead_time_dias: dias,
+        proveedor, lead_time_dias: dias, tipo: tipoFinal,
         activo: leadTimes[proveedor]?.activo ?? true, notas: editNotas,
       }, { onConflict: 'proveedor' });
-      setLeadTimes(prev => ({ ...prev, [proveedor]: { ...prev[proveedor], proveedor, lead_time_dias: dias, activo: prev[proveedor]?.activo ?? true, notas: editNotas } }));
+      setLeadTimes(prev => ({ ...prev, [proveedor]: { ...prev[proveedor], proveedor, lead_time_dias: dias, tipo: tipoFinal, activo: prev[proveedor]?.activo ?? true, notas: editNotas } }));
       setEditando(null);
-      mostrarMsg(`Lead time de ${proveedor} guardado: ${dias} días`);
+      mostrarMsg(`${proveedor} guardado: ${dias}d · ${tipoFinal === 'extranjero' ? '🌍 Extranjero' : '🇨🇷 Nacional'}`);
     } catch (e) { mostrarMsg('Error al guardar', 'err'); }
     setGuardando(false);
   }
@@ -218,6 +221,7 @@ export default function KronosTab({ calc, transitoMap }) {
     try {
       await supabase.from('proveedores_leadtime').upsert({
         proveedor, lead_time_dias: actual?.lead_time_dias || 8,
+        tipo: actual?.tipo || 'nacional',
         activo: nuevoActivo, notas: actual?.notas || '',
       }, { onConflict: 'proveedor' });
       setLeadTimes(prev => ({ ...prev, [proveedor]: { ...prev[proveedor], proveedor, activo: nuevoActivo } }));
@@ -246,6 +250,7 @@ export default function KronosTab({ calc, transitoMap }) {
       const lt = leadTimes[prov];
       const leadTimeDias = lt?.lead_time_dias || 8;
       const activo = lt?.activo ?? true;
+      const tipo = lt?.tipo || 'nacional';
       const pInfo = preciosMap[cod];
       const precio = pInfo?.precio || parseFloat(item.precio_venta) || 0;
       const costo = pInfo?.costo || parseFloat(item.costo) || 0;
@@ -258,7 +263,7 @@ export default function KronosTab({ calc, transitoMap }) {
           _mesesCobertura: null, _diasQuiebre: null, _fechaQuiebre: null,
           _fechaPedido: null, _diasParaPedir: null,
           _urgencia: urgencia(null, 0), _urgencia_orden: 99,
-          _leadTime: leadTimeDias, _activo: activo,
+          _leadTime: leadTimeDias, _activo: activo, _tipo: tipo,
           _precio: precio, _costo: costo, _margen: margen, _ventaMensualCRC: 0,
           _valorStock: existencias * costo,
         };
@@ -277,7 +282,7 @@ export default function KronosTab({ calc, transitoMap }) {
         _mesesCobertura: mesesCobertura, _diasQuiebre: diasQuiebre,
         _fechaQuiebre: fechaQuiebre.toISOString().slice(0, 10),
         _fechaPedido: fechaPedido.toISOString().slice(0, 10),
-        _diasParaPedir: diasParaPedir, _leadTime: leadTimeDias, _activo: activo,
+        _diasParaPedir: diasParaPedir, _leadTime: leadTimeDias, _activo: activo, _tipo: tipo,
         _urgencia: urg, _urgencia_orden: urg.orden,
         _precio: precio, _costo: costo, _margen: margen,
         _ventaMensualCRC: ventaMensualCRC,
@@ -292,6 +297,25 @@ export default function KronosTab({ calc, transitoMap }) {
     naranjas: proyecciones.filter(i => i._urgencia.orden === 3).length,
     verdes: proyecciones.filter(i => i._urgencia.orden === 4).length,
   }), [proyecciones]);
+
+  // Resumen específico para el director de compras: cuántos productos
+  // críticos hay separados por nacional/extranjero (los extranjeros queman
+  // más tiempo en tránsito, suelen ser los que se pierden si no se ordenan)
+  const resumenCompras = useMemo(() => {
+    const ext = proyecciones.filter(i => i._tipo === 'extranjero' && i._activo);
+    const nac = proyecciones.filter(i => i._tipo === 'nacional' && i._activo);
+    const peorExt = ext.filter(i => i._urgencia.orden <= 2).sort((a, b) => (a._diasQuiebre ?? 9999) - (b._diasQuiebre ?? 9999)).slice(0, 5);
+    return {
+      ext_criticos: ext.filter(i => i._urgencia.orden <= 1).length,
+      ext_urgentes: ext.filter(i => i._urgencia.orden === 2).length,
+      ext_total: ext.length,
+      nac_criticos: nac.filter(i => i._urgencia.orden <= 1).length,
+      nac_urgentes: nac.filter(i => i._urgencia.orden === 2).length,
+      nac_total: nac.length,
+      ventas_riesgo_ext: ext.filter(i => i._urgencia.orden <= 1).reduce((s, i) => s + (i._ventaMensualCRC || 0), 0),
+      peorExt,
+    };
+  }, [proyecciones]);
 
   // ── Vista plana con sort y paginación ──────────────────────────────────────
   const productosPlanos = useMemo(() => {
@@ -445,6 +469,9 @@ export default function KronosTab({ calc, transitoMap }) {
       const max = ordenMax[filtroUrgencia] ?? 99;
       items = items.filter(i => i._urgencia.orden <= max);
     }
+    if (filtroTipo !== 'todos') {
+      items = items.filter(i => i._tipo === filtroTipo);
+    }
     const activos = {}, pausados = {};
     items.forEach(item => {
       const prov = (item.ultimo_proveedor || 'Sin proveedor').trim();
@@ -457,7 +484,7 @@ export default function KronosTab({ calc, transitoMap }) {
       .map(([prov, items]) => ({ prov, items: [...items].sort((a, b) => a._urgencia.orden - b._urgencia.orden), minOrden: Math.min(...items.map(i => i._urgencia.orden)) }))
       .sort((a, b) => a.minOrden - b.minOrden);
     return { activos: ordenar(activos), pausados: ordenar(pausados) };
-  }, [proyecciones, busqueda, filtroUrgencia, leadTimes]);
+  }, [proyecciones, busqueda, filtroUrgencia, filtroTipo, leadTimes]);
 
   function toggleExpand(prov) { setExpandidos(prev => ({ ...prev, [prov]: !prev[prov] })); }
   function expandirTodos() {
@@ -493,7 +520,8 @@ export default function KronosTab({ calc, transitoMap }) {
           ) : <span style={{ color: '#ccc' }}>—</span>}
         </td>
         <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.78rem', color: item._mesesCobertura !== null ? (item._mesesCobertura < 1 ? '#E53E3E' : item._mesesCobertura < 2 ? '#D69E2E' : '#38A169') : '#ccc' }}>
-          {fmtMeses(item._mesesCobertura)}
+          {item._diasQuiebre !== null && item._diasQuiebre !== undefined ? `${item._diasQuiebre} días` : '—'}
+          {item._mesesCobertura !== null && <div style={{ fontSize: '0.62rem', color: '#aaa', fontWeight: 400 }}>≈ {fmtMeses(item._mesesCobertura)}</div>}
         </td>
         <td style={{ padding: '6px 10px', textAlign: 'right', fontSize: '0.73rem', color: item._diasQuiebre !== null && item._diasQuiebre < 30 ? '#E53E3E' : '#555' }}>
           {item._fechaQuiebre ? fmtFecha(item._fechaQuiebre) : '—'}
@@ -522,23 +550,32 @@ export default function KronosTab({ calc, transitoMap }) {
     const estaEditando = editando === prov;
     const criticos = items.filter(i => i._urgencia.orden <= 1).length;
     const urgentes = items.filter(i => i._urgencia.orden === 2).length;
+    const tipo = lt?.tipo || 'nacional';
+    const esExt = tipo === 'extranjero';
+    const flag = esExt ? '🌍' : '🇨🇷';
     return (
-      <div style={{ marginBottom: 10, border: `1px solid ${border}`, borderRadius: 10, overflow: 'hidden', opacity: pausado ? 0.65 : 1 }}>
+      <div style={{ marginBottom: 10, border: `1px solid ${border}`, borderRadius: 10, overflow: 'hidden', opacity: pausado ? 0.65 : 1, borderLeft: esExt ? '4px solid #3182CE' : `1px solid ${border}` }}>
         <div onClick={() => toggleExpand(prov)} style={{ background: bg, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '1rem', flexShrink: 0 }} title={esExt ? 'Extranjero' : 'Nacional'}>{flag}</span>
           <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#2a3a50', flex: 1 }}>{abierto ? '▼' : '▶'} {prov}</span>
+          {esExt && <span style={{ background: '#bee3f8', color: '#2c5282', borderRadius: 12, padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700 }}>EXTRANJERO</span>}
           {criticos > 0 && <span style={{ background: '#FED7D7', color: '#C53030', borderRadius: 12, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700 }}>🔴 {criticos}</span>}
           {urgentes > 0 && <span style={{ background: '#FEFCBF', color: '#744210', borderRadius: 12, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700 }}>🟡 {urgentes}</span>}
           <span style={{ fontSize: '0.72rem', color: '#888' }}>{items.length} prods.</span>
           <div onClick={e => e.stopPropagation()}>
             {estaEditando ? (
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input type="number" min={1} value={editVal} onChange={e => setEditVal(e.target.value)} style={{ width: 52, padding: '3px 6px', border: '1px solid var(--orange)', borderRadius: 4, fontSize: '0.75rem' }} />
-                <span style={{ fontSize: '0.7rem', color: '#888' }}>días</span>
+                <span style={{ fontSize: '0.7rem', color: '#888' }}>días tránsito</span>
+                <select value={editTipo} onChange={e => setEditTipo(e.target.value)} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid var(--orange)', fontSize: '0.72rem', background: 'white' }}>
+                  <option value="nacional">🇨🇷 Nacional</option>
+                  <option value="extranjero">🌍 Extranjero</option>
+                </select>
                 <button onClick={() => guardarLeadTime(prov)} disabled={guardando} style={{ padding: '3px 8px', background: 'var(--orange)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.72rem' }}>{guardando ? '...' : '✓'}</button>
                 <button onClick={() => setEditando(null)} style={{ padding: '3px 6px', background: '#eee', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.72rem' }}>✕</button>
               </div>
             ) : (
-              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 8); setEditNotas(lt?.notas || ''); }} style={{ fontSize: '0.72rem', color: 'var(--teal)', background: 'none', border: '1px solid var(--teal)', borderRadius: 6, cursor: 'pointer', padding: '3px 8px', whiteSpace: 'nowrap' }}>
+              <button onClick={() => { setEditando(prov); setEditVal(lt?.lead_time_dias || 8); setEditNotas(lt?.notas || ''); setEditTipo(lt?.tipo || 'nacional'); }} style={{ fontSize: '0.72rem', color: 'var(--teal)', background: 'none', border: '1px solid var(--teal)', borderRadius: 6, cursor: 'pointer', padding: '3px 8px', whiteSpace: 'nowrap' }}>
                 ⏱ {lt?.lead_time_dias ? `${lt.lead_time_dias}d` : 'Lead time'}
               </button>
             )}
@@ -963,8 +1000,74 @@ export default function KronosTab({ calc, transitoMap }) {
       {/* Contenido por tab */}
       {tabActivo === 'proveedor' && (
         <div>
+          {/* Resumen de compras: alerta visible para extranjeros (más críticos por tránsito largo) */}
+          {(resumenCompras.ext_criticos > 0 || resumenCompras.ext_urgentes > 0) && (
+            <div style={{
+              background: 'linear-gradient(135deg, #FFF5F5 0%, #FED7D7 100%)',
+              border: '2px solid #FC8181',
+              borderRadius: 12,
+              padding: '14px 18px',
+              marginBottom: 14,
+              display: 'flex',
+              gap: 16,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}>
+              <div style={{ fontSize: '1.8rem', flexShrink: 0 }}>🌍🚨</div>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#822727', marginBottom: 4 }}>
+                  Pedidos extranjeros que necesitan acción YA
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#555' }}>
+                  <strong style={{ color: '#C53030' }}>{resumenCompras.ext_criticos}</strong> críticos
+                  {resumenCompras.ext_urgentes > 0 && <> · <strong style={{ color: '#D69E2E' }}>{resumenCompras.ext_urgentes}</strong> urgentes</>}
+                  {resumenCompras.ventas_riesgo_ext > 0 && <> · ventas en riesgo: <strong style={{ color: '#C53030' }}>{fmtCRC(resumenCompras.ventas_riesgo_ext)}/mes</strong></>}
+                </div>
+                {resumenCompras.peorExt.length > 0 && (
+                  <div style={{ fontSize: '0.74rem', color: '#666', marginTop: 6 }}>
+                    Más urgentes: {resumenCompras.peorExt.map(i => `${i.codigo} (${i._diasQuiebre ?? '?'}d)`).join(' · ')}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => { setFiltroTipo('extranjero'); setFiltroUrgencia('urgente'); }}
+                style={{ background: '#C53030', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                Ver solo extranjeros urgentes →
+              </button>
+            </div>
+          )}
+
+          {/* Mini stats nacional vs extranjero */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 14 }}>
+            <div onClick={() => setFiltroTipo(filtroTipo === 'extranjero' ? 'todos' : 'extranjero')}
+              style={{ background: 'white', border: `2px solid ${filtroTipo === 'extranjero' ? '#3182CE' : '#e2e8f0'}`, borderRadius: 10, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.4rem' }}>🌍</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.72rem', color: '#666', fontWeight: 600 }}>EXTRANJEROS</div>
+                <div style={{ fontSize: '0.85rem', color: '#2a3a50' }}>
+                  <strong>{resumenCompras.ext_total}</strong> productos · <span style={{ color: '#C53030', fontWeight: 700 }}>{resumenCompras.ext_criticos}</span> 🔴 · <span style={{ color: '#D69E2E', fontWeight: 700 }}>{resumenCompras.ext_urgentes}</span> 🟡
+                </div>
+              </div>
+            </div>
+            <div onClick={() => setFiltroTipo(filtroTipo === 'nacional' ? 'todos' : 'nacional')}
+              style={{ background: 'white', border: `2px solid ${filtroTipo === 'nacional' ? '#38A169' : '#e2e8f0'}`, borderRadius: 10, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.4rem' }}>🇨🇷</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.72rem', color: '#666', fontWeight: 600 }}>NACIONALES</div>
+                <div style={{ fontSize: '0.85rem', color: '#2a3a50' }}>
+                  <strong>{resumenCompras.nac_total}</strong> productos · <span style={{ color: '#C53030', fontWeight: 700 }}>{resumenCompras.nac_criticos}</span> 🔴 · <span style={{ color: '#D69E2E', fontWeight: 700 }}>{resumenCompras.nac_urgentes}</span> 🟡
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
             <input className="module-input" style={{ flex: 1, minWidth: 220 }} placeholder="🔍 Buscar por código, nombre, proveedor..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+            <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: '0.82rem', cursor: 'pointer', background: 'white', color: '#333' }}>
+              <option value="todos">🌐 Todos los proveedores</option>
+              <option value="nacional">🇨🇷 Solo Nacionales</option>
+              <option value="extranjero">🌍 Solo Extranjeros</option>
+            </select>
             <select value={filtroUrgencia} onChange={e => setFiltroUrgencia(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: '0.82rem', cursor: 'pointer', background: 'white', color: '#333' }}>
               <option value="todos">📋 Todos los estados</option>
               <option value="critico">🔴 Críticos (Vencido + Pedí YA)</option>
@@ -975,6 +1078,12 @@ export default function KronosTab({ calc, transitoMap }) {
             <span style={{ fontSize: '0.78rem', color: '#999' }}>{totalFiltrado} productos · {grupos.activos.length} proveedores</span>
             <button onClick={expandirTodos} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontSize: '0.78rem', color: '#555' }}>▼ Expandir todo</button>
             <button onClick={colapsarTodos} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontSize: '0.78rem', color: '#555' }}>▶ Colapsar todo</button>
+            {(filtroTipo !== 'todos' || filtroUrgencia !== 'todos' || busqueda) && (
+              <button onClick={() => { setFiltroTipo('todos'); setFiltroUrgencia('todos'); setBusqueda(''); }}
+                style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid #fbb', background: '#fff5f5', cursor: 'pointer', fontSize: '0.78rem', color: '#c53030', fontWeight: 600 }}>
+                ✕ Limpiar filtros
+              </button>
+            )}
           </div>
           {grupos.activos.length === 0 && grupos.pausados.length === 0 && <div style={{ textAlign: 'center', padding: 48, color: '#aaa' }}>No hay productos que mostrar.</div>}
           {grupos.activos.map(g => <CardProveedor key={g.prov} prov={g.prov} items={g.items} pausado={false} />)}
