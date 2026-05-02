@@ -433,20 +433,23 @@ export default function ComercialV2() {
   const [productoAnio, setProductoAnio] = useState('todos');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null); // codigo_interno
 
-  // ── Load vendedores (desde informe de ventas + facturación) ─────────────────
+  // ── Load vendedores (desde informe de ventas, ventana de últimos 12 meses) ──
   useEffect(() => {
     (async () => {
-      // Primero intentar desde el informe de ventas (nombres oficiales)
+      // Tomar nombres oficiales de los últimos 12 meses para que la lista no
+      // quede vacía a inicios de mes cuando todavía no se subió el informe.
+      const now = new Date();
+      const desde = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      const desdeMes = `${desde.getFullYear()}-${String(desde.getMonth() + 1).padStart(2, '0')}`;
       const { data: informe } = await supabase
         .from('neo_informe_ventas_vendedor')
         .select('vendedor')
-        .eq('mes', currentMonth());
+        .gte('mes', desdeMes);
       const nombresInforme = (informe || []).map(r => r.vendedor).filter(Boolean);
-      // Fallback: desde facturación
-      const { data: facturacion } = await supabase.rpc('comercial_ventas_vendedor', { p_mes: currentMonth() });
-      const nombresFacturacion = (facturacion || []).map(d => d.vendedor).filter(Boolean);
-      // Combinar sin duplicados
-      const todosNombres = [...new Set([...nombresInforme, ...nombresFacturacion])].sort();
+      // Combinar sin duplicados, ordenado por nombre visible
+      const todosNombres = [...new Set(nombresInforme)].sort((a, b) =>
+        a.trim().localeCompare(b.trim(), 'es', { sensitivity: 'base' })
+      );
       const vends = todosNombres.map(n => ({ id: n, nombre: n }));
       setVendedores(vends);
       // Si no es admin, auto-llenar con su propio nombre
@@ -1049,7 +1052,7 @@ export default function ComercialV2() {
               >
                 <option value="">Seleccionar...</option>
                 {vendedores.map(v => (
-                  <option key={v.id} value={v.nombre}>{v.nombre}</option>
+                  <option key={v.id} value={v.nombre}>{v.nombre.replace(/\s+/g, ' ').trim()}</option>
                 ))}
               </select>
             </div>
