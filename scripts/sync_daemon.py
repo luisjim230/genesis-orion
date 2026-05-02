@@ -156,10 +156,10 @@ def procesar_solicitud(req):
 
 
 # ─── SCHEDULER INTEGRADO ──────────────────────────────────────────────────────
-# Lun–Sáb a las 9:00 y 16:00. Reemplaza a los LaunchAgents individuales.
+# Todos los días a las 8:00 y 16:00. Reemplaza a los LaunchAgents individuales.
 
-SCHEDULE_HOURS    = [9, 16]            # horas en que corre (hora local)
-SCHEDULE_WEEKDAYS = [0, 1, 2, 3, 4, 5] # 0=Lunes, 5=Sábado
+SCHEDULE_HOURS    = [8, 16]                  # horas en que corre (hora local)
+SCHEDULE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]    # 0=Lunes ... 6=Domingo (todos los días)
 SCHEDULE_SCRIPTS  = list(SCRIPT_MAP.keys())
 
 _ran_slots: set = set()  # "YYYY-MM-DD_HH" ya ejecutados en este ciclo de daemon
@@ -220,7 +220,7 @@ def main():
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info(f"Revisando solicitudes cada 60 segundos")
-    log.info(f"Sync programado: Lun–Sáb {SCHEDULE_HOURS} h")
+    log.info(f"Sync programado: todos los días {SCHEDULE_HOURS} h")
     log.info("=" * 50)
 
     while True:
