@@ -195,7 +195,7 @@ function detectarTipo(filas, nombreArchivo) {
   // ── Fallback: detectar por nombre de archivo ────────────────────────────
   // Algunos reportes tienen celdas mergeadas que XLSX.js no puede leer
   if (nombreArchivo) {
-    const nom = nombreArchivo.toLowerCase();
+    const nom = nombreArchivo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     // NEO exporta con fecha al final tipo "NombreReporte_16_03_09_17_12.xlsx"
     // Normalizar: quitar fecha, quitar underscores, minúsculas
     const nomNorm = nom
