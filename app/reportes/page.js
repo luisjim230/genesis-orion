@@ -1058,7 +1058,7 @@ function TabSubir() {
           <div style={{ marginBottom:10, textAlign:'right' }}>
             <button
               onClick={() => {
-                const automatizados = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados','informe_ventas_vendedor','movimientos_contables'];
+                const automatizados = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados','informe_ventas_vendedor','movimientos_contables','proformas_cabecera','proformas_items'];
                 automatizados.forEach(k => forzarSync(k));
               }}
               style={{ background:'#1a3a50', border:'1px solid #2a5a7a', borderRadius:7, color:'#63b3ed', padding:'5px 16px', fontSize:'0.8rem', cursor:'pointer', fontWeight:600 }}
@@ -1091,8 +1091,8 @@ function TabSubir() {
                 const fecha = s?.ultima_sync ? new Date(s.ultima_sync).toLocaleString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
                 const ok = s ? s.exitoso !== false : null;
                 const dot = ok === null ? '#888' : ok ? '#4ade80' : '#f87171';
-                const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados','informe_ventas_vendedor','movimientos_contables'].includes(key);
-                const manual = ['proformas_cabecera','proformas_items'].includes(key);
+                const automatizado = ['minimos_maximos','items_comprados','antiguedad_proveedores','antiguedad_clientes','items_facturados','informe_ventas_vendedor','movimientos_contables','proformas_cabecera','proformas_items'].includes(key);
+                const manual = false;
                 return (
                   <tr key={i} style={{ background: i%2===0 ? 'transparent' : 'rgba(237,110,46,0.04)' }}>
                     <td style={S.td}>{r}</td>
