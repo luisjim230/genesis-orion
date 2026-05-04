@@ -118,6 +118,44 @@ def rango_30_dias():
     return f_ini.strftime("%d%m%Y"), hoy.strftime("%d%m%Y")
 
 
+async def dump_inputs(iframe):
+    """Imprime los inputs/selects/botones visibles para diagnosticar la UI de NEO."""
+    log.info("  ── DEBUG: Inputs en la página ──")
+    try:
+        inputs = iframe.locator("input")
+        count = await inputs.count()
+        log.info(f"    Total inputs: {count}")
+        for i in range(min(count, 30)):
+            try:
+                tag_id   = await inputs.nth(i).get_attribute("id") or ""
+                tag_name = await inputs.nth(i).get_attribute("name") or ""
+                tag_type = await inputs.nth(i).get_attribute("type") or ""
+                tag_val  = await inputs.nth(i).get_attribute("value") or ""
+                tag_ph   = await inputs.nth(i).get_attribute("placeholder") or ""
+                visible  = await inputs.nth(i).is_visible()
+                if visible:
+                    log.info(f"    [{i}] type={tag_type:<10} id={tag_id:<25} name={tag_name:<25} val='{tag_val[:25]}' ph='{tag_ph[:20]}'")
+            except Exception:
+                pass
+    except Exception as e:
+        log.warning(f"    Error listando inputs: {e}")
+    try:
+        selects = iframe.locator("select")
+        sc = await selects.count()
+        log.info(f"    Total selects: {sc}")
+        for i in range(min(sc, 10)):
+            try:
+                if await selects.nth(i).is_visible():
+                    sid = await selects.nth(i).get_attribute("id") or ""
+                    snm = await selects.nth(i).get_attribute("name") or ""
+                    log.info(f"    select[{i}] id={sid:<25} name={snm}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    log.info("  ── FIN DEBUG ──")
+
+
 async def setear_fechas(iframe, f_inicio, f_fin):
     selectores = [
         ("#fFechaInicio",          "#fFechaFin"),
@@ -152,6 +190,7 @@ async def setear_fechas(iframe, f_inicio, f_fin):
     except Exception:
         pass
     log.warning("  No pude setear fechas — usando default de NEO")
+    await dump_inputs(iframe)
     return False
 
 
