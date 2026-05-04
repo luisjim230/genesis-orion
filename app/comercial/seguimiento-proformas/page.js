@@ -1037,7 +1037,7 @@ export default function SeguimientoProformas() {
 
   // Auth gate
   if (authLoading) return <div style={S.page}><Spinner /></div>;
-  if (!perfil || !puedeVer('comercial')) return (
+  if (!perfil || !puedeVer('seguimiento-proformas')) return (
     <div style={S.page}>
       <Empty msg="Acceso denegado" sub="No tenés permisos para ver este módulo." />
     </div>
