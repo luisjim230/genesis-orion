@@ -234,6 +234,19 @@ async def descargar():
         await page.wait_for_timeout(2000)
         log.info("✅ Ítems comprados cargado")
 
+        # Re-obtener iframe (puede haber cambiado al navegar) y esperar que el formulario aparezca
+        iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+        log.info("  Esperando que el formulario del reporte cargue...")
+        for _ in range(15):  # hasta 15s
+            try:
+                count_in = await iframe.locator("input[type='text']").count()
+                if count_in >= 4:  # formulario tiene varios inputs (fechas, etc)
+                    log.info(f"  Formulario listo (inputs={count_in})")
+                    break
+            except Exception:
+                pass
+            await page.wait_for_timeout(1000)
+
         # ── Setear rango de fechas (últimos 30 días) ───────────────────────────
         await setear_fechas(iframe, f_inicio, f_fin)
 
@@ -323,6 +336,28 @@ def subir_a_supabase(excel_path):
     if total < 10:
         log.error(f"❌ Solo {total} filas — posible error en descarga. Abortando.")
         return False
+
+    # Safety check: comparar contra lo que ya hay en la base.
+    # Si el Excel trae <50% de lo existente, asumimos descarga rota y abortamos
+    # para no destruir datos históricos.
+    prev_count = 0
+    try:
+        url_count = f"{SUPA_URL}/rest/v1/{TABLA}?select=id&limit=0"
+        req_c = urllib.request.Request(url_count, method="GET")
+        req_c.add_header("apikey", SUPA_KEY)
+        req_c.add_header("Authorization", f"Bearer {SUPA_KEY}")
+        req_c.add_header("Prefer", "count=exact")
+        with urllib.request.urlopen(req_c, timeout=15) as r_c:
+            cr = r_c.headers.get("Content-Range", "0-0/0")
+            prev_count = int(cr.split("/")[-1]) if "/" in cr else 0
+    except Exception as e:
+        log.warning(f"  No pude contar filas previas: {e}")
+
+    if prev_count > 200 and total < int(prev_count * 0.5):
+        log.error(f"❌ Excel trae {total} filas pero la base tiene {prev_count}. "
+                  f"Descarga sospechosamente vacía — abortando para no destruir histórico.")
+        return False
+    log.info(f"  Safety check OK: prev={prev_count}, nuevo={total}")
 
     # Metadatos
     fecha_carga = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
