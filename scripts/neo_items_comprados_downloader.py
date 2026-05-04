@@ -110,8 +110,56 @@ COL_MAP = {
 
 # ─── DESCARGA ─────────────────────────────────────────────────────────────────
 
+def rango_30_dias():
+    """Últimos 30 días corridos hasta hoy. Devuelve (DDMMYYYY, DDMMYYYY)."""
+    from datetime import timedelta, date
+    hoy = date.today()
+    f_ini = hoy - timedelta(days=30)
+    return f_ini.strftime("%d%m%Y"), hoy.strftime("%d%m%Y")
+
+
+async def setear_fechas(iframe, f_inicio, f_fin):
+    selectores = [
+        ("#fFechaInicio",          "#fFechaFin"),
+        ("#txtFechaInicio",        "#txtFechaFin"),
+        ("input[name='fFechaInicio']",   "input[name='fFechaFin']"),
+        ("input[name='txtFechaInicio']", "input[name='txtFechaFin']"),
+    ]
+    for sel_ini, sel_fin in selectores:
+        try:
+            el = iframe.locator(sel_ini)
+            if await el.count() > 0:
+                await el.click(click_count=3)
+                await el.fill(f_inicio)
+                await iframe.locator(sel_fin).click(click_count=3)
+                await iframe.locator(sel_fin).fill(f_fin)
+                log.info(f"  Fechas OK ({sel_ini}): {f_inicio} → {f_fin}")
+                return True
+        except Exception:
+            continue
+    try:
+        inputs = iframe.locator("input[type='text']")
+        count = await inputs.count()
+        for idx in range(min(count, 12)):
+            val = await inputs.nth(idx).get_attribute("value") or ""
+            if "/" in val and len(val) >= 8 and idx + 1 < count:
+                await inputs.nth(idx).click(click_count=3)
+                await inputs.nth(idx).fill(f_inicio)
+                await inputs.nth(idx + 1).click(click_count=3)
+                await inputs.nth(idx + 1).fill(f_fin)
+                log.info(f"  Fechas OK (fallback input[{idx}]): {f_inicio} → {f_fin}")
+                return True
+    except Exception:
+        pass
+    log.warning("  No pude setear fechas — usando default de NEO")
+    return False
+
+
 async def descargar():
     from playwright.async_api import async_playwright
+
+    f_inicio, f_fin = rango_30_dias()
+    log.info(f"Últimos 30 días: {f_inicio[:2]}/{f_inicio[2:4]}/{f_inicio[4:]} → {f_fin[:2]}/{f_fin[2:4]}/{f_fin[4:]}")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -144,7 +192,22 @@ async def descargar():
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
         await iframe.get_by_role("link", name=" Ítems comprados").click()
         await page.wait_for_load_state("networkidle")
+        await page.wait_for_timeout(2000)
         log.info("✅ Ítems comprados cargado")
+
+        # ── Setear rango de fechas (últimos 30 días) ───────────────────────────
+        await setear_fechas(iframe, f_inicio, f_fin)
+
+        # ── Refrescar para que NEO cargue el rango nuevo ───────────────────────
+        try:
+            await iframe.get_by_role("button", name="Refrescar").click()
+            log.info("  Click en Refrescar")
+        except Exception:
+            try:
+                await iframe.locator("input[value='Refrescar']").click()
+                log.info("  Click en Refrescar (fallback)")
+            except Exception:
+                log.warning("  No encontré botón Refrescar")
 
         # NEO es lento — esperar que el reporte termine de cargar
         # Esperamos el footer "X registros" en lugar del botón Exportar (que aparece de inmediato)
@@ -152,6 +215,8 @@ async def descargar():
         try:
             await iframe.locator("text=registros").wait_for(timeout=180_000)
             log.info("  Datos cargados")
+            # Pausa extra para que termine el render
+            await page.wait_for_timeout(5_000)
         except Exception:
             log.warning("Timeout 180s — esperando 15s extra y exportando igual")
             await page.wait_for_timeout(15_000)
