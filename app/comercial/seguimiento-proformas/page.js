@@ -950,7 +950,7 @@ export default function SeguimientoProformas() {
   const esAdmin = perfil?.rol === 'admin' || VER_UTILIDAD_USERNAMES.includes(perfil?.username);
   const [tab, setTab] = useState('abiertas');
   const [filas, setFilas] = useState(null);
-  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' });
+  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' });
   const [drawerProf, setDrawerProf] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -991,6 +991,8 @@ export default function SeguimientoProformas() {
   // Filtros aplicados sobre Abiertas
   const filasAbiertasFiltradas = useMemo(() => {
     if (!filasAbiertas) return null;
+    const profQ = String(filtros.proforma || '').trim();
+    const cliQ = String(filtros.cliente || '').trim().toLowerCase();
     let arr = filasAbiertas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
       if (filtros.tier && f.tier_nombre !== filtros.tier) return false;
@@ -1000,6 +1002,8 @@ export default function SeguimientoProformas() {
       }
       if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
       if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
+      if (profQ && !String(f.proforma).includes(profQ)) return false;
+      if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
       return true;
     });
     arr.sort((a, b) => {
@@ -1013,10 +1017,14 @@ export default function SeguimientoProformas() {
 
   const filasGanadasFiltradas = useMemo(() => {
     if (!filasGanadas) return null;
+    const profQ = String(filtros.proforma || '').trim();
+    const cliQ = String(filtros.cliente || '').trim().toLowerCase();
     let arr = filasGanadas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
       if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
       if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
+      if (profQ && !String(f.proforma).includes(profQ)) return false;
+      if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
       return true;
     });
     arr = [...arr].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
@@ -1131,6 +1139,20 @@ export default function SeguimientoProformas() {
                 onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
                 style={S.input} />
             </div>
+            <div>
+              <label style={S.label}># Proforma</label>
+              <input type="text" inputMode="numeric" value={filtros.proforma}
+                onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
+                placeholder="Ej: 136248"
+                style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Cliente</label>
+              <input type="text" value={filtros.cliente}
+                onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
+                placeholder="Buscar por nombre..."
+                style={S.input} />
+            </div>
             {esAdmin && (
               <div>
                 <label style={S.label}>Margen mínimo: {filtros.margenMin}%</label>
@@ -1140,9 +1162,9 @@ export default function SeguimientoProformas() {
                   style={{ width: '100%' }} />
               </div>
             )}
-            {(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0) && (
+            {(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente) && (
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button onClick={() => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' })}
+                <button onClick={() => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' })}
                   style={S.btnGhost}>Limpiar filtros</button>
               </div>
             )}
@@ -1187,9 +1209,23 @@ export default function SeguimientoProformas() {
                 onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
                 style={S.input} />
             </div>
-            {(filtros.vendedor || filtros.fechaDesde || filtros.fechaHasta) && (
+            <div>
+              <label style={S.label}># Proforma</label>
+              <input type="text" inputMode="numeric" value={filtros.proforma}
+                onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
+                placeholder="Ej: 136248"
+                style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Cliente</label>
+              <input type="text" value={filtros.cliente}
+                onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
+                placeholder="Buscar por nombre..."
+                style={S.input} />
+            </div>
+            {(filtros.vendedor || filtros.fechaDesde || filtros.fechaHasta || filtros.proforma || filtros.cliente) && (
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button onClick={() => setFiltros({ ...filtros, vendedor: '', fechaDesde: '', fechaHasta: '' })}
+                <button onClick={() => setFiltros({ ...filtros, vendedor: '', fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' })}
                   style={S.btnGhost}>Limpiar filtros</button>
               </div>
             )}
