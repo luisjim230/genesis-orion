@@ -790,7 +790,7 @@ function TabConfig() {
 }
 
 // ── Tab: Tabla de proformas (Abiertas / Ganadas) ────────────────────────────
-function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
+function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = false }) {
   if (!datos) return <Spinner />;
   if (datos.length === 0) return <Empty msg="Sin proformas" sub="No hay proformas que coincidan con los filtros." />;
   return (
@@ -805,8 +805,8 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
             <th style={S.th}>Vendedor</th>
             <th style={S.th}>Tier</th>
             <th style={{ ...S.th, textAlign: 'right' }}>Monto</th>
-            <th style={{ ...S.th, textAlign: 'right' }}>Margen %</th>
-            <th style={{ ...S.th, textAlign: 'right' }}>Utilidad</th>
+            {esAdmin && <th style={{ ...S.th, textAlign: 'right' }}>Margen %</th>}
+            {esAdmin && <th style={{ ...S.th, textAlign: 'right' }}>Utilidad</th>}
             <th style={{ ...S.th, textAlign: 'center' }}>Días</th>
             {mostrarSeguimientos && <th style={{ ...S.th, textAlign: 'center' }}>Seg.</th>}
           </tr>
@@ -828,10 +828,12 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true }) {
               <td style={S.td}>{p.vendedor || '—'}</td>
               <td style={S.td}><TierBadge nombre={p.tier_nombre} color={p.tier_color} /></td>
               <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{CRC(p.monto_total)}</td>
-              <td style={{ ...S.td, textAlign: 'right' }}>
-                <MargenCell pct={p.margen_pct} faltan={p.tiene_costos_faltantes} />
-              </td>
-              <td style={{ ...S.td, textAlign: 'right' }}>{CRC(p.utilidad_mercaderia)}</td>
+              {esAdmin && (
+                <td style={{ ...S.td, textAlign: 'right' }}>
+                  <MargenCell pct={p.margen_pct} faltan={p.tiene_costos_faltantes} />
+                </td>
+              )}
+              {esAdmin && <td style={{ ...S.td, textAlign: 'right' }}>{CRC(p.utilidad_mercaderia)}</td>}
               <td style={{ ...S.td, textAlign: 'center' }}>{p.dias_desde_proforma ?? '—'}</td>
               {mostrarSeguimientos && (
                 <td style={{ ...S.td, textAlign: 'center', fontFamily: 'monospace' }}>
@@ -939,8 +941,13 @@ function PodioVendedores({ filasGanadas, fechaDesde, fechaHasta }) {
 }
 
 // ── Página principal ────────────────────────────────────────────────────────
+// Usuarios autorizados a ver información sensible (utilidad, margen, costos)
+// además de cualquier usuario con rol 'admin'.
+const VER_UTILIDAD_USERNAMES = ['tony'];
+
 export default function SeguimientoProformas() {
   const { perfil, loading: authLoading, puedeVer } = useAuth();
+  const esAdmin = perfil?.rol === 'admin' || VER_UTILIDAD_USERNAMES.includes(perfil?.username);
   const [tab, setTab] = useState('abiertas');
   const [filas, setFilas] = useState(null);
   const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' });
@@ -1080,8 +1087,8 @@ export default function SeguimientoProformas() {
           }}>
             <KpiCard kicker="Proformas" value={kpis.count.toLocaleString('es-CR')} />
             <KpiCard kicker="Monto en juego" value={CRC(kpis.monto)} accent={C.gold} />
-            <KpiCard kicker="Utilidad potencial" value={CRC(kpis.utilidad)} accent={C.green} />
-            <KpiCard kicker="Margen promedio" value={`${kpis.margenAvg.toFixed(1)}%`} accent={C.blue} />
+            {esAdmin && <KpiCard kicker="Utilidad potencial" value={CRC(kpis.utilidad)} accent={C.green} />}
+            {esAdmin && <KpiCard kicker="Margen promedio" value={`${kpis.margenAvg.toFixed(1)}%`} accent={C.blue} />}
             <KpiCard kicker="Atrasadas" value={kpis.atrasadas.toLocaleString('es-CR')}
               danger={kpis.atrasadas > 0} sub={kpis.atrasadas > 0 ? 'Requieren acción inmediata' : 'Todo al día'} />
           </div>
@@ -1124,13 +1131,15 @@ export default function SeguimientoProformas() {
                 onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
                 style={S.input} />
             </div>
-            <div>
-              <label style={S.label}>Margen mínimo: {filtros.margenMin}%</label>
-              <input type="range" min={0} max={50} step={5}
-                value={filtros.margenMin}
-                onChange={e => setFiltros({ ...filtros, margenMin: Number(e.target.value) })}
-                style={{ width: '100%' }} />
-            </div>
+            {esAdmin && (
+              <div>
+                <label style={S.label}>Margen mínimo: {filtros.margenMin}%</label>
+                <input type="range" min={0} max={50} step={5}
+                  value={filtros.margenMin}
+                  onChange={e => setFiltros({ ...filtros, margenMin: Number(e.target.value) })}
+                  style={{ width: '100%' }} />
+              </div>
+            )}
             {(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0) && (
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button onClick={() => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '' })}
@@ -1143,6 +1152,7 @@ export default function SeguimientoProformas() {
             datos={filasAbiertasFiltradas}
             onRow={p => setDrawerProf(p)}
             mostrarSeguimientos={true}
+            esAdmin={esAdmin}
           />
         </div>
       )}
@@ -1188,6 +1198,7 @@ export default function SeguimientoProformas() {
             datos={filasGanadasFiltradas}
             onRow={p => setDrawerProf(p)}
             mostrarSeguimientos={false}
+            esAdmin={esAdmin}
           />
         </div>
       )}
