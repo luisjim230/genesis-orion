@@ -257,6 +257,57 @@ function DonutChart({ data, total }) {
   );
 }
 
+// Embudo visual del flujo Carrito → Checkout → Compra. Cada barra muestra
+// volumen absoluto + % respecto al paso anterior (drop-off por etapa).
+function ConversionFunnel({ data }) {
+  const steps = [
+    { key: 'add_to_cart',     label: '🛒 Agregaron al carrito', color: BLUE,   value: data.add_to_cart },
+    { key: 'begin_checkout',  label: '🧾 Iniciaron checkout',   color: AMBER,  value: data.begin_checkout },
+    { key: 'purchase',        label: '✅ Compraron',             color: GREEN,  value: data.purchase },
+  ];
+  const max = Math.max(...steps.map(s => s.value || 0), 1);
+  return (
+    <div style={{ marginTop: 18, padding: 16, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12 }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(0,0,0,0.7)', marginBottom: 12 }}>
+        📊 Embudo de conversión
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {steps.map((s, i) => {
+          const widthPct = max > 0 ? (s.value / max) * 100 : 0;
+          const prev = i > 0 ? steps[i - 1].value : null;
+          const dropPct = prev != null && prev > 0 ? ((prev - s.value) / prev) * 100 : null;
+          return (
+            <div key={s.key}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <span style={{ fontSize: '0.85rem', color: 'rgba(0,0,0,0.7)' }}>{s.label}</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'rgba(0,0,0,0.85)' }}>
+                  {fmtInt(s.value)}
+                  {dropPct != null && dropPct > 0 && (
+                    <span style={{ fontSize: '0.75rem', color: RED, fontWeight: 600, marginLeft: 8 }}>
+                      ↓ −{dropPct.toFixed(0)}%
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div style={{ height: 22, background: 'rgba(0,0,0,0.05)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ width: `${widthPct}%`, height: '100%', background: s.color, transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {data.add_to_cart > 0 && (
+        <div style={{ marginTop: 12, fontSize: '0.78rem', color: 'rgba(0,0,0,0.55)', lineHeight: 1.5 }}>
+          💡 De cada 100 personas que agregaron al carrito,{' '}
+          <strong>{((data.purchase / data.add_to_cart) * 100).toFixed(1)}</strong> compraron.
+          Las {fmtInt(data.add_to_cart - data.purchase)} restantes <strong>abandonaron</strong> —
+          son tu mejor audiencia para retargeting o cupones.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConversionsSection({ dateRange }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -283,6 +334,7 @@ function ConversionsSection({ dateRange }) {
             <MetricCard label="✅ Compras web" value={fmtInt(data.purchase)} hint="completadas en la web" />
             <MetricCard label="💰 Ingresos web" value={fmtCRC(data.revenue)} hint="suma de compras web (colones)" />
           </div>
+          <ConversionFunnel data={data} />
           {data.purchase === 0 && data.revenue > 0 && (
             <div style={{ marginTop: 12, background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.4)', color: '#7a5d10', padding: '10px 14px', borderRadius: 10, fontSize: '0.82rem', lineHeight: 1.5 }}>
               ⚠️ Hay revenue registrado pero 0 compras. Esto suele significar que GA4 está
@@ -407,6 +459,115 @@ function DeviceBreakdownSection({ dateRange }) {
   );
 }
 
+// Top productos abandonados en carrito: ranking de productos con más
+// add_to_cart pero baja conversión a purchase. Acciona retargeting/cupones.
+function AbandonedCartSection({ dateRange }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    ga4('abandoned_cart', dateRange).then(setData).catch(e => setError(e.message));
+  }, [dateRange]);
+
+  return (
+    <div style={S.card}>
+      <div style={S.sectionTitle}>🛒 Top productos abandonados en carrito</div>
+      <div style={S.sectionCap}>
+        Productos con alta intención (mucho carrito) y baja conversión (poca compra).
+        Cuanto más alto el <strong>score de oportunidad</strong>, más sentido tiene apuntarles
+        un cupón, retargeting en Meta, o revisar precio/stock.
+      </div>
+      {error && <div style={{ color: RED, fontSize: '0.85rem' }}>⚠️ {error}</div>}
+      <FallbackBanner data={data} />
+      {!data ? (
+        <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>⏳ Cargando...</div>
+      ) : !data.items || data.items.length === 0 ? (
+        <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '0.9rem' }}>
+          Sin datos de carrito en este período. Si el sitio está recibiendo eventos
+          <code style={{ background: 'rgba(0,0,0,0.05)', padding: '0 4px', borderRadius: 3, margin: '0 4px' }}>add_to_cart</code>
+          con detalle de items, acá aparecen los más abandonados.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
+            <MetricCard label="Total agregados" value={fmtInt(data.summary?.total_added)} hint="ítems al carrito en este período" />
+            <MetricCard label="Total abandonados" value={fmtInt(data.summary?.total_abandoned)} hint="agregados que NO se compraron" color={RED} />
+            <MetricCard label="Conversión promedio" value={`${(Number(data.summary?.avg_conversion_rate) || 0).toFixed(1)}%`} hint="de carrito a compra" color={GREEN} />
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(0,0,0,0.04)' }}>
+                  <th style={th()}>#</th>
+                  <th style={th()}>Producto</th>
+                  <th style={{ ...th(), textAlign: 'right' }}>Agregados</th>
+                  <th style={{ ...th(), textAlign: 'right' }}>Comprados</th>
+                  <th style={{ ...th(), textAlign: 'right' }}>Abandonados</th>
+                  <th style={{ ...th(), textAlign: 'right' }}>Conv.</th>
+                  <th style={{ ...th(), textAlign: 'right' }}>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((it, i) => {
+                  const isHot = it.opportunity_score >= 5 && it.conversion_rate < 30;
+                  const noConv = it.purchased === 0 && it.added > 0;
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', background: isHot ? 'rgba(255,193,7,0.06)' : 'transparent' }}>
+                      <td style={td()}>{i + 1}</td>
+                      <td style={td()}>
+                        <div style={{ fontWeight: 500 }}>{it.item_name || <span style={{ color: 'rgba(0,0,0,0.4)' }}>(sin nombre)</span>}</div>
+                        {it.item_id && <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.4)' }}>id: {it.item_id}</div>}
+                      </td>
+                      <td style={{ ...td(), textAlign: 'right', fontWeight: 700 }}>{fmtInt(it.added)}</td>
+                      <td style={{ ...td(), textAlign: 'right', color: noConv ? RED : GREEN, fontWeight: 700 }}>{fmtInt(it.purchased)}</td>
+                      <td style={{ ...td(), textAlign: 'right', color: RED, fontWeight: 700 }}>{fmtInt(it.abandoned)}</td>
+                      <td style={{ ...td(), textAlign: 'right' }}>{(Number(it.conversion_rate) || 0).toFixed(1)}%</td>
+                      <td style={{ ...td(), textAlign: 'right', fontWeight: 800, color: isHot ? AMBER : 'rgba(0,0,0,0.6)' }}>
+                        {(Number(it.opportunity_score) || 0).toFixed(1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 12, fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)', lineHeight: 1.5 }}>
+            💡 <strong>Cómo leer:</strong> filas amarillas son oportunidades calientes (score alto + baja conversión).
+            Score = abandonos × (1 − tasa de conversión). Más alto = más urgente accionar.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Info-card que explica cómo armar la audiencia de retargeting en Meta usando
+// el Pixel ya instalado en el sitio. No requiere código nuevo — todo se hace
+// desde Meta Ads Manager.
+function MetaRetargetingInfo() {
+  return (
+    <div style={{ ...S.card, background: 'rgba(225,48,108,0.06)', border: '1px solid rgba(225,48,108,0.25)' }}>
+      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#9c1e4a', marginBottom: 8 }}>
+        📣 ¿Cómo recuperar a los que abandonaron?
+      </div>
+      <div style={{ fontSize: '0.88rem', color: '#7c1740', lineHeight: 1.6 }}>
+        El <strong>Meta Pixel ya está instalado</strong> en depositojimenezcr.com y trackea
+        AddToCart, InitiateCheckout y Purchase. Para retargetearlos sin escribir código:
+        <ol style={{ marginTop: 8, marginBottom: 6, paddingLeft: 22 }}>
+          <li>Entrar a <a href="https://business.facebook.com/adsmanager/audiences" target="_blank" rel="noreferrer" style={{ color: '#9c1e4a', fontWeight: 600 }}>Meta Ads Manager → Audiencias</a>.</li>
+          <li>Crear nueva → <em>Audiencia personalizada</em> → fuente <em>Sitio web</em> → píxel de Depósito Jiménez.</li>
+          <li>Condición 1: <em>Personas que activaron <strong>AddToCart</strong> en los últimos 30 días</em>.</li>
+          <li>Condición 2 (excluir): <em>Personas que activaron <strong>Purchase</strong> en los últimos 30 días</em>.</li>
+          <li>Guardar como <em>Carrito Abandonado 30d</em>.</li>
+          <li>En <em>Campañas</em> → nueva campaña con esa audiencia + creativo con cupón.</li>
+        </ol>
+        <strong>Tip:</strong> priorizá los SKUs del Top de la tabla de arriba — esos son los que más conversión potencial tienen porque ya hay intención demostrada.
+        <br /><br />
+        <strong>Para email/WhatsApp con cupón al cliente específico:</strong> el dato del cliente (email/teléfono) lo guarda <strong>Nidux</strong>, no GA4. Andá al admin de Nidux → buscá <em>Carritos abandonados</em> o <em>Pedidos pendientes</em> — ahí están los contactos de quien arrancó el checkout.
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ dateRange }) {
   return (
     <div>
@@ -416,6 +577,8 @@ export default function Dashboard({ dateRange }) {
       <TopProductsSection dateRange={dateRange} />
       <TrafficSourcesSection dateRange={dateRange} />
       <ConversionsSection dateRange={dateRange} />
+      <AbandonedCartSection dateRange={dateRange} />
+      <MetaRetargetingInfo />
       <CampaignsPerformanceSection dateRange={dateRange} />
     </div>
   );

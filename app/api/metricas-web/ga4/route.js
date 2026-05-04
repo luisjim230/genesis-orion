@@ -27,6 +27,7 @@ const CACHE_TTL_SECONDS = {
   campaigns_performance: 15 * 60,
   device_breakdown:      30 * 60,
   internal_team_activity: 10 * 60,
+  abandoned_cart:        15 * 60,
 };
 
 let _admin = null;
@@ -514,6 +515,66 @@ async function fetchInternalTeamActivity(client, property, range) {
   };
 }
 
+// Top productos abandonados en carrito: productos con muchos add_to_cart pero
+// pocos purchase. Sirve para detectar dónde hay alta intención + baja conversión
+// (oportunidades de cupón, retargeting, ajuste de precio, etc).
+async function fetchAbandonedCart(client, property, range, traffic) {
+  const filter = buildTrafficFilter(traffic);
+  const dr = parseDateRange(range);
+  const [resp] = await client.runReport({
+    property,
+    dateRanges: [dr],
+    dimensions: [{ name: 'itemName' }, { name: 'itemId' }],
+    metrics: [
+      { name: 'itemsViewed' },
+      { name: 'itemsAddedToCart' },
+      { name: 'itemsPurchased' },
+      { name: 'itemRevenue' },
+    ],
+    orderBys: [{ metric: { metricName: 'itemsAddedToCart' }, desc: true }],
+    limit: 50,
+    ...(filter ? { dimensionFilter: filter } : {}),
+  });
+  const items = rowsToObjects(resp).map(r => {
+    const added = Number(r.itemsAddedToCart) || 0;
+    const purchased = Number(r.itemsPurchased) || 0;
+    const viewed = Number(r.itemsViewed) || 0;
+    const revenue = Number(r.itemRevenue) || 0;
+    const abandoned = Math.max(added - purchased, 0);
+    const conversionRate = added > 0 ? (purchased / added) * 100 : 0;
+    // Score de oportunidad: cuanto más se agrega y menos se compra, más alto.
+    // Pondera los abandonos por una constante para premiar volumen.
+    const opportunityScore = abandoned * (1 - conversionRate / 100);
+    return {
+      item_id: r.itemId,
+      item_name: r.itemName,
+      viewed,
+      added,
+      purchased,
+      abandoned,
+      conversion_rate: conversionRate,
+      opportunity_score: opportunityScore,
+      revenue,
+    };
+  })
+  .filter(x => x.added > 0)
+  .sort((a, b) => b.opportunity_score - a.opportunity_score)
+  .slice(0, 30);
+
+  const totalAbandoned = items.reduce((s, x) => s + x.abandoned, 0);
+  const totalAdded = items.reduce((s, x) => s + x.added, 0);
+  return {
+    items,
+    summary: {
+      total_added: totalAdded,
+      total_abandoned: totalAbandoned,
+      avg_conversion_rate: totalAdded > 0
+        ? (items.reduce((s, x) => s + x.purchased, 0) / totalAdded) * 100
+        : 0,
+    },
+  };
+}
+
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
@@ -555,6 +616,7 @@ export async function GET(req) {
         case 'campaigns_performance':  return fetchCampaigns(client, property, date_range, filter);
         case 'device_breakdown':       return fetchDeviceBreakdown(client, property, date_range, filter);
         case 'internal_team_activity': return fetchInternalTeamActivity(client, property, date_range);
+        case 'abandoned_cart':         return fetchAbandonedCart(client, property, date_range, filter);
         default: throw new Error(`metric_type desconocido: ${metric_type}`);
       }
     };
