@@ -55,6 +55,7 @@ export default function Configuracion() {
   const [clearing, setClearing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [copiedBootstrap, setCopiedBootstrap] = useState(false);
 
   async function loadAll() {
     // Status GA4: pegamos al endpoint con un metric_type ligero.
@@ -112,6 +113,13 @@ export default function Configuracion() {
     setTimeout(() => setCopiedLink(false), 1800);
   }
 
+  async function copyBootstrapLink() {
+    const url = 'https://www.depositojimenezcr.com/?traffic_type=internal';
+    await navigator.clipboard.writeText(url);
+    setCopiedBootstrap(true);
+    setTimeout(() => setCopiedBootstrap(false), 1800);
+  }
+
   async function copySnippet() {
     await navigator.clipboard.writeText(NIDUX_SNIPPET);
     setCopiedSnippet(true);
@@ -146,8 +154,8 @@ export default function Configuracion() {
       <div style={S.card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={S.sectionTitle}>🔗 Link mágico para empleados</div>
-            <div style={S.sectionCap}>Compartilo con cada empleado: cuando lo abren desde su Mac/celular, su navegador queda marcado como interno.</div>
+            <div style={S.sectionTitle}>🔗 Link mágico para empleados (matriculación inicial)</div>
+            <div style={S.sectionCap}>Compartilo con cada empleado <strong>nuevo</strong>: cuando lo abren desde su Mac/celular, completan el form, y su navegador queda matriculado en SOL.</div>
           </div>
           <button onClick={copyMarkLink} style={{ ...S.btnPrimary, background: copiedLink ? `linear-gradient(135deg, ${GREEN}, #1f5e3a)` : S.btnPrimary.background }}>
             {copiedLink ? '✓ Copiado' : '📋 Copiar link'}
@@ -155,6 +163,25 @@ export default function Configuracion() {
         </div>
         <div style={{ marginTop: 10, fontFamily: 'monospace', fontSize: '0.85rem', background: 'rgba(0,0,0,0.04)', padding: 10, borderRadius: 8, color: 'rgba(0,0,0,0.7)' }}>
           {typeof window !== 'undefined' ? `${window.location.origin}/marcar-interno` : '/marcar-interno'}
+        </div>
+      </div>
+
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <div style={S.sectionTitle}>⚡ Link de re-activación rápida (para empleados ya matriculados)</div>
+            <div style={S.sectionCap}>
+              Si un empleado ya completó la matriculación pero su actividad NO aparece en la tab Equipo WhatsApp,
+              probablemente le falta tener el flag activo en el dominio del sitio público (es un tema técnico de cookies cross-domain).
+              Mandale este link por WhatsApp y dile <em>abrilo una sola vez en tu navegador, listo</em> — eso lo deja marcado por 2 años.
+            </div>
+          </div>
+          <button onClick={copyBootstrapLink} style={{ ...S.btnPrimary, background: copiedBootstrap ? `linear-gradient(135deg, ${GREEN}, #1f5e3a)` : S.btnPrimary.background }}>
+            {copiedBootstrap ? '✓ Copiado' : '📋 Copiar link'}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, fontFamily: 'monospace', fontSize: '0.85rem', background: 'rgba(0,0,0,0.04)', padding: 10, borderRadius: 8, color: 'rgba(0,0,0,0.7)' }}>
+          https://www.depositojimenezcr.com/?traffic_type=internal
         </div>
       </div>
 
