@@ -32,15 +32,18 @@ PYTHON  = "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
 SCRIPTS = BASE
 
 LOG_FILE = BASE / "sync-daemon.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-7s %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[
-        logging.FileHandler(str(LOG_FILE)),
-        logging.StreamHandler(sys.stdout),
-    ]
-)
+# Evitar handlers duplicados si el módulo se re-importa
+_root_log = logging.getLogger()
+if not _root_log.handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[
+            logging.FileHandler(str(LOG_FILE)),
+            logging.StreamHandler(sys.stdout),
+        ]
+    )
 log = logging.getLogger(__name__)
 
 # Mapa script_id → archivo Python
@@ -210,6 +213,19 @@ def check_schedule():
         return
 
     _ran_slots.add(slot)
+
+    # Borrar sync_requests pendientes: el scheduler va a correr todos los
+    # scripts igual, no tiene sentido procesarlos en paralelo (causa locks).
+    try:
+        ahora_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cancelados = supa_patch(
+            "sync_requests?status=eq.pending",
+            {"status": "cancelled_by_scheduler", "completed_at": ahora_iso},
+        )
+        log.info(f"⏰ Pendientes cancelados antes del scheduler: {cancelados}")
+    except Exception as e:
+        log.warning(f"⏰ No pude limpiar pendientes: {e}")
+
     log.info(f"⏰ Sync programado {now.strftime('%A %H:%M')} — {len(SCHEDULE_SCRIPTS)} scripts")
     for key in SCHEDULE_SCRIPTS:
         ejecutar_script(key)
