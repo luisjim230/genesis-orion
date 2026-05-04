@@ -147,12 +147,14 @@ async def descargar():
         log.info("✅ Ítems comprados cargado")
 
         # NEO es lento — esperar que el reporte termine de cargar
-        log.info("Esperando que el reporte cargue...")
+        # Esperamos el footer "X registros" en lugar del botón Exportar (que aparece de inmediato)
+        log.info("Esperando datos (puede tardar varios minutos)...")
         try:
-            await iframe.wait_for_selector("button:has-text('Exportar')", timeout=90_000)
-            log.info("  Botón Exportar visible")
+            await iframe.locator("text=registros").wait_for(timeout=180_000)
+            log.info("  Datos cargados")
         except Exception:
-            log.warning("Timeout 90s — intentando exportar igual")
+            log.warning("Timeout 180s — esperando 15s extra y exportando igual")
+            await page.wait_for_timeout(15_000)
 
         # ── Exportar Excel ─────────────────────────────────────────────────────
         log.info("Descargando Excel...")
