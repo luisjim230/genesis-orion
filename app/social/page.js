@@ -22,12 +22,13 @@ const PLAT = {
 
 // Estado unificado del flujo
 const ESTADOS = {
-  idea:       { label:'Idea',              color:'#a78bfa', icon:'💡', next:'por_grabar' },
-  por_grabar: { label:'Por grabar',        color:'#f6ad55', icon:'🎬', next:'en_revision' },
-  en_revision:{ label:'En revisión',       color:'#63b3ed', icon:'👀', next:'listo' },
-  listo:      { label:'Listo',             color:'#68d391', icon:'✅', next:'programado' },
-  programado: { label:'Programado',        color:GOLD,      icon:'📅', next:'publicado' },
-  publicado:  { label:'Publicado',         color:'#718096', icon:'✔️', next:null },
+  idea:               { label:'Idea',                     color:'#a78bfa', icon:'💡', next:'por_grabar' },
+  por_grabar:         { label:'Por grabar',               color:'#f6ad55', icon:'🎬', next:'grabado_no_editado' },
+  grabado_no_editado: { label:'Grabado, sin editar',      color:'#f687b3', icon:'🎞️', next:'en_revision' },
+  en_revision:        { label:'En revisión',              color:'#63b3ed', icon:'👀', next:'listo' },
+  listo:              { label:'Listo',                    color:'#68d391', icon:'✅', next:'programado' },
+  programado:         { label:'Programado',               color:GOLD,      icon:'📅', next:'publicado' },
+  publicado:          { label:'Publicado',                color:'#718096', icon:'✔️', next:null },
 }
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -1113,12 +1114,13 @@ function TabEstadisticas() { return <TabDashboard/> }
 
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
-  { id:'dashboard',    icon:'📊', label:'Dashboard',           estadoFiltro:null },
-  { id:'listo',        icon:'✅', label:'Listo para publicar', estadoFiltro:'listo' },
-  { id:'por_grabar',   icon:'🎬', label:'Por grabar',          estadoFiltro:'por_grabar' },
-  { id:'en_revision',  icon:'👀', label:'En revisión',         estadoFiltro:'en_revision' },
-  { id:'ideas',        icon:'💡', label:'Ideas',               estadoFiltro:'idea' },
-  { id:'calendario',   icon:'📅', label:'Calendario',          estadoFiltro:null },
+  { id:'dashboard',           icon:'📊', label:'Dashboard',             estadoFiltro:null },
+  { id:'listo',               icon:'✅', label:'Listo para publicar',   estadoFiltro:'listo' },
+  { id:'por_grabar',          icon:'🎬', label:'Por grabar',            estadoFiltro:'por_grabar' },
+  { id:'grabado_no_editado',  icon:'🎞️', label:'Grabado pero no editado', estadoFiltro:'grabado_no_editado' },
+  { id:'en_revision',         icon:'👀', label:'En revisión',           estadoFiltro:'en_revision' },
+  { id:'ideas',               icon:'💡', label:'Ideas',                 estadoFiltro:'idea' },
+  { id:'calendario',          icon:'📅', label:'Calendario',            estadoFiltro:null },
 ]
 
 export default function SocialPage() {

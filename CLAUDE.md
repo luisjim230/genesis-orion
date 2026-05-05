@@ -25,6 +25,12 @@
    ```
    Nunca asumir que el usuario está en la rama correcta. Nunca darle `git pull` sin checkout previo. Si la rama no existe local, `git checkout -B <rama> origin/<rama>` la crea y traquea en un solo paso.
 
+8. **Mergear PRs automáticamente sin preguntar.** Cuando Claude termina una feature en una rama `claude/xxx`, debe:
+   - Crear el PR contra `main` con `mcp__github__create_pull_request`
+   - Mergearlo inmediatamente con `mcp__github__merge_pull_request` (squash merge por defecto)
+   - Reportar al usuario "ya está mergeado, esperá el deploy de Vercel"
+   No preguntar nunca "¿querés que haga el merge?" — es la regla por defecto.
+
 ## Contexto del proyecto
 
 - **Repo:** genesis-orion (Next.js + Supabase). Dominio prod: `sol.depositojimenez.com`. Sitio público trackeado: `depositojimenezcr.com` (Nidux).
