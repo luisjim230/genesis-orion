@@ -276,17 +276,25 @@ export default function DashboardPage() {
           if (match) tcVenta = parseFloat(match[1].replace(',','.'))
         } catch(e) { /* usar fallback */ }
 
-        const { data: bancosData } = await supabase
-          .from('fin_bancos')
-          .select('saldo, moneda')
+        const [{ data: bancosData }, { data: inversionesData }] = await Promise.all([
+          supabase.from('fin_bancos').select('saldo, moneda'),
+          supabase.from('fin_bancos_inversiones').select('monto, moneda'),
+        ])
 
-        const totalBancosCRC = (bancosData || [])
+        const liquidoBancosCRC = (bancosData || [])
           .filter(b => b.moneda === 'CRC')
           .reduce((sum, b) => sum + Number(b.saldo || 0), 0)
-
-        const totalBancosUSD = (bancosData || [])
+        const liquidoBancosUSD = (bancosData || [])
           .filter(b => b.moneda === 'USD')
           .reduce((sum, b) => sum + Number(b.saldo || 0), 0)
+        const inversionesBancosCRC = (inversionesData || [])
+          .filter(i => i.moneda === 'CRC')
+          .reduce((sum, i) => sum + Number(i.monto || 0), 0)
+        const inversionesBancosUSD = (inversionesData || [])
+          .filter(i => i.moneda === 'USD')
+          .reduce((sum, i) => sum + Number(i.monto || 0), 0)
+        const totalBancosCRC = liquidoBancosCRC + inversionesBancosCRC
+        const totalBancosUSD = liquidoBancosUSD + inversionesBancosUSD
 
         const { data: enviosData } = await supabase
           .from('neptuno_envios')
