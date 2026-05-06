@@ -7,7 +7,7 @@ Ubicación: ~/Documents/neo-sync/oc_uploader.py
 """
 import os, sys, asyncio, re, logging, json, urllib.request, urllib.error, tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 
@@ -67,8 +67,25 @@ def supa_patch(path, data):
         log.error(f"Supabase PATCH error {e.code}: {e.read().decode()[:200]}")
         return False
 
+def liberar_zombis():
+    """
+    Resetea procesando=false en registros que quedaron colgados con
+    procesando=true por más de 15 min. Sin esto, si el script crashea a
+    mitad de un upload el registro queda enterrado para siempre porque
+    obtener_pendientes() filtra por procesando=eq.false.
+    """
+    corte = (datetime.utcnow() - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    zombis = supa_get(
+        f"cola_neo_uploads?select=id,numero_sol&estado=in.(pendiente,error)&procesando=eq.true&created_at=lt.{corte}"
+    )
+    if isinstance(zombis, list) and zombis:
+        for z in zombis:
+            log.info(f"Liberando zombi: {z.get('numero_sol') or z['id']}")
+            supa_patch(f"cola_neo_uploads?id=eq.{z['id']}", {"procesando": False})
+
 def obtener_pendientes():
     """Trae OCs pendientes de la cola."""
+    liberar_zombis()
     registros = supa_get("cola_neo_uploads?estado=in.(pendiente,error)&procesando=eq.false&intentos=lt.3&order=created_at.asc")
     return registros if isinstance(registros, list) else []
 
