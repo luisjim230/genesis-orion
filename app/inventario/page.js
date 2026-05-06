@@ -112,7 +112,7 @@ export default function Inventario() {
   const [calc, setCalc] = useState([]);
   const [transitoMap, setTransitoMap] = useState({});
   const [transitoDiasMap, setTransitoDiasMap] = useState({});
-  const [dias, setDias] = useState(30);
+  const [dias, setDias] = useState(22);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroAlerta, setFiltroAlerta] = useState('Todos');
