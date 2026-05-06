@@ -429,6 +429,25 @@ function TabHistorial({ ordenes, items, loading, recargar }) {
                           const provNombre = its2[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
                           setModalWA({proveedor: provNombre, soloReenvio: true, items: its2.map(it=>({codigo:it.codigo, nombre:it.nombre||it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo:Number(it.costo_unitario)||0}))})
                         }}>📱</button>
+                        <button style={{...S.btnSm(), background:'#7B61FF', color:'#fff', border:'none'}} title="Reenviar a NEO" onClick={async e => {
+                          e.stopPropagation()
+                          if (!confirm(`Reenviar "${o.nombre_lote}" a NEO?\n\nVa a generar una OC nueva en la cola. Si la OC anterior quedó cargada contra el proveedor equivocado, primero eliminala manualmente en NEO.`)) return
+                          try {
+                            const { data: itsRe } = await supabase.from('ordenes_compra_items').select('*').eq('orden_id', o.id)
+                            const itemsActivos = (itsRe || []).filter(it => it.codigo && it.estado_item !== 'cancelado' && it.estado_item !== 'completo')
+                            if (!itemsActivos.length) { mostrarMsg('Esta OC no tiene ítems pendientes para reenviar', 'err'); return }
+                            const provNombre = itemsActivos[0]?.proveedor || o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'') || ''
+                            if (!provNombre) { mostrarMsg('No se pudo determinar el proveedor', 'err'); return }
+                            const payload = itemsActivos.map(it=>({codigo:it.codigo, cantidad:Number(it.cantidad_ordenada)||1, costo_unitario:Number(it.costo_unitario)||0, descuento:Number(it.descuento)||0}))
+                            const res = await fetch('/api/neo/encolar-oc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ proveedor: provNombre, items: payload, creadoPor: 'sol-reenvio' }) })
+                            const data = await res.json()
+                            if (!res.ok || data.error) { mostrarMsg('Error: '+(data.error||res.statusText), 'err'); return }
+                            const numeros = (data.lotes || []).map(l => l.numero_sol).join(', ') || data.numero_sol || ''
+                            mostrarMsg(`✅ Reencolado a NEO (${numeros}). El daemon lo va a subir en los próximos minutos.`, 'ok')
+                          } catch (err) {
+                            mostrarMsg('Error: '+err.message, 'err')
+                          }
+                        }}>🔄 NEO</button>
                       </div>
                     </td>
                   </tr>
