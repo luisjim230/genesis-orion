@@ -198,9 +198,15 @@ async def navegar_nueva_oc(page):
 
 async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     """
-    Busca el proveedor en NEO usando el campo txtProveedor_Text.
-    NEO muestra un dropdown tipo grid con columnas Identificación/Nombre.
-    Hace clic en la primera fila del dropdown.
+    Busca el proveedor en NEO usando el campo txtProveedor_Text y elige
+    del dropdown la fila cuyo nombre matchea más palabras del nombre
+    completo del proveedor SOL.
+
+    Antes elegía siempre la primera fila (rowselected) del dropdown, lo
+    cual fallaba cuando dos proveedores comparten una palabra: p.ej. SOL
+    manda "MFA MAYOREO FERRETERIA Y ACABADOS" → keyword "ACABADOS" → NEO
+    devuelve "ACABADOS PLUS" como primera coincidencia y la OC quedaba
+    cargada contra el proveedor equivocado.
     """
     log.info(f"Buscando proveedor: {nombre_proveedor}")
 
@@ -211,12 +217,9 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     await proveedor_input.fill("")
     await page.wait_for_timeout(300)
 
-    # Usar la primera palabra significativa (>3 letras) del nombre
     palabras = nombre_proveedor.upper().split()
-    # Tabla de excepciones: nombre exacto del proveedor -> keyword a usar en NEO
     KEYWORD_EXCEPTIONS = {
         "CHAOZHOU ZHONGTONG": "ZHONGTONG",
-        "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
         "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
     }
     nombre_upper = nombre_proveedor.upper().strip()
@@ -227,20 +230,53 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
         keyword = next((p for p in reversed(palabras) if len(p) > 3), palabras[-1])
     log.info(f"  Keyword: {keyword}")
 
-    # Tipear lento — NEO dispara AJAX en cada keyup
     await proveedor_input.type(keyword, delay=150)
     await page.wait_for_timeout(3000)
 
-    # El dropdown de NEO es dhtmlx grid: tabla con clase "obj" y filas "rowselected"
+    palabras_sol = set(p for p in re.findall(r"\w+", nombre_upper) if len(p) >= 3)
+
     try:
-        fila = page.locator("table.obj tr.rowselected")
-        await fila.first.wait_for(state="visible", timeout=5000)
-        texto = await fila.first.locator("td").nth(2).inner_text()
-        log.info(f"  Clic en proveedor: {texto.strip()}")
-        await fila.first.click()
-        await page.wait_for_timeout(1500)
+        await page.locator("table.obj tr").first.wait_for(state="visible", timeout=5000)
+        filas = page.locator("table.obj tr")
+        n = await filas.count()
+        mejor_score = -1
+        mejor_idx = None
+        mejor_nombre = ""
+        for i in range(n):
+            try:
+                fila = filas.nth(i)
+                tds = fila.locator("td")
+                if await tds.count() < 3:
+                    continue
+                nombre_neo = (await tds.nth(2).inner_text()).strip().upper()
+                if not nombre_neo:
+                    continue
+                palabras_neo = set(re.findall(r"\w+", nombre_neo))
+                score = len(palabras_sol & palabras_neo)
+                if nombre_neo == nombre_upper:
+                    score += 100
+                if score > mejor_score:
+                    mejor_score = score
+                    mejor_idx = i
+                    mejor_nombre = nombre_neo
+            except Exception:
+                continue
+
+        if mejor_idx is not None and mejor_score >= 1:
+            log.info(f"  Mejor match (score={mejor_score}): {mejor_nombre}")
+            await filas.nth(mejor_idx).click()
+            await page.wait_for_timeout(1500)
+        else:
+            log.warning(f"  Ningún row del dropdown matchea '{nombre_proveedor}' — usando rowselected")
+            fila_fb = page.locator("table.obj tr.rowselected")
+            try:
+                await fila_fb.first.wait_for(state="visible", timeout=3000)
+                await fila_fb.first.click()
+                await page.wait_for_timeout(1500)
+            except Exception as e:
+                log.warning(f"  Fallback rowselected falló: {e}")
     except Exception as e:
-        log.warning(f"  rowselected no encontrado: {e}")
+        log.warning(f"  Iteración dropdown falló: {e}")
         try:
             fila2 = page.locator("table.obj tr").nth(1)
             await fila2.wait_for(state="visible", timeout=3000)
@@ -249,7 +285,6 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
         except Exception as e2:
             log.warning(f"  Fallback tabla.obj falló: {e2}")
 
-    # Verificar que txtProveedor_Id tiene valor
     prov_id = await page.locator("#txtProveedor_Id").input_value()
     if prov_id:
         log.info(f"  ✅ Proveedor ID: {prov_id}")
