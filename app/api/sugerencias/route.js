@@ -23,7 +23,7 @@ export async function POST(req) {
       if(c&&p>0){ tMap[c]=(tMap[c]||0)+p }
     }
     const totalUnidades=Object.values(tMap).reduce((s,v)=>s+v,0)
-    const diasNum=parseInt(dias)||22
+    const diasNum=parseInt(dias)||36
     const resultados=[]
     for(const item of todos){
       const prom=parseFloat(item.promedio_mensual)||0, exist=parseFloat(item.existencias)||0
