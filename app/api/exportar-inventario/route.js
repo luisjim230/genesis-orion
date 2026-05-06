@@ -43,7 +43,7 @@ function calcularAlertas(items, transitoMap, dias) {
 
 export async function POST(request) {
   try {
-    const { dias = 22 } = await request.json().catch(() => ({}));
+    const { dias = 36 } = await request.json().catch(() => ({}));
 
     // 1. Cargar datos
     const { data: fd } = await supabase
