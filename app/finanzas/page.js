@@ -408,21 +408,26 @@ function categoriaGasto(cuenta) {
 }
 
 function TabFlujo({ tcC }) {
-  const [bancos,     setBancos]    = useState([]);
-  const [cobrar,     setCobrar]    = useState([]);
-  const [pagar,      setPagar]     = useState([]);
-  const [gastos,     setGastos]    = useState([]);
-  const [ventasHist, setVentasHist]= useState([]);
-  const [envios,     setEnvios]    = useState([]);
-  const [loading,    setLoad]      = useState(true);
+  const [bancos,      setBancos]    = useState([]);
+  const [inversiones, setInversiones] = useState([]);
+  const [cobrar,      setCobrar]    = useState([]);
+  const [pagar,       setPagar]     = useState([]);
+  const [gastos,      setGastos]    = useState([]);
+  const [ventasHist,  setVentasHist]= useState([]);
+  const [envios,      setEnvios]    = useState([]);
+  const [loading,     setLoad]      = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoad(true);
       try {
-        // 1. Saldos bancarios
-        const { data: bData } = await sb.from('fin_bancos').select('cuenta_codigo,saldo,moneda,notas');
+        // 1. Saldos bancarios + inversiones
+        const [{ data: bData }, { data: invData }] = await Promise.all([
+          sb.from('fin_bancos').select('cuenta_codigo,saldo,moneda,notas'),
+          sb.from('fin_bancos_inversiones').select('banco_key,moneda,monto,descripcion,fecha_vencimiento'),
+        ]);
         setBancos(bData || []);
+        setInversiones(invData || []);
 
         // 2. Cuentas por cobrar (última carga)
         const { data: fd1 } = await sb.from('fin_cuentas_cobrar')
@@ -458,22 +463,28 @@ function TabFlujo({ tcC }) {
           setPagar(all);
         }
 
-        // 4. Gastos recurrentes — últimos 3 meses, cuentas 70-XX, 77-XX y 90-XX
+        // 4. Gastos recurrentes — últimos 3 meses, cuentas 70-XX (operativos)
+        // y 90-XX (financieros). 77-XX se excluye porque son ajustes contables
+        // (mermas, diferencias de inventario) que no representan flujo de caja.
         const hace3m = new Date();
         hace3m.setMonth(hace3m.getMonth() - 3);
         const fStr = hace3m.toISOString().slice(0, 10);
-        let movs = [], mOff = 0;
-        while (mOff < 50000) {
-          const { data } = await sb.from('neo_movimientos_contables')
-            .select('cuenta_contable,debe_contabilidad')
-            .not('fecha', 'is', null)
-            .gte('fecha', fStr)
-            .or('cuenta_contable.ilike.70%,cuenta_contable.ilike.77%,cuenta_contable.ilike.90%')
-            .range(mOff, mOff + 999);
-          if (!data?.length) break;
-          movs = [...movs, ...data];
-          if (data.length < 1000) break;
-          mOff += 1000;
+        const prefijosGasto = ['70', '90'];
+        let movs = [];
+        for (const px of prefijosGasto) {
+          let mOff = 0;
+          while (mOff < 50000) {
+            const { data } = await sb.from('neo_movimientos_contables')
+              .select('cuenta_contable,debe_contabilidad')
+              .not('fecha', 'is', null)
+              .gte('fecha', fStr)
+              .ilike('cuenta_contable', `${px}%`)
+              .range(mOff, mOff + 999);
+            if (!data?.length) break;
+            movs = [...movs, ...data];
+            if (data.length < 1000) break;
+            mOff += 1000;
+          }
         }
         const cMap = {};
         movs.forEach(m => {
@@ -484,9 +495,9 @@ function TabFlujo({ tcC }) {
         setGastos(
           Object.entries(cMap)
             .map(([cuenta, total]) => ({ cuenta, mensual: total / 3, semanal: (total / 3) / 4 }))
-            .filter(g => g.mensual >= 100000)
+            .filter(g => g.mensual >= 50000)
             .sort((a, b) => b.mensual - a.mensual)
-            .slice(0, 20)
+            .slice(0, 30)
         );
 
         // 5. Ventas históricas mensuales
@@ -531,10 +542,14 @@ function TabFlujo({ tcC }) {
   if (loading) return <div style={S.info}>⏳ Calculando flujo de caja...</div>;
 
   // ── Posición actual ──────────────────────────────────────────────────────
-  const saldoCRC  = bancos.filter(b => b.moneda === 'CRC').reduce((s, b) => s + N(b.saldo), 0);
-  const saldoUSD  = bancos.filter(b => b.moneda === 'USD').reduce((s, b) => s + N(b.saldo), 0);
-  const totCobrar = cobrar.reduce((s, r) => s + N(r.saldo_actual), 0);
-  const totPagar  = pagar.reduce((s, r) => s + N(r.saldo_actual), 0);
+  const liquidoCRC = bancos.filter(b => b.moneda === 'CRC').reduce((s, b) => s + N(b.saldo), 0);
+  const liquidoUSD = bancos.filter(b => b.moneda === 'USD').reduce((s, b) => s + N(b.saldo), 0);
+  const invCRC     = inversiones.filter(i => i.moneda === 'CRC').reduce((s, i) => s + N(i.monto), 0);
+  const invUSD     = inversiones.filter(i => i.moneda === 'USD').reduce((s, i) => s + N(i.monto), 0);
+  const saldoCRC   = liquidoCRC + invCRC;
+  const saldoUSD   = liquidoUSD + invUSD;
+  const totCobrar  = cobrar.reduce((s, r) => s + N(r.saldo_actual), 0);
+  const totPagar   = pagar.reduce((s, r) => s + N(r.saldo_actual), 0);
 
   // ── Ventas proyectadas (promedio 6 meses, -30% pesimista) ───────────────
   const now = new Date();
