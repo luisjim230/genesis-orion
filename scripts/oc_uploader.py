@@ -311,7 +311,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     return False
 
 async def cargar_excel_oc(page, excel_path):
-    """Sube el Excel via CuteWebUI con browser headful."""
+    """Sube el Excel via CuteWebUI."""
     log.info(f"Subiendo Excel: {excel_path}")
     await page.wait_for_timeout(1000)
 
@@ -586,8 +586,8 @@ async def main():
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
-            headless=False,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--window-position=10000,10000"]
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
         )
         context = await browser.new_context(accept_downloads=True)
         page = await context.new_page()
