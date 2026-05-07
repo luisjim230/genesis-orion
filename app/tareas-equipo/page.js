@@ -33,12 +33,19 @@ export default function TareasEquipoPage(){
 
   const save = async () => {
     if(!form.titulo.trim()) return alert('El titulo es requerido');
-    const row = {...form, solicitado_por:form.solicitado_por||perfil?.nombre||''};
+    const row = {
+      ...form,
+      solicitado_por: form.solicitado_por||perfil?.nombre||'',
+      fecha_limite: form.fecha_limite || null,
+      asignado_a: form.asignado_a || null,
+    };
     if(editId){
-      await supabase.from('tareas_equipo').update({...row,actualizado_en:new Date().toISOString()}).eq('id',editId);
+      const {error} = await supabase.from('tareas_equipo').update({...row,actualizado_en:new Date().toISOString()}).eq('id',editId);
+      if(error){ alert('Error al guardar: '+error.message); return; }
       setEditId(null);
     } else {
-      await supabase.from('tareas_equipo').insert({...row,estado:'pendiente',fecha_solicitud:today()});
+      const {error} = await supabase.from('tareas_equipo').insert({...row,estado:'pendiente',fecha_solicitud:today()});
+      if(error){ alert('Error al guardar: '+error.message); return; }
     }
     setForm(blank()); setShowForm(false); fetchTareas();
   };
@@ -153,7 +160,7 @@ export default function TareasEquipoPage(){
           <div style={{display:'flex',flexWrap:'wrap',gap:14,marginTop:8,fontSize:12,color:'rgba(0,0,0,0.5)',fontFamily:'Rubik,sans-serif'}}>
             {t.asignado_a && <span>Asignado a: <b>{t.asignado_a}</b></span>}
             {t.solicitado_por && <span>Solicitado por: <b>{t.solicitado_por}</b></span>}
-            {t.fecha_limite && <span style={{color:overdue?'#e53e3e':'inherit',fontWeight:overdue?600:400}}>{'\ud83d\udcc5'} Limite: {fmt(t.fecha_limite)}{overdue?' (Vencida)':''}</span>}
+            <span style={{color:overdue?'#e53e3e':'inherit',fontWeight:overdue?600:400}}>{'\ud83d\udcc5'} Limite: {t.fecha_limite?fmt(t.fecha_limite):'sin fecha'}{overdue?' (Vencida)':''}</span>
           </div>
           {t.estado==='finalizada' && <div style={{fontSize:12,color:'#38a169',fontFamily:'Rubik,sans-serif',marginTop:6}}>Finalizada el {fmtDT(t.fecha_finalizada)}{dias!==null?` (${dias} dias)`:''}</div>}
         </div>
