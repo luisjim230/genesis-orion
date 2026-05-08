@@ -42,3 +42,9 @@ next-env.d.ts
 
 # supabase cli temp
 supabase/.temp/
+
+# python
+__pycache__/
+*.pyc
+scripts/*.log
+scripts/*.lock
