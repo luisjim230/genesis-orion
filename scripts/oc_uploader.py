@@ -252,8 +252,13 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
 
     palabras_sol = set(p for p in re.findall(r"\w+", nombre_upper) if len(p) >= 3)
 
+    # NEO renderiza las filas del dropdown como <tr> en el DOM con
+    # visibility:hidden hasta que la UI las muestra. wait_for(visible)
+    # tira timeout y nos deja sin matchear. Usamos state="attached" +
+    # text_content() para leer las filas hidden y click(force=True)
+    # para seleccionarlas.
     try:
-        await page.locator("table.obj tr").first.wait_for(state="visible", timeout=5000)
+        await page.locator("table.obj tr").first.wait_for(state="attached", timeout=5000)
         filas = page.locator("table.obj tr")
         n = await filas.count()
         mejor_score = -1
@@ -265,7 +270,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
                 tds = fila.locator("td")
                 if await tds.count() < 3:
                     continue
-                nombre_neo = (await tds.nth(2).inner_text()).strip().upper()
+                nombre_neo = ((await tds.nth(2).text_content()) or "").strip().upper()
                 if not nombre_neo:
                     continue
                 palabras_neo = set(re.findall(r"\w+", nombre_neo))
@@ -281,26 +286,36 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
 
         if mejor_idx is not None and mejor_score >= 1:
             log.info(f"  Mejor match (score={mejor_score}): {mejor_nombre}")
-            await filas.nth(mejor_idx).click()
+            await filas.nth(mejor_idx).click(force=True)
             await page.wait_for_timeout(1500)
         else:
             log.warning(f"  Ningún row del dropdown matchea '{nombre_proveedor}' — usando rowselected")
             fila_fb = page.locator("table.obj tr.rowselected")
             try:
-                await fila_fb.first.wait_for(state="visible", timeout=3000)
-                await fila_fb.first.click()
+                await fila_fb.first.wait_for(state="attached", timeout=3000)
+                await fila_fb.first.click(force=True)
                 await page.wait_for_timeout(1500)
             except Exception as e:
-                log.warning(f"  Fallback rowselected falló: {e}")
+                log.warning(f"  Fallback rowselected falló: {e} — probando Enter")
+                try:
+                    await proveedor_input.press("Enter")
+                    await page.wait_for_timeout(1500)
+                except Exception as e3:
+                    log.warning(f"  Fallback Enter falló: {e3}")
     except Exception as e:
         log.warning(f"  Iteración dropdown falló: {e}")
         try:
             fila2 = page.locator("table.obj tr").nth(1)
-            await fila2.wait_for(state="visible", timeout=3000)
-            await fila2.click()
+            await fila2.wait_for(state="attached", timeout=3000)
+            await fila2.click(force=True)
             await page.wait_for_timeout(1500)
         except Exception as e2:
-            log.warning(f"  Fallback tabla.obj falló: {e2}")
+            log.warning(f"  Fallback tabla.obj falló: {e2} — probando Enter")
+            try:
+                await proveedor_input.press("Enter")
+                await page.wait_for_timeout(1500)
+            except Exception as e3:
+                log.warning(f"  Fallback Enter falló: {e3}")
 
     prov_id = await page.locator("#txtProveedor_Id").input_value()
     if prov_id:
