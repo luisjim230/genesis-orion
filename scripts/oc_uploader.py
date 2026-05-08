@@ -5,11 +5,34 @@ descarga el Excel, lo sube a NEO con el proveedor correcto, marca como procesado
 
 Ubicación: ~/Documents/neo-sync/oc_uploader.py
 """
-import os, sys, asyncio, re, logging, json, urllib.request, urllib.error, tempfile
+import os, sys, asyncio, re, logging, json, urllib.request, urllib.error, tempfile, unicodedata
 from pathlib import Path
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
+
+
+# Palabras "genéricas" que NO distinguen proveedores entre sí (sufijos
+# corporativos y términos de uso amplio). Se ignoran al elegir keyword
+# de búsqueda y al validar match. Las prefijadas tipo IMPORTACIONES /
+# DISTRIBUIDORA / COMERCIALIZADORA NO entran acá porque sí distinguen
+# (existen IMPORTACIONES VEGA y COMERCIALIZADORA VEGA al mismo tiempo).
+GENERIC_WORDS = {
+    "SA", "SAS", "LTDA", "LTD", "INC", "CORP", "CORPORATION",
+    "LLC", "CO", "CIA", "COMPANY", "COMPANIA",
+    "INTERNATIONAL", "INTERNACIONAL", "INTL",
+    "GROUP", "GRUPO",
+    "ENTERPRISES", "ENTERPRISE",
+    "GLOBAL", "WORLDWIDE", "HOLDINGS",
+}
+
+
+def _normalize(s):
+    """Quita acentos y pasa a uppercase: ACUÑA → ACUNA, GERMÁN → GERMAN."""
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s.upper())
+        if unicodedata.category(c) != 'Mn'
+    )
 
 BASE = Path(__file__).parent
 load_dotenv(BASE / ".env")
@@ -215,99 +238,141 @@ async def navegar_nueva_oc(page):
 
 async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     """
-    Busca el proveedor en NEO usando el campo txtProveedor_Text y elige
-    del dropdown la fila cuyo nombre matchea más palabras del nombre
-    completo del proveedor SOL.
+    Busca el proveedor en NEO y selecciona solo si TODAS las palabras
+    distintivas del nombre SOL (ignorando sufijos genéricos tipo SA, LTD,
+    INTERNATIONAL, GROUP) aparecen como palabras del row de NEO. Si no,
+    aborta para evitar registrar la OC contra el proveedor equivocado.
 
-    Antes elegía siempre la primera fila (rowselected) del dropdown, lo
-    cual fallaba cuando dos proveedores comparten una palabra: p.ej. SOL
-    manda "MFA MAYOREO FERRETERIA Y ACABADOS" → keyword "ACABADOS" → NEO
-    devuelve "ACABADOS PLUS" como primera coincidencia y la OC quedaba
-    cargada contra el proveedor equivocado.
+    Casos reales que motivaron esta lógica estricta:
+      - "HOGGAN INTERNATIONAL" → registraba contra "BARANA INTERNATIONAL LTD"
+      - "TERNIUM INTERNACIONAL COSTA RICA" → contra "ALUTECH COSTA RICA"
+      - "IMPORTACIONES VEGA SA" → contra "COMERCIALIZADORA VEGA"
+      - "GERMAN ALEJANDRO CHAVES ACUNA" → contra "ACUÑA Y HERNANDEZ"
+        (este último era un proveedor "fantasma" del OC anterior porque
+        txtProveedor_Id quedaba pegado cuando la búsqueda fallaba)
     """
     log.info(f"Buscando proveedor: {nombre_proveedor}")
 
     proveedor_input = page.locator("#txtProveedor_Text")
     await proveedor_input.wait_for(state="visible", timeout=8000)
+
+    # Limpiar txtProveedor_Text Y txtProveedor_Id. Sin limpiar el ID, si la
+    # selección falla NEO sigue usando el proveedor del OC anterior.
+    await page.evaluate("""() => {
+        const t = document.getElementById('txtProveedor_Text');
+        const i = document.getElementById('txtProveedor_Id');
+        if (t) t.value = '';
+        if (i) i.value = '';
+    }""")
     await proveedor_input.click()
     await proveedor_input.click(click_count=3)
     await proveedor_input.fill("")
     await page.wait_for_timeout(300)
 
-    palabras = nombre_proveedor.upper().split()
+    nombre_norm = _normalize(nombre_proveedor.strip())
+    palabras_validas = [p for p in re.findall(r"\w+", nombre_norm) if len(p) >= 3]
+    distintivas_sol = set(p for p in palabras_validas if p not in GENERIC_WORDS)
+
+    if not distintivas_sol:
+        log.error(f"  ❌ '{nombre_proveedor}' no tiene palabras distintivas — abortando")
+        return False
+
     KEYWORD_EXCEPTIONS = {
         "CHAOZHOU ZHONGTONG": "ZHONGTONG",
         "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
     }
-    nombre_upper = nombre_proveedor.upper().strip()
-    if nombre_upper in KEYWORD_EXCEPTIONS:
-        keyword = KEYWORD_EXCEPTIONS[nombre_upper]
-        log.info(f"  Usando keyword de excepcion: {keyword}")
+
+    # Lista ordenada de keywords a probar
+    candidatos = []
+    if nombre_norm in KEYWORD_EXCEPTIONS:
+        candidatos.append(KEYWORD_EXCEPTIONS[nombre_norm])
     else:
-        keyword = next((p for p in reversed(palabras) if len(p) > 3), palabras[-1])
-    log.info(f"  Keyword: {keyword}")
+        # 1. Primera palabra distintiva ≥4 chars (suele ser el "brand")
+        for p in palabras_validas:
+            if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
+                candidatos.append(p)
+                break
+        # 2. Última palabra distintiva ≥4 chars (criterio histórico)
+        for p in reversed(palabras_validas):
+            if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
+                candidatos.append(p)
+                break
+        # 3. Cualquier distintiva ≥3 chars (cubre abreviaciones tipo MFA)
+        for p in palabras_validas:
+            if p not in GENERIC_WORDS and p not in candidatos:
+                candidatos.append(p)
+                break
 
-    await proveedor_input.type(keyword, delay=150)
-    await page.wait_for_timeout(3000)
+    if not candidatos:
+        log.error(f"  ❌ Sin candidatos de keyword para '{nombre_proveedor}' — abortando")
+        return False
 
-    palabras_sol = set(p for p in re.findall(r"\w+", nombre_upper) if len(p) >= 3)
+    log.info(f"  Distintivas SOL: {distintivas_sol}")
 
-    try:
-        await page.locator("table.obj tr").first.wait_for(state="visible", timeout=5000)
+    for kw_idx, keyword in enumerate(candidatos):
+        log.info(f"  Intento #{kw_idx+1} con keyword: {keyword}")
+
+        await proveedor_input.click()
+        await proveedor_input.click(click_count=3)
+        await proveedor_input.fill("")
+        await page.wait_for_timeout(300)
+        await proveedor_input.type(keyword, delay=150)
+        await page.wait_for_timeout(3000)
+
+        try:
+            await page.locator("table.obj tr").first.wait_for(state="visible", timeout=5000)
+        except Exception:
+            log.warning(f"  Dropdown no apareció con '{keyword}'")
+            continue
+
         filas = page.locator("table.obj tr")
         n = await filas.count()
-        mejor_score = -1
         mejor_idx = None
         mejor_nombre = ""
+        mejor_score = -1
+
         for i in range(n):
             try:
                 fila = filas.nth(i)
                 tds = fila.locator("td")
                 if await tds.count() < 3:
                     continue
-                nombre_neo = (await tds.nth(2).inner_text()).strip().upper()
-                if not nombre_neo:
+                nombre_neo_raw = (await tds.nth(2).inner_text()).strip()
+                if not nombre_neo_raw:
                     continue
-                palabras_neo = set(re.findall(r"\w+", nombre_neo))
-                score = len(palabras_sol & palabras_neo)
-                if nombre_neo == nombre_upper:
-                    score += 100
+                palabras_neo = set(re.findall(r"\w+", _normalize(nombre_neo_raw)))
+
+                # Validación estricta: todas las distintivas SOL en el row NEO
+                if not distintivas_sol.issubset(palabras_neo):
+                    continue
+
+                # Score: preferimos el match con menos palabras "extra"
+                score = 1000 - (len(palabras_neo) - len(distintivas_sol))
+                if _normalize(nombre_neo_raw) == nombre_norm:
+                    score += 10000
+
                 if score > mejor_score:
                     mejor_score = score
                     mejor_idx = i
-                    mejor_nombre = nombre_neo
+                    mejor_nombre = nombre_neo_raw
             except Exception:
                 continue
 
-        if mejor_idx is not None and mejor_score >= 1:
-            log.info(f"  Mejor match (score={mejor_score}): {mejor_nombre}")
-            await filas.nth(mejor_idx).click()
-            await page.wait_for_timeout(1500)
-        else:
-            log.warning(f"  Ningún row del dropdown matchea '{nombre_proveedor}' — usando rowselected")
-            fila_fb = page.locator("table.obj tr.rowselected")
-            try:
-                await fila_fb.first.wait_for(state="visible", timeout=3000)
-                await fila_fb.first.click()
-                await page.wait_for_timeout(1500)
-            except Exception as e:
-                log.warning(f"  Fallback rowselected falló: {e}")
-    except Exception as e:
-        log.warning(f"  Iteración dropdown falló: {e}")
-        try:
-            fila2 = page.locator("table.obj tr").nth(1)
-            await fila2.wait_for(state="visible", timeout=3000)
-            await fila2.click()
-            await page.wait_for_timeout(1500)
-        except Exception as e2:
-            log.warning(f"  Fallback tabla.obj falló: {e2}")
+        if mejor_idx is None:
+            log.warning(f"  Ningún row con '{keyword}' incluye todas las distintivas {distintivas_sol}")
+            continue
 
-    prov_id = await page.locator("#txtProveedor_Id").input_value()
-    if prov_id:
-        log.info(f"  ✅ Proveedor ID: {prov_id}")
-        return True
+        log.info(f"  ✅ Match estricto: {mejor_nombre} (score={mejor_score})")
+        await filas.nth(mejor_idx).click()
+        await page.wait_for_timeout(1500)
 
-    log.error("  ❌ txtProveedor_Id vacío — proveedor NO seleccionado")
+        prov_id = await page.locator("#txtProveedor_Id").input_value()
+        if prov_id:
+            log.info(f"  ✅ Proveedor ID: {prov_id}")
+            return True
+        log.warning(f"  txtProveedor_Id vacío post-click — probando siguiente keyword")
+
+    log.error(f"  ❌ Ningún keyword encontró match exacto para '{nombre_proveedor}' — abortando OC")
     return False
 
 async def cargar_excel_oc(page, excel_path):
