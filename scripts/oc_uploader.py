@@ -26,6 +26,26 @@ GENERIC_WORDS = {
     "GLOBAL", "WORLDWIDE", "HOLDINGS",
 }
 
+# Prefijos comunes en español que SÍ distinguen proveedores (IMPORTACIONES
+# VEGA ≠ COMERCIALIZADORA VEGA), pero que como keyword de búsqueda son
+# poco selectivos: NEO devuelve cientos de "DISTRIBUIDORAS" y nuestro
+# proveedor puede no estar en el dropdown limitado. Por eso al elegir
+# keyword los DEMOTAMOS — preferimos buscar primero por la palabra "brand"
+# (apellido o nombre específico). Igual quedan en distintivas_sol para
+# validación final.
+SOFT_GENERIC = {
+    "DISTRIBUIDORA", "DISTRIBUCIONES", "DISTRIBUIDOR",
+    "COMERCIAL", "COMERCIALIZADORA",
+    "IMPORTACIONES", "EXPORTACIONES",
+    "CORPORACION", "EMPRESA",
+    "INDUSTRIAS", "INDUSTRIA", "INDUSTRIALES",
+    "FERRETERIA", "INSTALACIONES", "MAYOREO",
+    "REPRESENTACIONES", "ALMACENES",
+    "SERVICIOS", "PRODUCTOS",
+    "SUMINISTROS", "MATERIALES",
+    "INVERSIONES",
+}
+
 
 def _normalize(s):
     """Quita acentos y pasa a uppercase: ACUÑA → ACUNA, GERMÁN → GERMAN."""
@@ -296,18 +316,19 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     if nombre_norm in KEYWORD_EXCEPTIONS:
         candidatos.append(KEYWORD_EXCEPTIONS[nombre_norm])
     else:
+        # 1. Todas las palabras "brand" (≥4, no genéricas, no soft-generic)
+        #    en orden — las más específicas primero.
+        for p in palabras_validas:
+            if len(p) >= 4 and p not in GENERIC_WORDS and p not in SOFT_GENERIC and p not in candidatos:
+                candidatos.append(p)
+        # 2. Palabras soft-generic ≥4 (DISTRIBUIDORA, IMPORTACIONES, etc.) como fallback.
         for p in palabras_validas:
             if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
                 candidatos.append(p)
-                break
-        for p in reversed(palabras_validas):
-            if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
-                candidatos.append(p)
-                break
+        # 3. Cualquier distintiva ≥3 chars (cubre abreviaciones tipo MFA).
         for p in palabras_validas:
             if p not in GENERIC_WORDS and p not in candidatos:
                 candidatos.append(p)
-                break
 
     if not candidatos:
         log.error(f"  ❌ Sin candidatos de keyword para '{nombre_proveedor}' — abortando")
