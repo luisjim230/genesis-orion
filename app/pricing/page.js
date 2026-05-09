@@ -35,7 +35,7 @@ export default function PricingPage() {
   const cargarDataset = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const { data, error } = await supabase.rpc('pricing_dataset', { p_start: inicio, p_end: fin });
+      const { data, error } = await supabase.rpc('pricing_dataset_json', { p_start: inicio, p_end: fin });
       if (error) throw error;
       setDataset(Array.isArray(data) ? data : []);
     } catch (e) {

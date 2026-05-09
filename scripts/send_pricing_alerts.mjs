@@ -116,8 +116,8 @@ async function main() {
   console.log(`Pricing alerts run: actual ${start30}..${end} · baseline ${start120}..${end120}`);
 
   const [actual, baseline] = await Promise.all([
-    rpc('pricing_dataset', { p_start: start30,  p_end: end }),
-    rpc('pricing_dataset', { p_start: start120, p_end: end120 }),
+    rpc('pricing_dataset_json', { p_start: start30,  p_end: end }),
+    rpc('pricing_dataset_json', { p_start: start120, p_end: end120 }),
   ]);
 
   const claseA = clasificarA(baseline, 'venta_neta');
