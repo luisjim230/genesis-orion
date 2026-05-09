@@ -15,7 +15,7 @@ const ALL_NAV=[
   {group:'Finanzas',items:[{href:'/finanzas',key:'finanzas',icon:'💰',name:'Finanzas'},{href:'/finanzas/bancos',key:'bancos',icon:'🏦',name:'Bancos'},{href:'/pagos',key:'pagos',icon:'💸',name:'Coordinación de pagos'}]},
   {group:'Gestión',items:[{href:'/tareas',key:'tareas',icon:'✅',name:'Tareas'},{href:'/tareas-equipo',key:'tareas-equipo',icon:'📋',name:'Tareas Equipo'},{href:'/social',key:'social',icon:'📱',name:'Redes Sociales'},{href:'/kommo-proveedores',key:'kommo-proveedores',icon:'📲',name:'WhatsApp Proveedores'}]},
   {group:'Herramientas',items:[{href:'/ponderacion',key:'ponderacion',icon:'⚖️',name:'Promedios ponderados'},{href:'/materiales',key:'materiales',icon:'🧱',name:'Cálculo de materiales'},{href:'/fichas-tecnicas',key:'fichas-tecnicas',icon:'📋',name:'Fichas Técnicas'},{href:'/garantias',key:'garantias',icon:'🔄',name:'Devoluciones y Garantías'},{href:'/encomiendas',key:'encomiendas',icon:'📦',name:'Encomiendas'}]},
-  {group:'Recursos Humanos',items:[{href:'/rrhh',key:'rrhh',icon:'👔',name:'Permisos y Vacaciones'}]},
+  {group:'Recursos Humanos',items:[{href:'/rrhh',key:'rrhh',icon:'👔',name:'Personal'}]},
   {group:'Admin',items:[{href:'/admin',key:'admin',icon:'👥',name:'Usuarios',adminOnly:true}]},
 ];
 const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8a84b',logistica:'#b794f4'};
