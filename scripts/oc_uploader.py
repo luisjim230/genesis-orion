@@ -238,18 +238,28 @@ async def navegar_nueva_oc(page):
 
 async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     """
-    Busca el proveedor en NEO y selecciona solo si TODAS las palabras
-    distintivas del nombre SOL (ignorando sufijos genéricos tipo SA, LTD,
-    INTERNATIONAL, GROUP) aparecen como palabras del row de NEO. Si no,
-    aborta para evitar registrar la OC contra el proveedor equivocado.
+    Busca el proveedor en NEO usando un keyword distintivo (ignorando
+    sufijos genéricos tipo SA, LTD, INTERNATIONAL, GROUP) y elige del
+    dropdown el row que mejor coincide con el nombre SOL.
 
-    Casos reales que motivaron esta lógica estricta:
+    Reglas de aceptación (de más confiable a menos):
+      1. Match exacto del nombre normalizado.
+      2. Subset perfecto: todas las palabras distintivas de SOL están en el row.
+      3. Único candidato del dropdown que contiene el keyword (NEO ya filtra,
+         así que si solo hay uno es muy probable que sea el correcto).
+      4. Ganador claro: el row tiene más palabras distintivas en común que
+         cualquier otro candidato.
+
+    Si nada califica → abortar para no registrar al proveedor equivocado.
+
+    Bugs reales que motivaron esta lógica:
       - "HOGGAN INTERNATIONAL" → registraba contra "BARANA INTERNATIONAL LTD"
+        (keyword genérica "INTERNATIONAL" → BARANA aparecía primero)
       - "TERNIUM INTERNACIONAL COSTA RICA" → contra "ALUTECH COSTA RICA"
       - "IMPORTACIONES VEGA SA" → contra "COMERCIALIZADORA VEGA"
       - "GERMAN ALEJANDRO CHAVES ACUNA" → contra "ACUÑA Y HERNANDEZ"
-        (este último era un proveedor "fantasma" del OC anterior porque
-        txtProveedor_Id quedaba pegado cuando la búsqueda fallaba)
+        (proveedor "fantasma": txtProveedor_Id quedaba pegado del OC anterior
+        cuando la búsqueda fallaba; ahora se limpia explícitamente)
     """
     log.info(f"Buscando proveedor: {nombre_proveedor}")
 
@@ -282,22 +292,18 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
         "CHAOZHOU ZHONGTONG TRADE": "ZHONGTONG",
     }
 
-    # Lista ordenada de keywords a probar
     candidatos = []
     if nombre_norm in KEYWORD_EXCEPTIONS:
         candidatos.append(KEYWORD_EXCEPTIONS[nombre_norm])
     else:
-        # 1. Primera palabra distintiva ≥4 chars (suele ser el "brand")
         for p in palabras_validas:
             if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
                 candidatos.append(p)
                 break
-        # 2. Última palabra distintiva ≥4 chars (criterio histórico)
         for p in reversed(palabras_validas):
             if len(p) >= 4 and p not in GENERIC_WORDS and p not in candidatos:
                 candidatos.append(p)
                 break
-        # 3. Cualquier distintiva ≥3 chars (cubre abreviaciones tipo MFA)
         for p in palabras_validas:
             if p not in GENERIC_WORDS and p not in candidatos:
                 candidatos.append(p)
@@ -327,9 +333,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
 
         filas = page.locator("table.obj tr")
         n = await filas.count()
-        mejor_idx = None
-        mejor_nombre = ""
-        mejor_score = -1
+        candidatos_filas = []
 
         for i in range(n):
             try:
@@ -340,39 +344,69 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
                 nombre_neo_raw = (await tds.nth(2).inner_text()).strip()
                 if not nombre_neo_raw:
                     continue
-                palabras_neo = set(re.findall(r"\w+", _normalize(nombre_neo_raw)))
+                nombre_neo_norm = _normalize(nombre_neo_raw)
+                palabras_neo = set(re.findall(r"\w+", nombre_neo_norm))
 
-                # Validación estricta: todas las distintivas SOL en el row NEO
-                if not distintivas_sol.issubset(palabras_neo):
+                # Sanity check: el keyword tiene que estar entre las palabras
+                # del row. NEO ya filtra por substring pero esto descarta
+                # rows raros que se cuelan (headers, separadores, etc).
+                if keyword not in palabras_neo:
                     continue
 
-                # Score: preferimos el match con menos palabras "extra"
-                score = 1000 - (len(palabras_neo) - len(distintivas_sol))
-                if _normalize(nombre_neo_raw) == nombre_norm:
-                    score += 10000
+                count = len(distintivas_sol & palabras_neo)
+                if count == 0:
+                    continue
 
-                if score > mejor_score:
-                    mejor_score = score
-                    mejor_idx = i
-                    mejor_nombre = nombre_neo_raw
+                candidatos_filas.append({
+                    'idx': i,
+                    'nombre_raw': nombre_neo_raw,
+                    'palabras_neo': palabras_neo,
+                    'count': count,
+                    'subset': distintivas_sol.issubset(palabras_neo),
+                    'exacto': nombre_neo_norm == nombre_norm,
+                })
             except Exception:
                 continue
 
-        if mejor_idx is None:
-            log.warning(f"  Ningún row con '{keyword}' incluye todas las distintivas {distintivas_sol}")
+        if not candidatos_filas:
+            log.warning(f"  Sin candidatos con keyword '{keyword}'")
             continue
 
-        log.info(f"  ✅ Match estricto: {mejor_nombre} (score={mejor_score})")
-        await filas.nth(mejor_idx).click()
+        # Ordenar: exacto > subset > más palabras matched > NEO row más corto
+        candidatos_filas.sort(key=lambda c: (
+            -int(c['exacto']),
+            -int(c['subset']),
+            -c['count'],
+            len(c['palabras_neo']),
+        ))
+
+        best = candidatos_filas[0]
+        runner_up_count = candidatos_filas[1]['count'] if len(candidatos_filas) > 1 else 0
+
+        # Aceptar si: match exacto, subset perfecto, único candidato,
+        # o ganador claro (estrictamente más palabras matched que el segundo).
+        accept = (
+            best['exacto']
+            or best['subset']
+            or len(candidatos_filas) == 1
+            or best['count'] > runner_up_count
+        )
+
+        if not accept:
+            log.warning(f"  Match ambiguo con '{keyword}': mejor count={best['count']}, runner-up={runner_up_count} — siguiente keyword")
+            continue
+
+        log.info(f"  ✅ Match: {best['nombre_raw']} (count={best['count']}/{len(distintivas_sol)}, subset={best['subset']}, exacto={best['exacto']})")
+        await filas.nth(best['idx']).click()
         await page.wait_for_timeout(1500)
 
         prov_id = await page.locator("#txtProveedor_Id").input_value()
         if prov_id:
             log.info(f"  ✅ Proveedor ID: {prov_id}")
             return True
-        log.warning(f"  txtProveedor_Id vacío post-click — probando siguiente keyword")
+        log.warning(f"  txtProveedor_Id vacío post-click — siguiente keyword")
 
-    log.error(f"  ❌ Ningún keyword encontró match exacto para '{nombre_proveedor}' — abortando OC")
+    log.error(f"  ❌ Ningún keyword resolvió '{nombre_proveedor}' — abortando OC")
     return False
 
 async def cargar_excel_oc(page, excel_path):
