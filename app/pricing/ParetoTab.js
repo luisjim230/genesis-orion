@@ -113,10 +113,11 @@ export default function ParetoTab({ rows, ventaEnr, utilEnr }) {
               <Th>Nombre</Th>
               <Th>Categoría</Th>
               <Th align="right">Unidades</Th>
-              <Th align="right">{metric === 'venta_neta' ? 'Venta' : 'Utilidad'}</Th>
-              <Th align="right">{metric === 'venta_neta' ? 'Margen %' : 'Venta'}</Th>
-              <Th align="right">% indiv.</Th>
-              <Th align="right">% acum.</Th>
+              <Th align="right">Venta</Th>
+              <Th align="right">Utilidad</Th>
+              <Th align="right">Margen %</Th>
+              <Th align="right" title={`% que aporta este SKU al total de ${metric === 'venta_neta' ? 'venta' : 'utilidad'} del período`}>% del total</Th>
+              <Th align="right" title="Suma acumulada del ranking. Los SKUs hasta 80% son Clase A, hasta 95% Clase B, el resto Clase C">% acumulado</Th>
               <Th align="center">Clase</Th>
             </tr>
           </thead>
@@ -128,10 +129,9 @@ export default function ParetoTab({ rows, ventaEnr, utilEnr }) {
                 <Td title={r.nombre}>{(r.nombre || '').slice(0, 60)}</Td>
                 <Td style={{ color: '#6b7280', fontSize: 11 }}>{r.categoria}</Td>
                 <Td align="right">{fmtNum(r.qty_neta, 0)}</Td>
-                <Td align="right" bold>{fmtCRC(metric === 'venta_neta' ? r.venta_neta : r.utilidad_neta)}</Td>
-                <Td align="right">
-                  {metric === 'venta_neta' ? fmtPct(r.margen_pct) : fmtCRC(r.venta_neta)}
-                </Td>
+                <Td align="right" bold={metric === 'venta_neta'}>{fmtCRC(r.venta_neta)}</Td>
+                <Td align="right" bold={metric === 'utilidad_neta'}>{fmtCRC(r.utilidad_neta)}</Td>
+                <Td align="right">{fmtPct(r.margen_pct)}</Td>
                 <Td align="right">{fmtPct(r._pct_individual * 100, 2)}</Td>
                 <Td align="right">{fmtPct(r._pct_acumulado * 100, 1)}</Td>
                 <Td align="center">
@@ -161,10 +161,11 @@ const inputStyle = {
 const selectStyle = { ...inputStyle, minWidth: 180, cursor: 'pointer' };
 const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 12 };
 
-function Th({ children, align = 'left' }) {
-  return <th style={{
+function Th({ children, align = 'left', title }) {
+  return <th title={title} style={{
     padding: '8px 10px', textAlign: align, fontSize: 11, fontWeight: 700,
     color: 'white', textTransform: 'uppercase', letterSpacing: 0.4, whiteSpace: 'nowrap',
+    cursor: title ? 'help' : 'default',
   }}>{children}</th>;
 }
 function Td({ children, align = 'left', mono, bold, ...rest }) {
