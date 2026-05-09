@@ -325,8 +325,12 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
         await proveedor_input.type(keyword, delay=150)
         await page.wait_for_timeout(3000)
 
+        # NEO renderiza las filas del dropdown como <tr> con visibility:hidden
+        # hasta que la UI las muestra. wait_for(visible) tira timeout. Usamos
+        # state="attached" + text_content() para leer rows hidden y
+        # click(force=True) para seleccionarlas.
         try:
-            await page.locator("table.obj tr").first.wait_for(state="visible", timeout=5000)
+            await page.locator("table.obj tr").first.wait_for(state="attached", timeout=5000)
         except Exception:
             log.warning(f"  Dropdown no apareció con '{keyword}'")
             continue
@@ -341,7 +345,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
                 tds = fila.locator("td")
                 if await tds.count() < 3:
                     continue
-                nombre_neo_raw = (await tds.nth(2).inner_text()).strip()
+                nombre_neo_raw = ((await tds.nth(2).text_content()) or "").strip()
                 if not nombre_neo_raw:
                     continue
                 nombre_neo_norm = _normalize(nombre_neo_raw)
@@ -397,7 +401,7 @@ async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
             continue
 
         log.info(f"  ✅ Match: {best['nombre_raw']} (count={best['count']}/{len(distintivas_sol)}, subset={best['subset']}, exacto={best['exacto']})")
-        await filas.nth(best['idx']).click()
+        await filas.nth(best['idx']).click(force=True)
         await page.wait_for_timeout(1500)
 
         prov_id = await page.locator("#txtProveedor_Id").input_value()
