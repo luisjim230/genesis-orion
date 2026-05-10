@@ -20,14 +20,20 @@ const ALL_NAV=[
 ];
 const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8a84b',logistica:'#b794f4'};
 
-function NavItem({href,icon,name,collapsed,isActive}){
+function NavItem({href,icon,name,collapsed,isActive,badge}){
   return(
     <Link href={href} style={{textDecoration:'none',display:'block'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',cursor:'pointer',borderRadius:10,margin:'1px 8px',borderLeft:isActive?'3px solid #c8a84b':'3px solid transparent',background:isActive?'rgba(200,168,75,0.15)':'transparent',transition:'all 0.15s ease'}}
         onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.06)';}}
         onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
         <span style={{fontSize:'1rem',flexShrink:0,width:20,textAlign:'center'}}>{icon}</span>
-        {!collapsed&&<div style={{fontSize:'0.82rem',fontWeight:isActive?600:400,color:isActive?'#c8a84b':'rgba(255,255,255,0.75)',lineHeight:1.3,fontFamily:"'Rubik',sans-serif",overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>}
+        {!collapsed&&<div style={{fontSize:'0.82rem',fontWeight:isActive?600:400,color:isActive?'#c8a84b':'rgba(255,255,255,0.75)',lineHeight:1.3,fontFamily:"'Rubik',sans-serif",overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{name}</div>}
+        {!collapsed && badge > 0 && (
+          <span title={`${badge} aprobaciones esperando orden`} style={{
+            background:'#c8a84b',color:'#1c1f26',fontSize:'0.65rem',fontWeight:700,
+            padding:'1px 6px',borderRadius:10,minWidth:18,textAlign:'center',flexShrink:0,
+          }}>{badge}</span>
+        )}
       </div>
     </Link>
   );
@@ -36,9 +42,30 @@ function NavItem({href,icon,name,collapsed,isActive}){
 export default function Sidebar(){
   const [collapsed,setCollapsed]=useState(false);
   const [search, setSearch] = useState('');
+  const [profeciasPendientes, setProfeciasPendientes] = useState(0);
   const {perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
-  const navAll=ALL_NAV.map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))})).filter(g=>g.items.length>0);
+
+  useEffect(()=>{
+    let cancelado=false;
+    async function cargar(){
+      try{
+        const r=await fetch('/api/profecias/aprobaciones-resumen');
+        if(!r.ok) return;
+        const j=await r.json();
+        if(!cancelado && j.ok) setProfeciasPendientes(j.aprobados||0);
+      }catch(_){}
+    }
+    cargar();
+    const id=setInterval(cargar, 30000);
+    return ()=>{ cancelado=true; clearInterval(id); };
+  },[pathname]);
+
+  const badgesPorKey={profecias:profeciasPendientes};
+  const navAll=ALL_NAV
+    .map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))}))
+    .map(g=>({...g,items:g.items.map(i=>({...i,badge:badgesPorKey[i.key]||0}))}))
+    .filter(g=>g.items.length>0);
   // Normaliza para búsqueda insensible a tildes y mayúsculas.
   // Ej: "métricas" y "metricas" se convierten ambos a "metricas".
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

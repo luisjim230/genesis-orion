@@ -1,28 +1,43 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import { fmtNum, fmtMoney, MadurezBadge, SemaforoBadge, ConfianzaIndicator, BanderasIcons } from './ui.js';
+import ConfirmarAprobacionModal from './ConfirmarAprobacionModal.js';
 
 const PAGE = 100;
 const SEMAFOROS_PEDIR = new Set(['rojo_critico', 'rojo', 'amarillo']);
 
 export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado }) {
-  const candidatas = useMemo(() => filas.filter((f) =>
-    f.cantidad_sugerida > 0 || SEMAFOROS_PEDIR.has(f.semaforo) || f.datos_insuficientes
-  ), [filas]);
-  const recienNacidos = useMemo(() => candidatas.filter((f) => f.madurez === 'recien_nacido').length, [candidatas]);
-  const insuficientes = useMemo(() => candidatas.filter((f) => f.datos_insuficientes).length, [candidatas]);
+  const [mostrarAprobados, setMostrarAprobados] = useState(false);
 
-  const [overrides, setOverrides] = useState({}); // codigo -> { cantidad, costo }
-  const [seleccion, setSeleccion] = useState({}); // codigo -> bool
+  const candidatas = useMemo(() => {
+    const arr = filas.filter((f) =>
+      f.cantidad_sugerida > 0 || SEMAFOROS_PEDIR.has(f.semaforo) || f.datos_insuficientes
+    );
+    if (mostrarAprobados) return arr;
+    return arr.filter((f) => f.estado_aprobacion !== 'aprobado' && f.estado_aprobacion !== 'en_orden');
+  }, [filas, mostrarAprobados]);
+
+  const recienNacidos = useMemo(() => candidatas.filter((f) => f.madurez === 'recien_nacido' && f.estado_aprobacion !== 'aprobado').length, [candidatas]);
+  const insuficientes = useMemo(() => candidatas.filter((f) => f.datos_insuficientes && f.estado_aprobacion !== 'aprobado').length, [candidatas]);
+  const yaAprobados = useMemo(() => filas.filter((f) => f.estado_aprobacion === 'aprobado').length, [filas]);
+
+  const [overrides, setOverrides] = useState({});
+  const [seleccion, setSeleccion] = useState({});
   const [sort, setSort] = useState({ col: 'cantidad_sugerida', dir: 'desc' });
   const [pagina, setPagina] = useState(1);
   const [aprobando, setAprobando] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [modalAbierto, setModalAbierto] = useState(false);
 
   useEffect(() => {
-    setOverrides({});
-    setSeleccion({});
-  }, [filas.length]);
+    // Limpiar selección de SKUs que ya no son candidatas (filtros cambiaron)
+    setSeleccion((prev) => {
+      const visibles = new Set(candidatas.map((c) => c.codigo_interno));
+      const next = {};
+      for (const k of Object.keys(prev)) if (visibles.has(k)) next[k] = prev[k];
+      return next;
+    });
+  }, [candidatas]);
 
   const ordenadas = useMemo(() => {
     const arr = [...candidatas];
@@ -31,7 +46,8 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      if (typeof va === 'number' && typeof vb === 'number') return sort.dir === 'asc' ? va - vb : vb - va;
+      const na = Number(va), nb = Number(vb);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return sort.dir === 'asc' ? na - nb : nb - na;
       return sort.dir === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
     return arr;
@@ -43,7 +59,8 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
   const cantFinal = (f) => {
     const ov = overrides[f.codigo_interno];
     if (ov?.cantidad != null && ov.cantidad !== '') return parseFloat(ov.cantidad) || 0;
-    return Number(f.cantidad_sugerida) || 0;
+    if (f.cantidad_sugerida != null) return Number(f.cantidad_sugerida) || 0;
+    return 0;
   };
   const costoFinal = (f) => {
     const ov = overrides[f.codigo_interno];
@@ -65,6 +82,8 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
     setOverrides((prev) => ({ ...prev, [codigo]: { ...(prev[codigo] || {}), [campo]: val } }));
   }
 
+  const aprobado = (f) => f.estado_aprobacion === 'aprobado' || f.estado_aprobacion === 'en_orden';
+
   function toggle(codigo) {
     setSeleccion((prev) => ({ ...prev, [codigo]: !prev[codigo] }));
   }
@@ -72,7 +91,7 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
   function seleccionarTodosVisibles(val) {
     setSeleccion((prev) => {
       const cur = { ...prev };
-      for (const f of visibles) cur[f.codigo_interno] = val;
+      for (const f of visibles) if (!aprobado(f)) cur[f.codigo_interno] = val;
       return cur;
     });
   }
@@ -80,6 +99,7 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
   function seleccionarAltaConfianza() {
     const cur = {};
     for (const f of candidatas) {
+      if (aprobado(f)) continue;
       if (f.confianza === 'alta' && f.cantidad_sugerida > 0) cur[f.codigo_interno] = true;
     }
     setSeleccion(cur);
@@ -88,33 +108,48 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
   function seleccionarRecienNacidos() {
     const cur = {};
     for (const f of candidatas) {
+      if (aprobado(f)) continue;
       if (f.madurez === 'recien_nacido') cur[f.codigo_interno] = true;
     }
     setSeleccion(cur);
   }
 
-  async function aprobarSeleccion() {
-    setAprobando(true);
+  const itemsParaModal = useMemo(() => {
+    return candidatas
+      .filter((f) => seleccion[f.codigo_interno] && !aprobado(f))
+      .map((f) => ({
+        codigo_interno: f.codigo_interno,
+        item: f.item,
+        proveedor: f.ultimo_proveedor,
+        cantidad_aprobada: cantFinal(f),
+        costo_unitario_estimado: costoFinal(f),
+      }))
+      .filter((i) => i.cantidad_aprobada > 0);
+  }, [candidatas, seleccion, overrides]);
+
+  function abrirModal() {
+    if (!itemsParaModal.length) {
+      setMsg({ tipo: 'err', txt: 'Seleccioná al menos un SKU con cantidad > 0.' });
+      return;
+    }
     setMsg(null);
+    setModalAbierto(true);
+  }
+
+  async function confirmarAprobacion({ notas }) {
+    setAprobando(true);
     try {
-      const items = candidatas
-        .filter((f) => seleccion[f.codigo_interno])
-        .map((f) => ({
-          codigo_interno: f.codigo_interno,
-          proveedor: f.ultimo_proveedor,
-          cantidad_firmada: cantFinal(f),
-          costo_unitario_estimado: costoFinal(f),
-        }));
-      if (!items.length) throw new Error('Seleccioná al menos un SKU.');
       const r = await fetch('/api/profecias/aprobar-lote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items: itemsParaModal, notas }),
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || 'Error');
-      setMsg({ tipo: 'ok', txt: `${j.total} decisiones registradas.` });
+      setMsg({ tipo: 'ok', txt: `${j.count} SKUs aprobados. Ahora aparecen en Plan por Proveedor.` });
       setSeleccion({});
+      setOverrides({});
+      setModalAbierto(false);
       onAprobado?.();
     } catch (e) {
       setMsg({ tipo: 'err', txt: e.message });
@@ -123,14 +158,16 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
     }
   }
 
-  function exportarExcel() {
+  function exportarCSV() {
     const sel = candidatas.filter((f) => seleccion[f.codigo_interno]);
-    const rows = (sel.length ? sel : candidatas).map((f) => ({
+    const fuente = sel.length ? sel : candidatas;
+    if (!fuente.length) return;
+    const rows = fuente.map((f) => ({
       Codigo: f.codigo_interno,
       Nombre: f.item,
       Proveedor: f.ultimo_proveedor,
       Existencias: f.existencias,
-      DemandaMes: f.demanda_proyectada,
+      Proyeccion: f.demanda_proyectada,
       LeadTime: f.lead_time_dias,
       PuntoReorden: f.punto_reorden,
       CantidadSugerida: f.cantidad_sugerida,
@@ -140,8 +177,9 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
       Confianza: f.confianza,
       Madurez: f.madurez,
       Semaforo: f.semaforo,
+      Estado: f.estado_aprobacion,
     }));
-    const csv = [Object.keys(rows[0] || {}).join(',')]
+    const csv = [Object.keys(rows[0]).join(',')]
       .concat(rows.map((r) => Object.values(r).map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')))
       .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -177,17 +215,23 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
         background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 10,
         alignItems: 'center',
       }}>
-        <button onClick={seleccionarAltaConfianza} style={btnPri}>Aprobar alta confianza</button>
+        <button onClick={seleccionarAltaConfianza} style={btnSec}>Marcar alta confianza</button>
         <button onClick={seleccionarRecienNacidos} style={btnSec}>Marcar recién nacidos</button>
         <button onClick={() => seleccionarTodosVisibles(true)} style={btnSec}>Marcar página</button>
         <button onClick={() => setSeleccion({})} style={btnSec}>Limpiar selección</button>
+
+        <label style={{ marginLeft: 12, fontSize: 12, color: '#4a5568', display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <input type="checkbox" checked={mostrarAprobados} onChange={(e) => setMostrarAprobados(e.target.checked)} />
+          Mostrar también SKUs ya aprobados {yaAprobados > 0 && `(${yaAprobados})`}
+        </label>
+
         <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4a5568' }}>
           {totalSeleccion.count} seleccionados · <strong>{fmtMoney(totalSeleccion.inversion)}</strong>
         </span>
-        <button disabled={aprobando || !totalSeleccion.count} onClick={aprobarSeleccion} style={{ ...btnPri, opacity: !totalSeleccion.count ? 0.5 : 1 }}>
-          {aprobando ? 'Aprobando…' : 'Aprobar selección'}
+        <button disabled={!totalSeleccion.count || aprobando} onClick={abrirModal} style={{ ...btnPri, opacity: !totalSeleccion.count ? 0.5 : 1 }}>
+          Aprobar selección {totalSeleccion.count > 0 ? `(${totalSeleccion.count})` : ''}
         </button>
-        <button onClick={exportarExcel} style={btnSec}>Exportar CSV</button>
+        <button onClick={exportarCSV} style={btnSec}>Exportar CSV</button>
       </div>
 
       {msg && (
@@ -223,33 +267,47 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
             {visibles.map((f) => {
               const cant = cantFinal(f);
               const costo = costoFinal(f);
+              const ya = aprobado(f);
               return (
                 <tr key={f.codigo_interno}
-                  style={{ borderBottom: '1px solid #f0f2f5', background: seleccion[f.codigo_interno] ? 'rgba(200,168,75,0.08)' : 'transparent' }}
+                  style={{
+                    borderBottom: '1px solid #f0f2f5',
+                    background: ya ? '#f7fafc' : (seleccion[f.codigo_interno] ? 'rgba(200,168,75,0.08)' : 'transparent'),
+                    color: ya ? '#a0aec0' : 'inherit',
+                  }}
                 >
-                  <td style={td}><input type="checkbox" checked={!!seleccion[f.codigo_interno]} onChange={() => toggle(f.codigo_interno)} /></td>
+                  <td style={td}>
+                    <input type="checkbox" disabled={ya} checked={!!seleccion[f.codigo_interno]} onChange={() => toggle(f.codigo_interno)} />
+                  </td>
                   <td style={td}><SemaforoBadge value={f.semaforo} mini /></td>
-                  <td style={{ ...td, fontFamily: 'monospace', fontWeight: 600, cursor: 'pointer' }} onClick={() => onSeleccionar(f.codigo_interno)}>{f.codigo_interno}</td>
+                  <td style={{ ...td, fontFamily: 'monospace', fontWeight: 600, cursor: 'pointer' }} onClick={() => onSeleccionar(f.codigo_interno)}>
+                    {f.codigo_interno}
+                    {ya && <span title={`Aprobado el ${new Date(f.aprobado_en).toLocaleDateString('es-CR')}`} style={{ marginLeft: 6, fontSize: 10, color: '#38A169', fontWeight: 700 }}>✓ APROBADO</span>}
+                  </td>
                   <td style={{ ...td, cursor: 'pointer' }} onClick={() => onSeleccionar(f.codigo_interno)}>{f.item}</td>
                   <td style={td}>{f.ultimo_proveedor}</td>
                   <td style={td}><MadurezBadge value={f.madurez} /></td>
                   <td style={tdNum}>{fmtNum(f.existencias, 0)}</td>
-                  <td style={tdNum}>{fmtNum(f.demanda_proyectada, 1)}</td>
+                  <td style={tdNum}>{f.datos_insuficientes ? <span style={{ color: '#805AD5' }}>🔬</span> : fmtNum(f.demanda_proyectada, 1)}</td>
                   <td style={tdNum}>{f.lead_time_dias}</td>
                   <td style={tdNum}>{fmtNum(f.punto_reorden, 0)}</td>
                   <td style={{ ...tdNum, color: '#c8a84b', fontWeight: 700 }}>{fmtNum(f.cantidad_sugerida, 0)}</td>
                   <td style={tdNum}>
                     <input
-                      type="number" min={0} value={overrides[f.codigo_interno]?.cantidad ?? f.cantidad_sugerida}
+                      type="number" min={0}
+                      disabled={ya}
+                      value={overrides[f.codigo_interno]?.cantidad ?? (f.cantidad_sugerida ?? '')}
                       onChange={(e) => setOverride(f.codigo_interno, 'cantidad', e.target.value)}
-                      style={inputNum}
+                      style={{ ...inputNum, opacity: ya ? 0.5 : 1 }}
                     />
                   </td>
                   <td style={tdNum}>
                     <input
-                      type="number" min={0} step="0.01" value={overrides[f.codigo_interno]?.costo ?? f.ultimo_costo}
+                      type="number" min={0} step="0.01"
+                      disabled={ya}
+                      value={overrides[f.codigo_interno]?.costo ?? f.ultimo_costo}
                       onChange={(e) => setOverride(f.codigo_interno, 'costo', e.target.value)}
-                      style={inputNum}
+                      style={{ ...inputNum, opacity: ya ? 0.5 : 1 }}
                     />
                   </td>
                   <td style={tdNum}>{fmtMoney(cant * costo, f.moneda)}</td>
@@ -265,6 +323,15 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
         </table>
       </div>
       <Pager pagina={pagina} setPagina={setPagina} totalPaginas={totalPaginas} total={ordenadas.length} />
+
+      {modalAbierto && (
+        <ConfirmarAprobacionModal
+          items={itemsParaModal}
+          onClose={() => setModalAbierto(false)}
+          onConfirmar={confirmarAprobacion}
+          aprobando={aprobando}
+        />
+      )}
     </div>
   );
 }
