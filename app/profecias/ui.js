@@ -114,6 +114,8 @@ export function ConfianzaIndicator({ value }) {
 
 export function BanderasIcons({ row }) {
   const banderas = [];
+  if (row.datos_insuficientes) banderas.push({ k: 'insuf', icon: '🔬', label: 'Datos insuficientes para proyectar (menos de 7 días de vida).' });
+  if (row.tiene_outliers) banderas.push({ k: 'out', icon: '📊', label: 'Tiene facturas atípicas (mayoreo). El Ritmo Ajustado las excluye.' });
   if (row.bandera_stockout) banderas.push({ k: 'stockout', icon: '🔄', label: 'Stockout: cliente vino sin stock' });
   if (row.bandera_discontinuar) banderas.push({ k: 'disc', icon: '⚠️', label: 'Sin venta reciente: posible discontinuar' });
   if (row.proveedor_pausado) banderas.push({ k: 'paus', icon: '⏸️', label: 'Proveedor pausado' });

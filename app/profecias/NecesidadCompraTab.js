@@ -6,8 +6,11 @@ const PAGE = 100;
 const SEMAFOROS_PEDIR = new Set(['rojo_critico', 'rojo', 'amarillo']);
 
 export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado }) {
-  const candidatas = useMemo(() => filas.filter((f) => f.cantidad_sugerida > 0 || SEMAFOROS_PEDIR.has(f.semaforo)), [filas]);
+  const candidatas = useMemo(() => filas.filter((f) =>
+    f.cantidad_sugerida > 0 || SEMAFOROS_PEDIR.has(f.semaforo) || f.datos_insuficientes
+  ), [filas]);
   const recienNacidos = useMemo(() => candidatas.filter((f) => f.madurez === 'recien_nacido').length, [candidatas]);
+  const insuficientes = useMemo(() => candidatas.filter((f) => f.datos_insuficientes).length, [candidatas]);
 
   const [overrides, setOverrides] = useState({}); // codigo -> { cantidad, costo }
   const [seleccion, setSeleccion] = useState({}); // codigo -> bool
@@ -155,14 +158,17 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
 
   return (
     <div>
-      {recienNacidos > 0 && (
+      {(recienNacidos > 0 || insuficientes > 0) && (
         <div style={{
           background: '#FFF8E1', border: '1px solid #F6E05E', borderRadius: 8,
           padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#744210',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
         }}>
-          <span>🆕 Hay <strong>{recienNacidos}</strong> SKUs recién nacidos que requieren tu criterio.</span>
-          <button onClick={seleccionarRecienNacidos} style={btnLink}>Seleccionar todos</button>
+          <span>
+            {insuficientes > 0 && <>🔬 <strong>{insuficientes}</strong> SKUs con datos insuficientes (menos de 7 días) requieren decisión humana. </>}
+            {recienNacidos > 0 && <>🆕 <strong>{recienNacidos}</strong> SKUs recién nacidos que requieren tu criterio.</>}
+          </span>
+          <button onClick={seleccionarRecienNacidos} style={btnLink}>Seleccionar recién nacidos</button>
         </div>
       )}
 
@@ -202,7 +208,7 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
               <Th k="ultimo_proveedor" sort={sort} onSort={handleSort}>Proveedor</Th>
               <Th k="madurez" sort={sort} onSort={handleSort}>Madurez</Th>
               <Th k="existencias" sort={sort} onSort={handleSort} num>Exist.</Th>
-              <Th k="demanda_proyectada" sort={sort} onSort={handleSort} num>Dem./mes</Th>
+              <Th k="demanda_proyectada" sort={sort} onSort={handleSort} num>Proyección</Th>
               <Th k="lead_time_dias" sort={sort} onSort={handleSort} num>Lead</Th>
               <Th k="punto_reorden" sort={sort} onSort={handleSort} num>P.Reord.</Th>
               <Th k="cantidad_sugerida" sort={sort} onSort={handleSort} num>Sugerida</Th>
