@@ -6,6 +6,7 @@ import ProyeccionVentasTab from './ProyeccionVentasTab.js';
 import NecesidadCompraTab from './NecesidadCompraTab.js';
 import PlanProveedorTab from './PlanProveedorTab.js';
 import SkuDetailDrawer from './SkuDetailDrawer.js';
+import LeyendaPanel from './LeyendaPanel.js';
 import { fmtFecha } from './ui.js';
 
 const TABS = [
@@ -153,6 +154,8 @@ function ProfeciasInner() {
         <Kpi label="🛒 Con sugerencia" valor={kpis.sugerir.toLocaleString('es-CR')} color="#c8a84b" />
         <Kpi label="💰 Inv. estimada" valor={'₡' + Math.round(kpis.inversion).toLocaleString('es-CR')} color="#1c1f26" />
       </div>
+
+      <LeyendaPanel />
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid #e2e8f0' }}>
         {TABS.map((t) => (
