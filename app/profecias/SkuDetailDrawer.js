@@ -105,18 +105,32 @@ export default function SkuDetailDrawer({ codigo, onClose, onClasificacionChange
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
                 <Card titulo="Existencias" valor={fmtNum(p.existencias, 0)} />
-                <Card titulo="Demanda/mes" valor={fmtNum(p.demanda_proyectada, 1)} />
+                <Card titulo="Proyección/mes" valor={p.datos_insuficientes ? 'decisión 🔬' : fmtNum(p.demanda_proyectada, 1)} highlight />
                 <Card titulo="Meses cobertura" valor={p.meses_cobertura == null ? '—' : `${fmtNum(p.meses_cobertura, 1)} m`} />
                 <Card titulo="Lead time" valor={`${p.lead_time_dias} d`} />
                 <Card titulo="Punto reorden" valor={fmtNum(p.punto_reorden, 0)} />
                 <Card titulo="Cant. sugerida" valor={fmtNum(p.cantidad_sugerida, 0)} highlight />
-                <Card titulo="Vel. 30d" valor={fmtNum(p.velocidad_30d, 1)} />
-                <Card titulo="Vel. 90d" valor={fmtNum(p.velocidad_90d, 1)} />
-                <Card titulo="Vel. 180d" valor={fmtNum(p.velocidad_180d, 1)} />
+                <Card titulo="Vendido 30d" valor={fmtNum(p.vendido_30d, 0)} />
+                <Card titulo="Vendido 90d" valor={fmtNum(p.vendido_90d, 0)} />
+                <Card titulo="Vendido 180d" valor={fmtNum(p.vendido_180d, 0)} />
+                <Card titulo="Ritmo 30d" valor={p.velocidad_30d == null ? '—' : fmtNum(p.velocidad_30d, 1)} sub={p.tiene_outliers && p.velocidad_ajustada_30d != null ? `aj. ${fmtNum(p.velocidad_ajustada_30d, 1)}` : null} />
+                <Card titulo="Ritmo 90d" valor={p.velocidad_90d == null ? '—' : fmtNum(p.velocidad_90d, 1)} sub={p.tiene_outliers && p.velocidad_ajustada_90d != null ? `aj. ${fmtNum(p.velocidad_ajustada_90d, 1)}` : null} />
+                <Card titulo="Ritmo 180d" valor={p.velocidad_180d == null ? '—' : fmtNum(p.velocidad_180d, 1)} sub={p.tiene_outliers && p.velocidad_ajustada_180d != null ? `aj. ${fmtNum(p.velocidad_ajustada_180d, 1)}` : null} />
                 <Card titulo="Días de vida" valor={p.dias_vida} />
                 <Card titulo="Primera venta" valor={fmtFecha(p.primera_venta)} />
                 <Card titulo="Última venta" valor={fmtFecha(p.ultima_venta)} />
               </div>
+
+              {(p.datos_insuficientes || p.tiene_outliers) && (
+                <div style={{
+                  display: 'flex', gap: 16, marginBottom: 14, padding: '8px 12px',
+                  background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6,
+                  fontSize: 12, color: '#92400E', flexWrap: 'wrap',
+                }}>
+                  {p.datos_insuficientes && <span>🔬 Datos insuficientes — proyección automática deshabilitada (menos de 7 días de vida).</span>}
+                  {p.tiene_outliers && <span>📊 Hay facturas atípicas (mayoreo). Mediana por factura: {fmtNum(p.mediana_factura, 1)} u sobre {p.num_facturas} facturas. La proyección usa el ritmo ajustado (sin outliers).</span>}
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
                 <span style={{ fontSize: 13, color: '#4a5568' }}><strong>Clasificación:</strong></span>
@@ -171,14 +185,15 @@ export default function SkuDetailDrawer({ codigo, onClose, onClasificacionChange
 const th = { textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', fontSize: 11, color: '#4a5568' };
 const td = { padding: '6px 8px', borderBottom: '1px solid #f0f2f5' };
 
-function Card({ titulo, valor, highlight }) {
+function Card({ titulo, valor, sub, highlight }) {
   return (
     <div style={{
       padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6,
       background: highlight ? 'rgba(200,168,75,0.12)' : '#fff',
     }}>
       <div style={{ fontSize: 10, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.4 }}>{titulo}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: highlight ? '#1c1f26' : '#1c1f26' }}>{valor}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: '#1c1f26' }}>{valor}</div>
+      {sub && <div style={{ fontSize: 10, color: '#0369a1', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
