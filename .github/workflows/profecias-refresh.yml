@@ -1,0 +1,30 @@
+name: Profecias Panel Refresh
+
+on:
+  schedule:
+    # 5am Costa Rica = 11:00 UTC
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh materialized view profecias_panel
+        run: |
+          set -e
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            'https://xeeieqjqmtoiutfnltqu.supabase.co/rest/v1/rpc/refresh_profecias_panel' \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "HTTP $status"
+          echo "Body: $body"
+          if [ "$status" != "200" ] && [ "$status" != "204" ]; then
+            echo "Refresh falló"
+            exit 1
+          fi
+          echo "Refresh OK"
