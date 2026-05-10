@@ -2,79 +2,103 @@ import { sb, jsonError } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
 
+// POST convertir aprobaciones a orden de compra real.
+// Body: { proveedor, ids_aprobaciones: [], nombre_lote?, dias_tribucion? }
 export async function POST(req) {
   try {
     const body = await req.json();
     const proveedor = String(body.proveedor || '').trim();
-    const items = Array.isArray(body.items) ? body.items.filter((i) => parseFloat(i.cantidad) > 0) : [];
-    if (!items.length) return jsonError('items vacío', 400);
+    const ids = Array.isArray(body.ids_aprobaciones)
+      ? body.ids_aprobaciones.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)
+      : [];
+    if (!ids.length) return jsonError('ids_aprobaciones requerido', 400);
+
+    const { data: aprobs, error: eAp } = await sb()
+      .from('profecias_aprobaciones')
+      .select('*')
+      .in('id', ids)
+      .eq('estado', 'aprobado');
+    if (eAp) throw eAp;
+    if (!aprobs.length) return jsonError('No se encontraron aprobaciones activas con esos IDs', 400);
+
+    if (proveedor) {
+      const ajeno = aprobs.find((a) => (a.proveedor || '').trim().toUpperCase() !== proveedor.toUpperCase());
+      if (ajeno) return jsonError(`La aprobación ${ajeno.id} pertenece a otro proveedor (${ajeno.proveedor})`, 400);
+    }
+    const provDef = proveedor || aprobs[0].proveedor || 'SIN PROVEEDOR';
+
+    // Traer items para tener nombre actual
+    const codigos = [...new Set(aprobs.map((a) => a.codigo_interno))];
+    const { data: panelRows } = await sb()
+      .from('profecias_panel')
+      .select('codigo_interno, item')
+      .in('codigo_interno', codigos);
+    const panelMap = new Map((panelRows || []).map((p) => [p.codigo_interno, p]));
 
     const ahora = new Date().toISOString();
-    const nombreLote = body.nombre_lote || `Profecías · ${proveedor || 'mixto'} · ${ahora.slice(0, 10)}`;
-    const diasTribucion = parseInt(body.dias_tribucion) || null;
+    const nombreLote = body.nombre_lote || `Profecías · ${provDef} · ${ahora.slice(0, 10)}`;
+    const diasTribucion = body.dias_tribucion != null ? parseInt(body.dias_tribucion) : null;
 
-    const { data: orden, error: e1 } = await sb()
+    // 1) Crear orden_compra
+    const { data: orden, error: eOrd } = await sb()
       .from('ordenes_compra')
       .insert({
         fecha_orden: ahora,
         nombre_lote: nombreLote,
         dias_tribucion: diasTribucion,
-        total_productos: items.length,
+        total_productos: aprobs.length,
         creado_en: ahora,
       })
       .select()
       .single();
-    if (e1) throw e1;
+    if (eOrd) throw eOrd;
 
-    const codigos = items.map((i) => String(i.codigo).trim());
-    const { data: panelRows } = await sb()
-      .from('profecias_panel')
-      .select('codigo_interno, item, ultimo_proveedor, madurez, velocidad_90d, velocidad_30d, existencias, cantidad_sugerida, ultimo_costo, clasificacion_manual')
-      .in('codigo_interno', codigos);
-    const panelMap = new Map((panelRows || []).map((p) => [p.codigo_interno, p]));
+    // 2) Crear ordenes_compra_items
+    const itemsRows = aprobs.map((a) => ({
+      orden_id: orden.id,
+      codigo: a.codigo_interno,
+      nombre: panelMap.get(a.codigo_interno)?.item || '',
+      proveedor: a.proveedor || provDef,
+      cantidad_ordenada: Number(a.cantidad_aprobada) || 0,
+      costo_unitario: Number(a.costo_unitario_estimado) || 0,
+      descuento: 0,
+      dias_tribucion: diasTribucion,
+      cantidad_recibida: 0,
+      estado_item: 'pendiente',
+      creado_en: ahora,
+    }));
+    const { error: eItems } = await sb().from('ordenes_compra_items').insert(itemsRows);
+    if (eItems) {
+      // Rollback manual: borrar la orden recién creada
+      await sb().from('ordenes_compra').delete().eq('id', orden.id);
+      throw eItems;
+    }
 
-    const itemsRows = items.map((i) => {
-      const p = panelMap.get(String(i.codigo).trim()) || {};
-      return {
-        orden_id: orden.id,
-        codigo: String(i.codigo).trim(),
-        nombre: i.nombre || p.item || '',
-        proveedor: i.proveedor || p.ultimo_proveedor || proveedor || '',
-        cantidad_ordenada: parseFloat(i.cantidad) || 0,
-        costo_unitario: parseFloat(i.costo_unitario || p.ultimo_costo || 0) || 0,
-        descuento: parseFloat(i.descuento) || 0,
-        dias_tribucion: diasTribucion,
-        cantidad_recibida: 0,
-        estado_item: 'pendiente',
-        creado_en: ahora,
-      };
-    });
-    const { error: e2 } = await sb().from('ordenes_compra_items').insert(itemsRows);
-    if (e2) throw e2;
-
-    const decisionRows = items.map((i) => {
-      const p = panelMap.get(String(i.codigo).trim()) || {};
-      const cant = parseFloat(i.cantidad) || 0;
-      const costo = parseFloat(i.costo_unitario || p.ultimo_costo || 0) || 0;
-      return {
-        codigo_interno: String(i.codigo).trim(),
-        fecha_decision: ahora.slice(0, 10),
-        proveedor: i.proveedor || p.ultimo_proveedor || proveedor || null,
-        madurez_al_momento: p.madurez || null,
-        velocidad_observada: p.velocidad_90d ?? p.velocidad_30d ?? null,
-        existencias_al_momento: p.existencias ?? null,
-        cantidad_sugerida: p.cantidad_sugerida ?? null,
-        cantidad_firmada: cant,
-        costo_unitario_estimado: costo,
-        inversion_estimada: cant * costo,
-        clasificacion_manual_al_momento: p.clasificacion_manual || 'normal',
-        notas: i.notas || null,
+    // 3) Marcar aprobaciones como en_orden
+    const { error: eUpd } = await sb()
+      .from('profecias_aprobaciones')
+      .update({
+        estado: 'en_orden',
         orden_compra_id: orden.id,
-      };
-    });
-    await sb().from('profecias_historial_decisiones').insert(decisionRows);
+        fecha_envio_orden: ahora,
+      })
+      .in('id', aprobs.map((a) => a.id));
+    if (eUpd) {
+      await sb().from('ordenes_compra_items').delete().eq('orden_id', orden.id);
+      await sb().from('ordenes_compra').delete().eq('id', orden.id);
+      throw eUpd;
+    }
 
-    return Response.json({ ok: true, orden_id: orden.id, total: items.length });
+    sb().rpc('refresh_profecias_panel').then(() => {}, () => {});
+
+    const inversion_total = aprobs.reduce((s, a) => s + (Number(a.inversion_estimada) || 0), 0);
+    return Response.json({
+      ok: true,
+      orden_id: orden.id,
+      nombre_lote: nombreLote,
+      num_items: aprobs.length,
+      inversion_total,
+    });
   } catch (e) {
     return jsonError(e.message);
   }

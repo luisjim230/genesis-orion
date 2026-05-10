@@ -166,7 +166,9 @@ function ProfeciasInner() {
         ))}
       </div>
 
-      <FiltrosToolbar filas={filas} filtros={filtros} setFiltros={setFiltros} modo={tabActivo === 'compra' ? 'compra' : 'ventas'} />
+      {tabActivo !== 'proveedor' && (
+        <FiltrosToolbar filas={filas} filtros={filtros} setFiltros={setFiltros} modo={tabActivo === 'compra' ? 'compra' : 'ventas'} />
+      )}
 
       {cargando && <div style={{ padding: 40, textAlign: 'center', color: '#718096' }}>Cargando profecías…</div>}
       {error && <div style={{ padding: 16, background: '#FED7D7', color: '#822727', borderRadius: 6 }}>Error: {error}</div>}
@@ -175,7 +177,7 @@ function ProfeciasInner() {
         <>
           {tabActivo === 'ventas' && <ProyeccionVentasTab filas={filasFiltradas} onSeleccionar={setSkuActivo} />}
           {tabActivo === 'compra' && <NecesidadCompraTab filas={filasFiltradas} onSeleccionar={setSkuActivo} onAprobado={cargar} />}
-          {tabActivo === 'proveedor' && <PlanProveedorTab filas={filasFiltradas} onSeleccionar={setSkuActivo} />}
+          {tabActivo === 'proveedor' && <PlanProveedorTab onSeleccionar={setSkuActivo} onCambio={cargar} />}
         </>
       )}
 
