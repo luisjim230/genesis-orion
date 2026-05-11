@@ -154,7 +154,7 @@ async function descargarLead(page, lead) {
     console.log(`LIMITE_PRUEBA activo: solo ${config.LIMITE_PRUEBA} leads esta corrida.`);
   }
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     storageState: config.SESION_FILE,
     viewport: { width: 1400, height: 900 },
