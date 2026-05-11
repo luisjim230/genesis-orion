@@ -318,11 +318,19 @@ function NotaBadge({ nota, size = 'md' }) {
   );
 }
 
-function ProgressBar({ value, max = 100, color = C.gold, height = 6 }) {
-  const pctVal = Math.min(100, Math.round((value / Math.max(max, 1)) * 100));
+function ProgressBar({ value, max = 100, color = C.gold, height = 6, overColor = C.green }) {
+  // El 100% de la meta queda a 70% del ancho del bar, dejando 30% de espacio
+  // para que se vea visualmente cuánto superó la meta (hasta ~143%).
+  const ratio = value / Math.max(max, 1);
+  const isOver = ratio > 1;
+  const widthPct = isOver
+    ? Math.min(100, 70 + Math.round((ratio - 1) * 70))
+    : Math.round(ratio * 70);
+  const finalColor = isOver ? overColor : color;
   return (
-    <div style={{ background: 'rgba(200,168,75,0.12)', borderRadius: height, height, width: '100%', overflow: 'hidden' }}>
-      <div style={{ background: color, borderRadius: height, height, width: pctVal + '%', transition: 'width .4s ease' }} />
+    <div style={{ background: 'rgba(200,168,75,0.12)', borderRadius: height, height, width: '100%', overflow: 'hidden', position: 'relative' }}>
+      <div style={{ background: finalColor, borderRadius: height, height, width: widthPct + '%', transition: 'width .4s ease' }} />
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: '70%', width: 1, background: 'rgba(0,0,0,0.3)' }} />
     </div>
   );
 }
@@ -369,7 +377,7 @@ function KpiDetailPanel({ kpis }) {
           <div style={{ fontSize: '1.05rem', fontWeight: 700, color: it.accent || C.text }}>{it.value}</div>
           {it.bar !== undefined && (
             <div style={{ marginTop: 6 }}>
-              <ProgressBar value={Math.min(it.bar, 1) * 100} color={it.accent || C.gold} height={4} />
+              <ProgressBar value={it.bar * 100} color={it.accent || C.gold} height={4} />
             </div>
           )}
         </div>
@@ -396,6 +404,7 @@ export default function ComercialV2() {
   const [metasData, setMetasData] = useState({});
   const [informeVentasNetas, setInformeVentasNetas] = useState(null);
   const [informeData, setInformeData] = useState([]);
+  const [vendedoresActivos, setVendedoresActivos] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [statusReportes, setStatusReportes] = useState(null);
   const [sortCol, setSortCol] = useState(null);
@@ -407,6 +416,9 @@ export default function ComercialV2() {
   const [formData, setFormData] = useState({});
   const [formSaving, setFormSaving] = useState(false);
   const [formMsg, setFormMsg] = useState('');
+  const [formVendedoresActivos, setFormVendedoresActivos] = useState('');
+  const [vendedoresActivosSaving, setVendedoresActivosSaving] = useState(false);
+  const [vendedoresActivosMsg, setVendedoresActivosMsg] = useState('');
 
   // Historial states (tab 3)
   const [historialData, setHistorialData] = useState([]);
@@ -476,6 +488,14 @@ export default function ComercialV2() {
       const totalInforme = (informeRows || []).reduce((s, r) => s + N(r.ventas_netas), 0);
       setInformeVentasNetas(totalInforme > 0 ? totalInforme : null);
       setInformeData(informeRows || []);
+
+      // Config mensual: cantidad de vendedores activos que toman llamadas
+      const { data: configMensual } = await supabase
+        .from('comercial_config_mensual')
+        .select('vendedores_activos')
+        .eq('mes', mes)
+        .maybeSingle();
+      setVendedoresActivos(configMensual?.vendedores_activos ?? null);
 
       // Status de reportes (para alertas de datos incompletos)
       const { data: stRows } = await supabase.rpc('comercial_status_reportes', { p_mes: mes });
@@ -549,6 +569,43 @@ export default function ComercialV2() {
   useEffect(() => {
     if (tab === 'datos') loadFormData();
   }, [tab, formVendedor, formMes, loadFormData]);
+
+  // Load vendedores_activos config for selected month
+  useEffect(() => {
+    if (tab !== 'datos' || !formMes) return;
+    (async () => {
+      const { data } = await supabase
+        .from('comercial_config_mensual')
+        .select('vendedores_activos')
+        .eq('mes', formMes)
+        .maybeSingle();
+      setFormVendedoresActivos(data?.vendedores_activos ?? '');
+      setVendedoresActivosMsg('');
+    })();
+  }, [tab, formMes]);
+
+  const saveVendedoresActivos = async () => {
+    if (!formMes) return;
+    setVendedoresActivosSaving(true);
+    setVendedoresActivosMsg('');
+    try {
+      const val = N(formVendedoresActivos);
+      const payload = {
+        mes: formMes,
+        vendedores_activos: val > 0 ? Math.round(val) : null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase
+        .from('comercial_config_mensual')
+        .upsert(payload, { onConflict: 'mes' });
+      if (error) throw error;
+      setVendedoresActivosMsg('Guardado');
+      if (mes === formMes) setVendedoresActivos(payload.vendedores_activos);
+    } catch (e) {
+      setVendedoresActivosMsg('Error: ' + e.message);
+    }
+    setVendedoresActivosSaving(false);
+  };
 
   // ── Load historial (tab 3) ─────────────────────────────────────────────────
   const loadHistorial = useCallback(async () => {
@@ -689,11 +746,12 @@ export default function ComercialV2() {
         }))
       : ventasData;
 
+    const numVendedoresCalc = vendedoresActivos && vendedoresActivos > 0 ? vendedoresActivos : baseData.length;
     const rows = baseData.map(v => {
       const manual = manualesData[v.vendedor] || {};
       const mb = metasData[v.vendedor] || 0;
       const ncMonto = N(v.nc_monto);
-      const kpis = calcAllKpis(v, manual, mb, baseData.length, ncMonto);
+      const kpis = calcAllKpis(v, manual, mb, numVendedoresCalc, ncMonto);
       return { vendedor: v.vendedor, kpis, nc_monto: ncMonto, nc_facturas: N(v.nc_facturas) };
     });
     // Sorting
@@ -719,7 +777,7 @@ export default function ComercialV2() {
       return dir * ((va || 0) - (vb || 0));
     });
     return rows;
-  }, [ventasData, informeData, manualesData, metasData, sortCol, sortDir]);
+  }, [ventasData, informeData, manualesData, metasData, vendedoresActivos, sortCol, sortDir]);
 
   // Date range from actual data
   const dataRange = useMemo(() => {
@@ -1068,6 +1126,46 @@ export default function ComercialV2() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Config global del mes: vendedores activos que toman llamadas */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 12,
+            padding: '12px 14px',
+            background: 'rgba(200,168,75,0.06)',
+            border: `1px dashed ${C.gold}`,
+            borderRadius: 10,
+            marginBottom: 24,
+          }}>
+            <div style={{ flex: '0 0 240px' }}>
+              <label style={S.label}>Vendedores activos del mes (global)</label>
+              <input
+                type="number"
+                style={S.input}
+                value={formVendedoresActivos}
+                onChange={e => setFormVendedoresActivos(e.target.value)}
+                placeholder="Ej: 10"
+              />
+            </div>
+            <button
+              style={S.btnPrimary}
+              onClick={saveVendedoresActivos}
+              disabled={vendedoresActivosSaving}
+            >
+              {vendedoresActivosSaving ? 'Guardando...' : 'Guardar'}
+            </button>
+            {vendedoresActivosMsg && (
+              <span style={{
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: vendedoresActivosMsg.startsWith('Error') ? C.red : C.green,
+              }}>{vendedoresActivosMsg}</span>
+            )}
+            <span style={{ fontSize: '0.75rem', color: C.muted, marginLeft: 'auto' }}>
+              Se usa como divisor en &quot;Participación Esperada&quot;.
+            </span>
           </div>
 
           {formVendedor && (
