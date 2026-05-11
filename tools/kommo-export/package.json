@@ -1,0 +1,10 @@
+{
+  "name": "kommo-export",
+  "version": "2.0.0",
+  "description": "Descarga conversaciones de WhatsApp de Kommo para entrenar el agente IA.",
+  "main": "1-login.js",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
