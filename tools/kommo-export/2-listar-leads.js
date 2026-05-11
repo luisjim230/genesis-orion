@@ -142,7 +142,7 @@ async function capturarLeadIds(page) {
   }
   const yaConocidos = new Set(pendientes.map((l) => String(l.lead_id)));
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     storageState: config.SESION_FILE,
     viewport: { width: 1400, height: 900 },
