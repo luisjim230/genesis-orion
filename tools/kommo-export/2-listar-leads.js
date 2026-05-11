@@ -1,191 +1,152 @@
-// Paso 2 — listar TODOS los leads con actividad de WhatsApp en el rango configurado.
+// Paso 2 — listar leads con teléfono usando la API privada de Kommo.
 // Uso: node 2-listar-leads.js
 //
-// Itera mes por mes desde DESDE_FECHA hasta HASTA_FECHA, aplica el filtro
-// del inbox por fuente WhatsApp (WABA + Wazzup), scrollea hasta el fondo
-// y captura todos los lead_ids visibles. Genera leads-pendientes.json.
+// Estrategia (basada en lo que funcionaba antes):
+//   1. Paginá /api/v4/contacts?with=leads — devuelve TODOS los contactos
+//      con sus campos custom (incluyendo PHONE) y a qué leads están vinculados.
+//   2. Quedate solo con los que tienen teléfono = potenciales clientes de WhatsApp.
+//   3. Filtrá por la fecha de creación del lead (rango del config).
+//   4. Volcá la lista única a leads-pendientes.json.
 //
-// Si ya existe leads-pendientes.json, lo respeta y NO sobrescribe IDs
-// previamente capturados — solo agrega los nuevos.
+// La API responde con cookies de sesión, así que no necesitamos token.
 
-const { chromium } = require('playwright');
+const { request } = require('playwright');
 const fs = require('fs');
-const path = require('path');
 const config = require('./config');
 
-function mesesEnRango(desde, hasta) {
-  const out = [];
-  const [yD, mD] = desde.split('-').map(Number);
-  const [yH, mH] = hasta.split('-').map(Number);
-  let y = yD, m = mD;
-  while (y < yH || (y === yH && m <= mH)) {
-    const desdeM = `${y}-${String(m).padStart(2, '0')}-01`;
-    const ultimoDia = new Date(y, m, 0).getDate();
-    const hastaM = `${y}-${String(m).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-    out.push({ etiqueta: `${y}-${String(m).padStart(2, '0')}`, desde: desdeM, hasta: hastaM });
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  // Recortar el primer y último mes a las fechas reales del config.
-  if (out.length) {
-    if (out[0].desde < desde) out[0].desde = desde;
-    if (out[out.length - 1].hasta > hasta) out[out.length - 1].hasta = hasta;
-  }
-  return out;
-}
+const BASE_URL = config.KOMMO_URL.replace(/\/$/, '');
 
-async function aplicarFiltroFecha(page, desde, hasta) {
-  // Abre filtros si están cerrados.
-  await page.locator('#inbox_messaging_aside #search-options').click().catch(() => {});
-  await page.waitForTimeout(500);
-
-  // Click en el campo de fecha.
-  await page.getByText('Selecciona una fecha').first().click({ timeout: 5000 }).catch(async () => {
-    // Si ya hay una fecha seteada, abrir el calendario por el ícono.
-    await page.locator('.date_field_wrapper--calendar > .svg-card-calendar-dims').first().click().catch(() => {});
-  });
-  await page.waitForTimeout(500);
-
-  // Setear fechas en los inputs del datepicker (Kommo acepta YYYY-MM-DD).
-  // Buscamos los dos inputs de fecha visibles.
-  const inputs = await page.locator('input[type="text"][placeholder*="-"], input.date_field_wrapper--input').all();
-  if (inputs.length >= 2) {
-    await inputs[0].fill('');
-    await inputs[0].type(desde, { delay: 30 });
-    await inputs[1].fill('');
-    await inputs[1].type(hasta, { delay: 30 });
-    await page.keyboard.press('Tab');
-  } else {
-    console.log(`  ⚠ No se encontraron inputs de fecha. Setear manualmente ${desde} → ${hasta}.`);
-  }
-  await page.waitForTimeout(500);
-
-  await page.getByRole('button', { name: 'Hecho' }).click().catch(() => {});
-  await page.waitForTimeout(500);
-}
-
-async function aplicarFiltroFuentes(page) {
-  // Asegurar fuentes: WABA + Wazzup.
-  await page.locator('#inbox_messaging_aside #search-options').click().catch(() => {});
-  await page.waitForTimeout(500);
-  await page.getByText('Fuentes del chat').click({ timeout: 3000 }).catch(() => {});
-  await page.waitForTimeout(300);
-
-  for (const fuente of ['[WABA]', 'Wazzup (WhatsApp & Instagram)']) {
-    const cb = page.getByRole('checkbox', { name: fuente });
-    const visible = await cb.isVisible().catch(() => false);
-    if (visible) {
-      const checked = await cb.isChecked().catch(() => false);
-      if (!checked) await cb.check().catch(() => {});
-    }
-  }
-  await page.waitForTimeout(300);
-}
-
-async function aplicar(page) {
-  await page.getByRole('button', { name: 'Aplicar' }).click().catch(() => {});
-  await page.waitForTimeout(2000);
-}
-
-async function scrollearHastaElFinal(page) {
-  const lista = page.locator('.inbox-list, #inbox_messaging .feed-wrapper, .feed-compose').first();
-  let alturaPrevia = 0;
-  let iguales = 0;
-  for (let i = 0; i < 200; i++) {
-    const altura = await page.evaluate(() => {
-      const cont = document.querySelector('.feed-compose, .inbox-list, .js-inbox-feed-wrapper');
-      return cont ? cont.scrollHeight : 0;
-    });
-    if (altura === alturaPrevia) {
-      iguales++;
-      if (iguales >= 3) break;
-    } else {
-      iguales = 0;
-    }
-    alturaPrevia = altura;
-    await page.evaluate(() => {
-      const cont = document.querySelector('.feed-compose, .inbox-list, .js-inbox-feed-wrapper') || document.scrollingElement;
-      cont.scrollTop = cont.scrollHeight;
-    });
-    await page.waitForTimeout(config.ESPERA_SCROLL_MS);
-  }
-}
-
-async function capturarLeadIds(page) {
-  return await page.evaluate(() => {
-    const ids = new Set();
-    document.querySelectorAll('a[href*="/leads/detail/"]').forEach((a) => {
-      const m = a.getAttribute('href').match(/\/leads\/detail\/(\d+)/);
-      if (m) ids.add(m[1]);
-    });
-    return Array.from(ids);
-  });
+function unix(fecha) {
+  return Math.floor(new Date(fecha + 'T00:00:00').getTime() / 1000);
 }
 
 (async () => {
   if (!fs.existsSync(config.SESION_FILE)) {
-    console.error(`✗ No existe ${config.SESION_FILE}. Corré antes: node 1-login.js`);
+    console.error(`✗ Falta ${config.SESION_FILE}. Corré: node 1-login.js`);
     process.exit(1);
   }
 
-  console.log(`Rango: ${config.DESDE_FECHA} → ${config.HASTA_FECHA}`);
-  const meses = mesesEnRango(config.DESDE_FECHA, config.HASTA_FECHA);
-  console.log(`Voy a recorrer ${meses.length} meses, uno por uno.`);
+  const desdeUnix = unix(config.DESDE_FECHA);
+  const hastaUnix = unix(config.HASTA_FECHA) + 24 * 3600;
 
-  // Cargar leads ya conocidos (si veníamos de una corrida previa).
-  let pendientes = [];
+  console.log(`Rango lead.created_at: ${config.DESDE_FECHA} → ${config.HASTA_FECHA}`);
+
+  const api = await request.newContext({
+    storageState: config.SESION_FILE,
+    baseURL: BASE_URL,
+    extraHTTPHeaders: {
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+  });
+
+  // Cargar lo previo si reanudamos.
+  let leads = [];
+  const yaConocidos = new Set();
   if (fs.existsSync(config.LEADS_FILE)) {
     try {
-      pendientes = JSON.parse(fs.readFileSync(config.LEADS_FILE, 'utf8'));
-      console.log(`Ya tenía ${pendientes.length} leads en ${config.LEADS_FILE}, los conservo.`);
+      leads = JSON.parse(fs.readFileSync(config.LEADS_FILE, 'utf8'));
+      leads.forEach((l) => yaConocidos.add(String(l.lead_id)));
+      console.log(`Ya había ${leads.length} leads en ${config.LEADS_FILE}, los conservo.`);
     } catch {}
   }
-  const yaConocidos = new Set(pendientes.map((l) => String(l.lead_id)));
 
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    storageState: config.SESION_FILE,
-    viewport: { width: 1400, height: 900 },
-  });
-  const page = await context.newPage();
+  console.log('\nPaginando /api/v4/contacts (con teléfono y leads vinculados)...');
+  let pagina = 1;
+  let contactosVistos = 0;
+  let conTelefono = 0;
+  let leadsNuevos = 0;
 
-  console.log(`Yendo al inbox...`);
-  await page.goto(`${config.KOMMO_URL}inbox/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
-
-  await aplicarFiltroFuentes(page);
-
-  for (const mes of meses) {
-    console.log(`\n── ${mes.etiqueta} (${mes.desde} → ${mes.hasta})`);
+  while (true) {
+    const url = `/api/v4/contacts?limit=250&page=${pagina}&with=leads`;
+    let resp;
     try {
-      await aplicarFiltroFecha(page, mes.desde, mes.hasta);
-      await aplicar(page);
-      await page.waitForTimeout(2000);
-
-      console.log('  scrolleando hasta el final del inbox...');
-      await scrollearHastaElFinal(page);
-
-      const ids = await capturarLeadIds(page);
-      let nuevos = 0;
-      for (const id of ids) {
-        if (!yaConocidos.has(id)) {
-          pendientes.push({ lead_id: Number(id), mes_actividad: mes.etiqueta });
-          yaConocidos.add(id);
-          nuevos++;
-        }
-      }
-      console.log(`  visibles: ${ids.length} · nuevos: ${nuevos} · total acumulado: ${pendientes.length}`);
-
-      // Guardar después de cada mes.
-      fs.writeFileSync(config.LEADS_FILE, JSON.stringify(pendientes, null, 2));
+      resp = await api.get(url);
     } catch (err) {
-      console.error(`  ✗ Error en ${mes.etiqueta}:`, err.message);
-      await page.screenshot({ path: `error-${mes.etiqueta}.png` }).catch(() => {});
+      console.error(`  ✗ Error red página ${pagina}: ${err.message}`);
+      await new Promise((r) => setTimeout(r, 3000));
+      continue;
     }
+
+    const status = resp.status();
+    if (status === 204) break;
+    if (status === 401 || status === 403) {
+      console.error(`  ✗ Sesión expirada (HTTP ${status}). Corré: node 1-login.js`);
+      break;
+    }
+    if (status !== 200) {
+      const body = await resp.text();
+      console.error(`  ✗ HTTP ${status} en página ${pagina}: ${body.slice(0, 200)}`);
+      break;
+    }
+
+    const data = await resp.json();
+    const contactos = data._embedded?.contacts || [];
+    if (contactos.length === 0) break;
+
+    for (const c of contactos) {
+      contactosVistos++;
+      const phone = (c.custom_fields_values || []).find((f) => f.field_code === 'PHONE');
+      if (!phone?.values?.[0]?.value) continue;
+      conTelefono++;
+
+      const telefono = String(phone.values[0].value).replace(/\s/g, '');
+      const leadsVinc = c._embedded?.leads || [];
+      for (const lv of leadsVinc) {
+        if (yaConocidos.has(String(lv.id))) continue;
+        // No tenemos created_at acá; lo filtramos cuando hagamos el matcheo
+        // contra la API de leads. Por ahora aceptamos.
+        leads.push({
+          lead_id: lv.id,
+          contact_id: c.id,
+          contact_name: c.name || '',
+          telefono,
+        });
+        yaConocidos.add(String(lv.id));
+        leadsNuevos++;
+      }
+    }
+
+    if (pagina % 10 === 0) {
+      console.log(`  página ${pagina} · contactos ${contactosVistos} · con tel ${conTelefono} · leads únicos ${leads.length}`);
+      fs.writeFileSync(config.LEADS_FILE, JSON.stringify(leads, null, 2));
+    }
+
+    if (!data._links?.next) break;
+    pagina++;
+    await new Promise((r) => setTimeout(r, 150));
   }
 
-  console.log(`\n✓ Total final: ${pendientes.length} leads únicos en ${config.LEADS_FILE}`);
-  console.log('Ahora corré: node 3-descargar.js');
+  console.log(`\nContactos revisados: ${contactosVistos}`);
+  console.log(`Con teléfono: ${conTelefono}`);
+  console.log(`Leads candidatos (potencial WhatsApp): ${leads.length}`);
 
-  await browser.close();
+  // Ahora filtramos por created_at del lead en el rango.
+  console.log('\nFiltrando por fecha de creación del lead...');
+  const idsBatch = [];
+  for (const l of leads) idsBatch.push(l.lead_id);
+  const dentroRango = new Map();
+  for (let i = 0; i < idsBatch.length; i += 250) {
+    const slice = idsBatch.slice(i, i + 250);
+    const qs = slice.map((id) => `filter[id][]=${id}`).join('&');
+    const url = `/api/v4/leads?limit=250&${qs}&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
+    const resp = await api.get(url);
+    if (resp.status() === 200) {
+      const d = await resp.json();
+      for (const lead of d._embedded?.leads || []) {
+        dentroRango.set(lead.id, { created_at: lead.created_at, name: lead.name });
+      }
+    }
+    if (i % 2500 === 0) console.log(`  ${i + slice.length}/${idsBatch.length}`);
+    await new Promise((r) => setTimeout(r, 120));
+  }
+
+  const filtrados = leads.filter((l) => dentroRango.has(l.lead_id))
+    .map((l) => ({ ...l, ...dentroRango.get(l.lead_id) }));
+
+  fs.writeFileSync(config.LEADS_FILE, JSON.stringify(filtrados, null, 2));
+  console.log(`\n✓ ${filtrados.length} leads dentro del rango guardados en ${config.LEADS_FILE}`);
+  console.log('Siguiente: node 3-descargar.js');
+
+  await api.dispose();
 })();
