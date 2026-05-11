@@ -1,128 +1,137 @@
-// Paso 3 — descargar cada lead listado en leads-pendientes.json.
+// Paso 3 — descargar la conversación de cada lead con Playwright.
 // Uso: node 3-descargar.js
+//
+// Selectores reales detectados en Kommo (de la inspección que hicimos):
+//   .notes-wrapper__scroller       → contenedor del chat (scroll)
+//   .notes-wrapper__load-more      → botón "cargar más" (historia vieja)
+//   .feed-note                     → cada mensaje/evento
+//   .feed-note__author / .feed-note__user-name → quién lo mandó
+//   .feed-note__text               → texto del mensaje
+//   .drive-field__download-btn     → botón descargar archivo
 //
 // Por cada lead:
 //   1. Navega a /leads/detail/{id}
-//   2. Espera que cargue el chat
-//   3. Scrollea hacia arriba para cargar mensajes históricos
-//   4. Extrae mensajes a JSON y HTML
-//   5. Guarda en export/AAAA-MM/lead_{id}/
+//   2. Espera .feed-note
+//   3. Sube scroll y clickea "cargar más" hasta agotar
+//   4. Extrae cada nota a JSON
+//   5. Guarda export/AAAA-MM/lead_{id}/conversacion.{json,html}
 //
-// Es idempotente: si el lead ya tiene conversacion.json, lo saltea.
+// Idempotente: saltea leads ya descargados.
 
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
+const BASE_URL = config.KOMMO_URL.replace(/\/$/, '');
+
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
-function detectarMesActividad(mensajes, fallback) {
-  // Si los mensajes traen fecha embebida tipo "DD/MM/YYYY", usar la más reciente.
-  let ultima = null;
-  for (const m of mensajes) {
-    const match = (m.content || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (match) {
-      const [, dd, mm, yyyy] = match;
-      const fecha = `${yyyy}-${mm}`;
-      if (!ultima || fecha > ultima) ultima = fecha;
-    }
-  }
-  return ultima || fallback;
+function mesDeUnix(unix) {
+  if (!unix) return 'sin-mes';
+  const d = new Date(unix * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-async function scrollearChatHaciaArriba(page) {
-  const sel = '.feed-compose-section, .feed-compose, .js-feed-compose, .feed';
-  let alturaPrevia = -1;
-  let iguales = 0;
+async function cargarTodaLaHistoria(page) {
+  // Subir scroll y clickear "Cargar más" repetidamente.
   for (let i = 0; i < 100; i++) {
-    const top = await page.evaluate((s) => {
-      const cont = document.querySelector(s);
-      if (!cont) return null;
-      cont.scrollTop = 0;
-      return cont.scrollHeight;
-    }, sel);
-    if (top === null) break;
-    if (top === alturaPrevia) {
-      iguales++;
-      if (iguales >= 3) break;
-    } else {
-      iguales = 0;
+    const loadMore = page.locator('.notes-wrapper__load-more-button, .js-feed-load-more').first();
+    const visible = await loadMore.isVisible().catch(() => false);
+    if (!visible) {
+      // Intentar con scroll hacia arriba.
+      await page.evaluate(() => {
+        const s = document.querySelector('.notes-wrapper__scroller');
+        if (s) s.scrollTop = 0;
+      });
+      await page.waitForTimeout(config.ESPERA_SCROLL_MS);
+      const visible2 = await loadMore.isVisible().catch(() => false);
+      if (!visible2) break;
     }
-    alturaPrevia = top;
+    await loadMore.click({ timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(config.ESPERA_SCROLL_MS);
   }
 }
 
-async function extraerMensajes(page) {
-  // Heurística: cada nota del feed con clase tipo .feed-note-wrapper o similar
-  // tiene un autor (vendedor o cliente) y un texto. Capturamos lo posible.
+async function extraerNotas(page) {
   return await page.evaluate(() => {
     const out = [];
-    const nodos = document.querySelectorAll(
-      '.feed-compose-message, .feed-note-text, .feed-note, .feed-compose-section li, .chat-message, [data-id]'
-    );
-    nodos.forEach((n) => {
-      const texto = (n.innerText || '').trim();
-      if (!texto || texto.length < 1) return;
-      // Detectar si es "entrante" (cliente) o "saliente" (vendedor) por clase.
-      const cls = n.className || '';
-      const esCliente = /incoming|in-message|client|user/i.test(cls);
-      const esVendedor = /outgoing|out-message|manager|seller/i.test(cls);
-      let role = 'unknown';
-      if (esCliente) role = 'user';
-      else if (esVendedor) role = 'assistant';
-      // Vendedor: buscar nombre cercano.
+    document.querySelectorAll('.feed-note').forEach((nota) => {
+      const cls = nota.className || '';
+      // Detectar si es entrante (cliente) o saliente (vendedor).
+      const esEntrante = /incoming|in-message|chat_message_received|note_chat_in/i.test(cls);
+      const esSaliente = /outgoing|out-message|chat_message_sent|note_chat_out/i.test(cls);
+
+      // Heurística adicional: si tiene .feed-note__author como el equipo.
       let vendedor = null;
-      const autor = n.querySelector('.feed-compose-message__author, .feed-note-author, .user-name');
-      if (autor) vendedor = autor.innerText.trim();
-      out.push({ role, content: texto, vendedor });
+      const aut = nota.querySelector('.feed-note__author, .feed-note__user-name, .feed-note__title');
+      if (aut) vendedor = (aut.innerText || '').trim() || null;
+
+      const textoEl = nota.querySelector('.feed-note__body, .feed-note__text, .feed-note__content');
+      const texto = (textoEl?.innerText || nota.innerText || '').trim();
+      if (!texto) return;
+
+      // Capturar timestamp si está visible.
+      let ts = null;
+      const tsEl = nota.querySelector('.feed-note__time, .feed-note__date');
+      if (tsEl) ts = tsEl.innerText.trim();
+
+      let role = 'unknown';
+      if (esEntrante) role = 'user';
+      else if (esSaliente) role = 'assistant';
+
+      // Detectar adjuntos.
+      const tieneAdjunto = !!nota.querySelector(
+        '.drive-field__download-btn, .feed-note-attach, .feed-note__file'
+      );
+
+      out.push({ role, content: texto, vendedor, ts, tiene_adjunto: tieneAdjunto });
     });
     return out;
   });
 }
 
 async function descargarLead(page, lead) {
-  const mesFallback = lead.mes_actividad || 'sin-mes';
-  const tmpDir = path.join(config.EXPORT_DIR, '_tmp', `lead_${lead.lead_id}`);
-  ensureDir(tmpDir);
+  const mesObjetivo = mesDeUnix(lead.created_at);
+  const destino = path.join(config.EXPORT_DIR, mesObjetivo, `lead_${lead.lead_id}`);
+  ensureDir(destino);
 
-  await page.goto(`${config.KOMMO_URL}leads/detail/${lead.lead_id}`, {
+  await page.goto(`${BASE_URL}/leads/detail/${lead.lead_id}`, {
     waitUntil: 'domcontentloaded',
     timeout: 60000,
   });
-  await page.waitForTimeout(2000);
 
-  // Esperar a que aparezca el feed.
-  await page.waitForSelector('.feed, .feed-compose, .card-feed', { timeout: 30000 }).catch(() => {});
-  await scrollearChatHaciaArriba(page);
+  // Esperar que cargue el feed.
+  await page.waitForSelector('.feed-note, .notes-wrapper__scroller', { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(2500);
 
-  const mensajes = await extraerMensajes(page);
+  await cargarTodaLaHistoria(page);
+  await page.waitForTimeout(500);
+
+  const mensajes = await extraerNotas(page);
   const html = await page.content();
-
-  const mesReal = detectarMesActividad(mensajes, mesFallback);
-  const destino = path.join(config.EXPORT_DIR, mesReal, `lead_${lead.lead_id}`);
-  ensureDir(destino);
-
-  // Capturar nombre del contacto y teléfono si están visibles.
-  const meta = await page.evaluate(() => {
-    const nombre = document.querySelector('.card-contact-name, .contact-name, .lead-name');
-    const tel = document.querySelector('[href^="tel:"]');
-    return {
-      contact_name: nombre ? nombre.innerText.trim() : '',
-      telefono: tel ? tel.getAttribute('href').replace('tel:', '') : '',
-    };
-  });
 
   fs.writeFileSync(
     path.join(destino, 'conversacion.json'),
-    JSON.stringify({ lead_id: lead.lead_id, ...meta, messages: mensajes }, null, 2)
+    JSON.stringify(
+      {
+        lead_id: lead.lead_id,
+        contact_id: lead.contact_id,
+        contact_name: lead.contact_name,
+        telefono: lead.telefono,
+        created_at: lead.created_at,
+        name: lead.name,
+        messages: mensajes,
+      },
+      null,
+      2
+    )
   );
   fs.writeFileSync(path.join(destino, 'conversacion.html'), html);
 
-  return { mes: mesReal, mensajes: mensajes.length };
+  return { mes: mesObjetivo, mensajes: mensajes.length };
 }
 
 (async () => {
@@ -138,20 +147,27 @@ async function descargarLead(page, lead) {
   const leads = JSON.parse(fs.readFileSync(config.LEADS_FILE, 'utf8'));
   ensureDir(config.EXPORT_DIR);
 
-  // Filtrar los que ya están descargados.
-  const restantes = leads.filter((l) => {
-    // Buscar si ya existe la carpeta en cualquier mes.
-    const meses = fs.readdirSync(config.EXPORT_DIR).filter((d) => /^\d{4}-\d{2}$/.test(d));
-    return !meses.some((m) =>
-      fs.existsSync(path.join(config.EXPORT_DIR, m, `lead_${l.lead_id}`, 'conversacion.json'))
-    );
-  });
+  // Cuáles ya están descargados (en cualquier mes).
+  const carpetas = fs
+    .readdirSync(config.EXPORT_DIR)
+    .filter((d) => /^\d{4}-\d{2}$/.test(d));
+  const yaDescargado = new Set();
+  for (const c of carpetas) {
+    for (const l of fs.readdirSync(path.join(config.EXPORT_DIR, c))) {
+      const m = l.match(/^lead_(\d+)$/);
+      if (m && fs.existsSync(path.join(config.EXPORT_DIR, c, l, 'conversacion.json'))) {
+        yaDescargado.add(m[1]);
+      }
+    }
+  }
+  let restantes = leads.filter((l) => !yaDescargado.has(String(l.lead_id)));
 
-  console.log(`Leads totales: ${leads.length}`);
-  console.log(`Pendientes de descargar: ${restantes.length}`);
+  console.log(`Leads en lista:        ${leads.length}`);
+  console.log(`Ya descargados:        ${yaDescargado.size}`);
+  console.log(`Pendientes:            ${restantes.length}`);
   if (config.LIMITE_PRUEBA > 0) {
-    restantes.splice(config.LIMITE_PRUEBA);
-    console.log(`LIMITE_PRUEBA activo: solo ${config.LIMITE_PRUEBA} leads esta corrida.`);
+    restantes = restantes.slice(0, config.LIMITE_PRUEBA);
+    console.log(`LIMITE_PRUEBA activo:  ${config.LIMITE_PRUEBA}`);
   }
 
   const browser = await chromium.launch({ headless: true });
@@ -161,24 +177,31 @@ async function descargarLead(page, lead) {
   });
   const page = await context.newPage();
 
-  let ok = 0, fail = 0;
+  let ok = 0,
+    fail = 0;
+  const t0 = Date.now();
   for (let i = 0; i < restantes.length; i++) {
     const lead = restantes[i];
     const pct = ((i / restantes.length) * 100).toFixed(1);
-    process.stdout.write(`[${i + 1}/${restantes.length} ${pct}%] lead ${lead.lead_id} → `);
+    const eta =
+      i > 0
+        ? Math.round(((Date.now() - t0) / i) * (restantes.length - i) / 60000)
+        : '?';
+    process.stdout.write(
+      `[${i + 1}/${restantes.length} ${pct}% · ETA ${eta}min] lead ${lead.lead_id} → `
+    );
     try {
       const r = await descargarLead(page, lead);
-      process.stdout.write(`${r.mes} · ${r.mensajes} msgs\n`);
+      process.stdout.write(`${r.mes} · ${r.mensajes} notas\n`);
       ok++;
     } catch (err) {
       process.stdout.write(`✗ ${err.message}\n`);
       fail++;
-      await page.screenshot({ path: `error-lead-${lead.lead_id}.png` }).catch(() => {});
     }
     await page.waitForTimeout(config.ESPERA_ENTRE_LEADS_MS);
   }
 
   console.log(`\n✓ OK: ${ok} · ✗ Fallos: ${fail}`);
-  console.log('Ahora corré: node 4-construir-dataset.js');
+  console.log('Siguiente: node 4-construir-dataset.js');
   await browser.close();
 })();
