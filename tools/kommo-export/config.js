@@ -1,17 +1,26 @@
 // Configuración compartida por todos los scripts.
 // Editá las fechas acá si querés cambiar el rango.
 
+const path = require('path');
+const os = require('os');
+
+const DESDE_FECHA = '2025-07-15';
+const HASTA_FECHA = '2026-05-11';
+
 module.exports = {
   KOMMO_URL: 'https://depositojimenez.kommo.com/',
 
   // Desde que arrancaron Kommo (11-jul-2025), bajamos todo el historial.
-  DESDE_FECHA: '2025-07-15',
-  HASTA_FECHA: '2026-05-11',
+  DESDE_FECHA,
+  HASTA_FECHA,
 
   // Archivos/carpetas locales.
   SESION_FILE: './sesion.json',
   LEADS_FILE: './leads-pendientes.json',
   EXPORT_DIR: './export',
+
+  // Carpeta de salida del dataset final (en el Escritorio del usuario).
+  OUTPUT_DIR: path.join(os.homedir(), 'Desktop', `KOMMO ${DESDE_FECHA} a ${HASTA_FECHA}`),
 
   // Throttling. Si Kommo te empieza a tirar errores, subí estos números.
   ESPERA_ENTRE_LEADS_MS: 1500,

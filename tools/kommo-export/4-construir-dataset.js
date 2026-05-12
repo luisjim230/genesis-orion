@@ -51,6 +51,11 @@ function recorrerExport() {
   const convs = recorrerExport();
   console.log(`Encontradas ${convs.length} conversaciones en ${config.EXPORT_DIR}/`);
 
+  const OUT = config.OUTPUT_DIR;
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.mkdirSync(path.join(OUT, 'dataset-por-vendedor'), { recursive: true });
+  console.log(`Carpeta de salida: ${OUT}`);
+
   // dataset-entrenamiento.jsonl
   const lineas = convs.map((c) =>
     JSON.stringify({
@@ -61,11 +66,10 @@ function recorrerExport() {
       messages: c.messages || [],
     })
   );
-  fs.writeFileSync('dataset-entrenamiento.jsonl', lineas.join('\n'));
+  fs.writeFileSync(path.join(OUT, 'dataset-entrenamiento.jsonl'), lineas.join('\n'));
   console.log(`✓ dataset-entrenamiento.jsonl (${lineas.length} líneas)`);
 
   // Por vendedor.
-  fs.mkdirSync('dataset-por-vendedor', { recursive: true });
   const porVendedor = new Map();
   for (const c of convs) {
     for (const m of c.messages || []) {
@@ -76,19 +80,19 @@ function recorrerExport() {
     }
   }
   for (const [v, msgs] of porVendedor) {
-    const f = path.join('dataset-por-vendedor', `${limpiarNombreArchivo(v)}.jsonl`);
+    const f = path.join(OUT, 'dataset-por-vendedor', `${limpiarNombreArchivo(v)}.jsonl`);
     fs.writeFileSync(f, msgs.map((m) => JSON.stringify(m)).join('\n'));
   }
   console.log(`✓ dataset-por-vendedor/ (${porVendedor.size} vendedores)`);
 
   // TODAS-LAS-CONVERSACIONES en 3 formatos.
-  fs.writeFileSync('TODAS-LAS-CONVERSACIONES.json', JSON.stringify(convs, null, 2));
+  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.json'), JSON.stringify(convs, null, 2));
 
   const csv = ['lead_id,mes,contact_name,telefono,total_mensajes'];
   for (const c of convs) {
     csv.push(`${c.lead_id},${c.mes},"${(c.contact_name || '').replace(/"/g, '""')}",${c.telefono || ''},${(c.messages || []).length}`);
   }
-  fs.writeFileSync('TODAS-LAS-CONVERSACIONES.csv', csv.join('\n'));
+  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.csv'), csv.join('\n'));
 
   const txt = [];
   for (const c of convs) {
@@ -99,19 +103,25 @@ function recorrerExport() {
     }
     txt.push('');
   }
-  fs.writeFileSync('TODAS-LAS-CONVERSACIONES.txt', txt.join('\n'));
+  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.txt'), txt.join('\n'));
   console.log(`✓ TODAS-LAS-CONVERSACIONES.{json,csv,txt}`);
 
   // Estadísticas.
   const porMes = new Map();
   for (const c of convs) porMes.set(c.mes, (porMes.get(c.mes) || 0) + 1);
-  const stats = ['CONTEO POR MES:'];
+  const stats = [
+    `Rango: ${config.DESDE_FECHA} a ${config.HASTA_FECHA}`,
+    `Total leads: ${convs.length}`,
+    '',
+    'CONTEO POR MES:',
+  ];
   for (const [mes, n] of [...porMes.entries()].sort()) stats.push(`  ${mes}: ${n} leads`);
-  stats.push('\nMENSAJES POR VENDEDOR:');
+  stats.push('', 'MENSAJES POR VENDEDOR:');
   for (const [v, msgs] of [...porVendedor.entries()].sort((a, b) => b[1].length - a[1].length)) {
     stats.push(`  ${v}: ${msgs.length} mensajes`);
   }
-  fs.writeFileSync('estadisticas.txt', stats.join('\n'));
+  fs.writeFileSync(path.join(OUT, 'estadisticas.txt'), stats.join('\n'));
   console.log(`✓ estadisticas.txt\n`);
   console.log(stats.join('\n'));
+  console.log(`\n✓ Todo guardado en: ${OUT}`);
 })();
