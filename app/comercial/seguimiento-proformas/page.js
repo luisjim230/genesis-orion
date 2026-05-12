@@ -988,12 +988,15 @@ export default function SeguimientoProformas() {
     return [...new Set(filas.map(f => f.vendedor).filter(Boolean))].sort();
   }, [filas]);
 
-  // Normaliza fecha a "YYYY-MM-DD" para comparar contra value de <input type="date">.
-  // Soporta strings ISO ("2026-05-11", "2026-05-11T00:00:00.000Z"), Date objects, o null.
-  const fechaISO = (v) => {
-    if (!v) return '';
-    if (typeof v === 'string') return v.slice(0, 10);
-    try { return new Date(v).toISOString().slice(0, 10); } catch { return ''; }
+  // Convierte "YYYY-MM-DD" o ISO string o Date a timestamp (ms al inicio del día UTC).
+  // Compara fechas robustamente sin caer en problemas de strings con/sin ceros.
+  const fechaMs = (v) => {
+    if (!v) return NaN;
+    if (v instanceof Date) return Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate());
+    const s = String(v).slice(0, 10);
+    const [y, m, d] = s.split('-').map(Number);
+    if (!y || !m || !d) return NaN;
+    return Date.UTC(y, m - 1, d);
   };
 
   // Filtros aplicados sobre Abiertas
@@ -1001,8 +1004,8 @@ export default function SeguimientoProformas() {
     if (!filasAbiertas) return null;
     const profQ = String(filtros.proforma || '').trim();
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
-    const desde = String(filtros.fechaDesde || '').trim();
-    const hasta = String(filtros.fechaHasta || '').trim();
+    const desdeMs = fechaMs(filtros.fechaDesde);
+    const hastaMs = fechaMs(filtros.fechaHasta);
     let arr = filasAbiertas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
       if (filtros.tier && f.tier_nombre !== filtros.tier) return false;
@@ -1010,11 +1013,11 @@ export default function SeguimientoProformas() {
         const m = N(f.margen_pct);
         if (m < filtros.margenMin) return false;
       }
-      if (desde || hasta) {
-        const fISO = fechaISO(f.fecha);
-        if (!fISO) return false;
-        if (desde && fISO < desde) return false;
-        if (hasta && fISO > hasta) return false;
+      if (!Number.isNaN(desdeMs) || !Number.isNaN(hastaMs)) {
+        const fMs = fechaMs(f.fecha);
+        if (Number.isNaN(fMs)) return false;
+        if (!Number.isNaN(desdeMs) && fMs < desdeMs) return false;
+        if (!Number.isNaN(hastaMs) && fMs > hastaMs) return false;
       }
       if (profQ && !String(f.proforma).includes(profQ)) return false;
       if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
@@ -1033,15 +1036,15 @@ export default function SeguimientoProformas() {
     if (!filasGanadas) return null;
     const profQ = String(filtros.proforma || '').trim();
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
-    const desde = String(filtros.fechaDesde || '').trim();
-    const hasta = String(filtros.fechaHasta || '').trim();
+    const desdeMs = fechaMs(filtros.fechaDesde);
+    const hastaMs = fechaMs(filtros.fechaHasta);
     let arr = filasGanadas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
-      if (desde || hasta) {
-        const fISO = fechaISO(f.fecha);
-        if (!fISO) return false;
-        if (desde && fISO < desde) return false;
-        if (hasta && fISO > hasta) return false;
+      if (!Number.isNaN(desdeMs) || !Number.isNaN(hastaMs)) {
+        const fMs = fechaMs(f.fecha);
+        if (Number.isNaN(fMs)) return false;
+        if (!Number.isNaN(desdeMs) && fMs < desdeMs) return false;
+        if (!Number.isNaN(hastaMs) && fMs > hastaMs) return false;
       }
       if (profQ && !String(f.proforma).includes(profQ)) return false;
       if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
@@ -1054,6 +1057,37 @@ export default function SeguimientoProformas() {
   const hayFiltrosActivos = !!(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente);
 
   const limpiarFiltros = () => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' });
+
+  // Chips visibles de filtros activos (sirven como feedback de que el estado captura el input).
+  const chipsFiltros = () => {
+    const items = [];
+    if (filtros.vendedor) items.push({ k: 'vendedor', label: `Vendedor: ${filtros.vendedor}` });
+    if (filtros.tier) items.push({ k: 'tier', label: `Tier: ${filtros.tier}` });
+    if (filtros.fechaDesde) items.push({ k: 'fechaDesde', label: `Desde: ${filtros.fechaDesde}` });
+    if (filtros.fechaHasta) items.push({ k: 'fechaHasta', label: `Hasta: ${filtros.fechaHasta}` });
+    if (filtros.margenMin > 0) items.push({ k: 'margenMin', label: `Margen ≥ ${filtros.margenMin}%` });
+    if (filtros.proforma) items.push({ k: 'proforma', label: `# ${filtros.proforma}` });
+    if (filtros.cliente) items.push({ k: 'cliente', label: `Cliente: ${filtros.cliente}` });
+    if (!items.length) return null;
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        {items.map(it => (
+          <span key={it.k} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'rgba(212,175,55,0.18)', color: C.text,
+            border: `1px solid ${C.gold}`, borderRadius: 999,
+            padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
+          }}>
+            {it.label}
+            <button onClick={() => setFiltros({ ...filtros, [it.k]: it.k === 'margenMin' ? 0 : '' })}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '0.9rem', lineHeight: 1, padding: 0 }}>
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   // Resalta visualmente los inputs cuando tienen valor (feedback de que el filtro está activo)
   const inputFiltro = (activo) => activo
@@ -1196,6 +1230,9 @@ export default function SeguimientoProformas() {
             )}
           </div>
 
+          {/* Chips de filtros activos */}
+          {chipsFiltros()}
+
           {/* Contador de resultados + botón limpiar (siempre visible cuando hay filtros) */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1265,6 +1302,7 @@ export default function SeguimientoProformas() {
                 style={inputFiltro(!!filtros.cliente)} />
             </div>
           </div>
+          {chipsFiltros()}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             gap: 10, flexWrap: 'wrap', marginBottom: 14, padding: '0 4px',
