@@ -131,7 +131,18 @@ const SEMAFORO = {
 };
 
 const CANALES = ['whatsapp', 'llamada', 'email', 'presencial', 'otro'];
-const RESULTADOS = ['interesado', 'pensandolo', 'sin_respuesta', 'objecion_precio', 'objecion_producto', 'ganada', 'perdida'];
+const RESULTADOS = ['en_seguimiento', 'ganada', 'perdida'];
+const RESULTADO_LABEL = {
+  en_seguimiento:     { txt: 'En seguimiento', color: '#92400e' },
+  ganada:             { txt: 'Vendida',        color: '#065f46' },
+  perdida:            { txt: 'Perdida',        color: '#b91c1c' },
+  // Legacy (registros anteriores al cambio del flujo)
+  interesado:         { txt: 'Interesado',     color: '#1d4ed8' },
+  pensandolo:         { txt: 'Pensándolo',     color: '#1d4ed8' },
+  sin_respuesta:      { txt: 'Sin respuesta',  color: '#64748b' },
+  objecion_precio:    { txt: 'Objeción precio',color: '#92400e' },
+  objecion_producto:  { txt: 'Objeción producto', color: '#92400e' },
+};
 
 function fmtFecha(d) {
   if (!d) return '—';
@@ -233,7 +244,7 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
   const [lineas, setLineas] = useState(null);
   const [seguimientos, setSeguimientos] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ canal: 'whatsapp', resultado: 'interesado', nota: '', razon: '' });
+  const [form, setForm] = useState({ canal: 'whatsapp', resultado: 'en_seguimiento', nota: '', razon: '' });
   const [guardando, setGuardando] = useState(false);
   const [errMsg, setErrMsg] = useState(null);
   const [okMsg, setOkMsg] = useState(null);
@@ -277,7 +288,7 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
     try { await supabase.rpc('refresh_hermes_panel'); } catch {}
     setOkMsg(`Seguimiento #${numeroSeg} registrado`);
     setShowForm(false);
-    setForm({ canal: 'whatsapp', resultado: 'interesado', nota: '', razon: '' });
+    setForm({ canal: 'whatsapp', resultado: 'en_seguimiento', nota: '', razon: '' });
     setGuardando(false);
     await cargar();
     if (onChange) onChange();
@@ -364,7 +375,7 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <div style={{ fontSize: '0.82rem', fontWeight: 700, color: C.text }}>
-                      #{s.numero_seguimiento} · {s.canal || '—'} · <span style={{ color: s.estado_resultado === 'perdida' ? C.red : C.blue }}>{s.estado_resultado || '—'}</span>
+                      #{s.numero_seguimiento} · {s.canal || '—'} · <span style={{ color: (RESULTADO_LABEL[s.estado_resultado]?.color) || C.blue }}>{(RESULTADO_LABEL[s.estado_resultado]?.txt) || s.estado_resultado || '—'}</span>
                     </div>
                     <div style={{ fontSize: '0.74rem', color: C.muted, whiteSpace: 'nowrap' }}>
                       {fmtFechaHora(s.fecha_realizado)}
@@ -401,20 +412,41 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
               background: '#eef2ff', border: '1px solid #c7d2fe',
               borderRadius: 12, padding: 16, marginTop: 4,
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                <div>
-                  <label style={S.label}>Canal</label>
-                  <select value={form.canal} onChange={e => setForm({ ...form, canal: e.target.value })}
-                    style={{ ...S.select, width: '100%' }}>
-                    {CANALES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={S.label}>Resultado</label>
-                  <select value={form.resultado} onChange={e => setForm({ ...form, resultado: e.target.value })}
-                    style={{ ...S.select, width: '100%' }}>
-                    {RESULTADOS.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
+              <div style={{ marginBottom: 12 }}>
+                <label style={S.label}>Canal</label>
+                <select value={form.canal} onChange={e => setForm({ ...form, canal: e.target.value })}
+                  style={{ ...S.select, width: '100%' }}>
+                  {CANALES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={S.label}>Resultado</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {[
+                    { v: 'en_seguimiento', label: 'En seguimiento', emoji: '🟡', color: '#92400e', bg: '#fef3c7' },
+                    { v: 'ganada',         label: 'Vendida',        emoji: '✅', color: '#065f46', bg: '#d1fae5' },
+                    { v: 'perdida',        label: 'Perdida',        emoji: '❌', color: '#b91c1c', bg: '#fee2e2' },
+                  ].map(opt => {
+                    const activo = form.resultado === opt.v;
+                    return (
+                      <button key={opt.v} type="button"
+                        onClick={() => setForm({ ...form, resultado: opt.v })}
+                        style={{
+                          padding: '12px 8px', borderRadius: 12,
+                          border: activo ? `2px solid ${opt.color}` : '1.5px solid rgba(0,0,0,0.08)',
+                          background: activo ? opt.bg : '#fff',
+                          color: activo ? opt.color : C.muted,
+                          fontWeight: 700, fontSize: '0.84rem',
+                          fontFamily: 'Rubik, sans-serif', cursor: 'pointer',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                          transition: 'all .15s',
+                        }}>
+                        <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{opt.emoji}</span>
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -791,28 +823,80 @@ function TabConfig() {
 
 // ── Tab: Tabla de proformas (Abiertas / Ganadas) ────────────────────────────
 function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = false }) {
+  const [orden, setOrden] = useState(null); // { col, dir: 'asc' | 'desc' }
   if (!datos) return <Spinner />;
   if (datos.length === 0) return <Empty msg="Sin proformas" sub="No hay proformas que coincidan con los filtros." />;
+
+  const cambiarOrden = (col) => {
+    setOrden(o => {
+      if (!o || o.col !== col) return { col, dir: 'asc' };
+      if (o.dir === 'asc') return { col, dir: 'desc' };
+      return null; // tercer click → quita el orden y vuelve al default
+    });
+  };
+
+  const cmp = (a, b, col) => {
+    const get = (x) => {
+      switch (col) {
+        case 'estado':    return SEMAFORO[x.semaforo]?.orden ?? 99;
+        case 'proforma':  return Number(x.proforma) || 0;
+        case 'fecha':     return x.fecha || '';
+        case 'cliente':   return String(x.cliente || '').toLowerCase();
+        case 'vendedor':  return String(x.vendedor || '').toLowerCase();
+        case 'tier':      return String(x.tier_nombre || '');
+        case 'monto':     return N(x.monto_total);
+        case 'margen':    return N(x.margen_pct);
+        case 'utilidad':  return N(x.utilidad_mercaderia);
+        case 'dias':      return Number(x.dias_desde_proforma) || 0;
+        case 'seg':       return Number(x.seguimientos_realizados) || 0;
+        default: return 0;
+      }
+    };
+    const va = get(a), vb = get(b);
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+
+  const filas = orden
+    ? [...datos].sort((a, b) => cmp(a, b, orden.col) * (orden.dir === 'asc' ? 1 : -1))
+    : datos;
+
+  const HeaderCell = ({ col, label, align = 'left' }) => {
+    const activo = orden?.col === col;
+    const flecha = activo ? (orden.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return (
+      <th onClick={() => cambiarOrden(col)}
+        style={{
+          ...S.th, textAlign: align, cursor: 'pointer',
+          userSelect: 'none', whiteSpace: 'nowrap',
+          color: activo ? C.gold : undefined,
+        }}>
+        {label}{flecha}
+      </th>
+    );
+  };
+
   return (
     <div style={{ ...S.card, padding: 0, overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
         <thead>
           <tr>
-            <th style={S.th}>Estado</th>
-            <th style={S.th}>#</th>
-            <th style={S.th}>Fecha</th>
-            <th style={S.th}>Cliente</th>
-            <th style={S.th}>Vendedor</th>
-            <th style={S.th}>Tier</th>
-            <th style={{ ...S.th, textAlign: 'right' }}>Monto</th>
-            {esAdmin && <th style={{ ...S.th, textAlign: 'right' }}>Margen %</th>}
-            {esAdmin && <th style={{ ...S.th, textAlign: 'right' }}>Utilidad</th>}
-            <th style={{ ...S.th, textAlign: 'center' }}>Días</th>
-            {mostrarSeguimientos && <th style={{ ...S.th, textAlign: 'center' }}>Seg.</th>}
+            <HeaderCell col="estado"   label="Estado" />
+            <HeaderCell col="proforma" label="#" />
+            <HeaderCell col="fecha"    label="Fecha" />
+            <HeaderCell col="cliente"  label="Cliente" />
+            <HeaderCell col="vendedor" label="Vendedor" />
+            <HeaderCell col="tier"     label="Tier" />
+            <HeaderCell col="monto"    label="Monto" align="right" />
+            {esAdmin && <HeaderCell col="margen"   label="Margen %" align="right" />}
+            {esAdmin && <HeaderCell col="utilidad" label="Utilidad" align="right" />}
+            <HeaderCell col="dias"     label="Días" align="center" />
+            {mostrarSeguimientos && <HeaderCell col="seg" label="Seg." align="center" />}
           </tr>
         </thead>
         <tbody>
-          {datos.map(p => (
+          {filas.map(p => (
             <tr key={p.proforma}
               onClick={() => onRow && onRow(p)}
               style={{ cursor: onRow ? 'pointer' : 'default', transition: 'background .15s' }}
