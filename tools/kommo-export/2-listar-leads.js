@@ -1,10 +1,11 @@
-// Paso 2 — listar leads de TODOS los canales sociales (WhatsApp / Instagram / Facebook).
+// Paso 2 — listar TODOS los leads en el rango (sin filtrar por canal del contacto).
 // Uso: node 2-listar-leads.js
 //
-// Pagina /api/v4/contacts?with=leads&with=custom_fields_values y se queda con
-// los que tengan PHONE, IM, o cualquier custom field social (instagram, facebook,
-// messenger). El canal real se detecta DESPUÉS al reprocesar el HTML por el
-// ícono de origen — esta etapa solo arma la lista de candidatos.
+// Antes filtrábamos por contactos con teléfono/IM, lo que dejaba afuera los leads
+// de Instagram y Facebook (cuyos contactos no tienen PHONE). Ahora paginamos
+// /api/v4/leads directo y bajamos TODO el rango. El canal real
+// (whatsapp/instagram/facebook) se detecta DESPUÉS en 5-reprocesar.js por el
+// ícono de origen de cada mensaje del HTML.
 
 const { request } = require('playwright');
 const fs = require('fs');
@@ -14,32 +15,6 @@ const BASE_URL = config.KOMMO_URL.replace(/\/$/, '');
 
 function unix(fecha) {
   return Math.floor(new Date(fecha + 'T00:00:00').getTime() / 1000);
-}
-
-function detectarCanales(contacto) {
-  const canales = new Set();
-  const fields = contacto.custom_fields_values || [];
-  for (const f of fields) {
-    const code = (f.field_code || '').toUpperCase();
-    const name = (f.field_name || '').toLowerCase();
-
-    if (code === 'PHONE') {
-      const v = f.values?.[0]?.value;
-      if (v) canales.add('whatsapp');
-    }
-    if (code === 'IM') {
-      for (const val of f.values || []) {
-        const enumCode = (val.enum_code || '').toLowerCase();
-        if (enumCode.includes('instagram')) canales.add('instagram');
-        else if (enumCode.includes('facebook') || enumCode.includes('messenger')) canales.add('facebook');
-        else if (enumCode.includes('whatsapp')) canales.add('whatsapp');
-        else canales.add('im_otro');
-      }
-    }
-    if (name.includes('instagram')) canales.add('instagram');
-    if (name.includes('facebook') || name.includes('messenger')) canales.add('facebook');
-  }
-  return [...canales];
 }
 
 (async () => {
@@ -58,7 +33,7 @@ function detectarCanales(contacto) {
     extraHTTPHeaders: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
   });
 
-  // Cargar lo previo (acumulativo).
+  // Cargar lo previo (acumulativo, idempotente).
   let leads = [];
   const yaConocidos = new Set();
   if (fs.existsSync(config.LEADS_FILE)) {
@@ -69,13 +44,13 @@ function detectarCanales(contacto) {
     } catch {}
   }
 
-  console.log('\nPaginando /api/v4/contacts (todos los canales sociales)...');
+  console.log('\nPaginando /api/v4/leads (todos los canales)...');
   let pagina = 1;
-  let contactosVistos = 0;
-  const conteoCanales = { whatsapp: 0, instagram: 0, facebook: 0, im_otro: 0 };
+  let totalVistos = 0;
+  const porSource = {};
 
   while (true) {
-    const url = `/api/v4/contacts?limit=250&page=${pagina}&with=leads`;
+    const url = `/api/v4/leads?limit=250&page=${pagina}&with=contacts&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
     const resp = await api.get(url).catch(() => null);
     if (!resp) {
       await new Promise((r) => setTimeout(r, 3000));
@@ -93,67 +68,46 @@ function detectarCanales(contacto) {
     }
 
     const data = await resp.json();
-    const contactos = data._embedded?.contacts || [];
-    if (contactos.length === 0) break;
+    const leadsPage = data._embedded?.leads || [];
+    if (leadsPage.length === 0) break;
 
-    for (const c of contactos) {
-      contactosVistos++;
-      const canales = detectarCanales(c);
-      if (canales.length === 0) continue;
-      canales.forEach((cn) => { if (conteoCanales[cn] != null) conteoCanales[cn]++; });
+    for (const l of leadsPage) {
+      totalVistos++;
+      const src = l.source_id || 'sin_source';
+      porSource[src] = (porSource[src] || 0) + 1;
 
-      const leadsVinc = c._embedded?.leads || [];
-      for (const lv of leadsVinc) {
-        if (yaConocidos.has(String(lv.id))) continue;
-        leads.push({
-          lead_id: lv.id,
-          contact_id: c.id,
-          contact_name: c.name || '',
-          canales_contacto: canales,
-        });
-        yaConocidos.add(String(lv.id));
-      }
+      if (yaConocidos.has(String(l.id))) continue;
+      const contactId = l._embedded?.contacts?.[0]?.id || null;
+      leads.push({
+        lead_id: l.id,
+        contact_id: contactId,
+        contact_name: '',
+        created_at: l.created_at,
+        name: l.name || '',
+        source_id: l.source_id || null,
+        pipeline_id: l.pipeline_id || null,
+      });
+      yaConocidos.add(String(l.id));
     }
 
     if (pagina % 10 === 0) {
-      console.log(`  página ${pagina} · contactos ${contactosVistos} · leads únicos acumulados ${leads.length}`);
+      console.log(`  página ${pagina} · leads vistos ${totalVistos} · únicos en lista ${leads.length}`);
       fs.writeFileSync(config.LEADS_FILE, JSON.stringify(leads, null, 2));
     }
 
     if (!data._links?.next) break;
     pagina++;
-    await new Promise((r) => setTimeout(r, 150));
-  }
-
-  console.log(`\nContactos revisados: ${contactosVistos}`);
-  console.log('Conteo por canal detectado en contactos:');
-  Object.entries(conteoCanales).forEach(([k, v]) => console.log(`  ${k}: ${v}`));
-
-  // Filtrar leads por fecha de creación.
-  console.log('\nFiltrando por fecha de creación del lead...');
-  const ids = leads.map((l) => l.lead_id);
-  const dentroRango = new Map();
-  for (let i = 0; i < ids.length; i += 250) {
-    const slice = ids.slice(i, i + 250);
-    const qs = slice.map((id) => `filter[id][]=${id}`).join('&');
-    const url = `/api/v4/leads?limit=250&${qs}&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
-    const resp = await api.get(url);
-    if (resp.status() === 200) {
-      const d = await resp.json();
-      for (const lead of d._embedded?.leads || []) {
-        dentroRango.set(lead.id, { created_at: lead.created_at, name: lead.name });
-      }
-    }
-    if (i % 2500 === 0) console.log(`  ${i + slice.length}/${ids.length}`);
     await new Promise((r) => setTimeout(r, 120));
   }
 
-  const filtrados = leads.filter((l) => dentroRango.has(l.lead_id))
-    .map((l) => ({ ...l, ...dentroRango.get(l.lead_id) }));
+  fs.writeFileSync(config.LEADS_FILE, JSON.stringify(leads, null, 2));
+  console.log(`\n✓ ${leads.length} leads totales en rango guardados en ${config.LEADS_FILE}`);
+  console.log('\nDistribución por source_id (informativo — el canal real sale del HTML):');
+  Object.entries(porSource)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([k, v]) => console.log(`  ${k}: ${v}`));
 
-  fs.writeFileSync(config.LEADS_FILE, JSON.stringify(filtrados, null, 2));
-  console.log(`\n✓ ${filtrados.length} leads dentro del rango guardados en ${config.LEADS_FILE}`);
-  console.log('Siguiente: node 3-descargar.js');
+  console.log('\nSiguiente: node 3-descargar.js');
 
   await api.dispose();
 })();
