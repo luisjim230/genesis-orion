@@ -19,8 +19,10 @@ module.exports = {
   LEADS_FILE: './leads-pendientes.json',
   EXPORT_DIR: './export',
 
-  // Carpeta de salida del dataset final (en el Escritorio del usuario).
+  // Carpetas de salida del dataset final por canal (en el Escritorio).
   OUTPUT_DIR: path.join(os.homedir(), 'Desktop', `KOMMO ${DESDE_FECHA} a ${HASTA_FECHA}`),
+  OUTPUT_DIR_INSTAGRAM: path.join(os.homedir(), 'Desktop', `KOMMO-INSTAGRAM ${DESDE_FECHA} a ${HASTA_FECHA}`),
+  OUTPUT_DIR_FACEBOOK: path.join(os.homedir(), 'Desktop', `KOMMO-FACEBOOK ${DESDE_FECHA} a ${HASTA_FECHA}`),
 
   // Throttling. Si Kommo te empieza a tirar errores, subí estos números.
   ESPERA_ENTRE_LEADS_MS: 1500,

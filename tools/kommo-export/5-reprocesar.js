@@ -27,6 +27,29 @@ function normalizarVendedor(nombre) {
   return nombre.replace(/\s*\(Call Center\)\s*$/i, '').trim();
 }
 
+function detectarCanal(html) {
+  // Busca los íconos de origen en cada mensaje del HTML.
+  const matches = html.match(/feed-note__icon-origin[^>]*>\s*<img[^>]+src="[^"]+"/g) || [];
+  const counts = { whatsapp: 0, instagram: 0, facebook: 0, otro: 0 };
+  for (const m of matches) {
+    const src = (m.match(/src="([^"]+)"/) || [])[1] || '';
+    const name = src.split('/').pop().toLowerCase();
+    if (name.includes('waba') || name.includes('whatsapp') || name.includes('wazzup')) {
+      counts.whatsapp++;
+    } else if (name.includes('instagram')) {
+      counts.instagram++;
+    } else if (name.includes('facebook') || name.includes('messenger') || name.includes('fb')) {
+      counts.facebook++;
+    } else {
+      counts.otro++;
+    }
+  }
+  // Canal con más matches gana.
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!top || top[1] === 0) return 'desconocido';
+  return top[0];
+}
+
 function parseFechaDDMMYYYY(str) {
   if (!str) return null;
   const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -130,12 +153,14 @@ function* recorrerLeads(dir) {
 
   const cuentaPorMes = {};
   const cuentaPorVendedor = {};
+  const cuentaPorCanal = {};
 
   for (const e of recorrerLeads(config.EXPORT_DIR)) {
     total++;
     try {
       const html = fs.readFileSync(e.htmlPath, 'utf8');
       const mensajes = extraerMensajes(html);
+      const canal = detectarCanal(html);
 
       // Cargar JSON previo para conservar lead_id, contact_name, telefono.
       let meta = {};
@@ -166,6 +191,7 @@ function* recorrerLeads(dir) {
         telefono: meta.telefono || '',
         created_at: meta.created_at || null,
         name: meta.name || '',
+        canal,
         messages: mensajes,
         reprocesado: true,
       };
@@ -183,6 +209,7 @@ function* recorrerLeads(dir) {
       }
 
       cuentaPorMes[mesReal] = (cuentaPorMes[mesReal] || 0) + 1;
+      cuentaPorCanal[canal] = (cuentaPorCanal[canal] || 0) + 1;
       mensajes.forEach((m) => {
         if (m.role === 'assistant' && m.vendedor && !esBot(m.vendedor)) {
           cuentaPorVendedor[m.vendedor] = (cuentaPorVendedor[m.vendedor] || 0) + 1;
@@ -203,6 +230,11 @@ function* recorrerLeads(dir) {
   console.log(`Sin mensajes:           ${sinMensajes}`);
   console.log(`Movidos a otro mes:     ${movidos}`);
   console.log(`Errores:                ${errores}`);
+
+  console.log('\n=== CONTEO POR CANAL ===');
+  Object.entries(cuentaPorCanal)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([k, v]) => console.log(`  ${k}: ${v} leads`));
 
   console.log('\n=== CONTEO POR MES (post-reproceso) ===');
   Object.keys(cuentaPorMes)
