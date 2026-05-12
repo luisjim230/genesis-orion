@@ -59,35 +59,42 @@ async function extraerNotas(page) {
   return await page.evaluate(() => {
     const out = [];
     document.querySelectorAll('.feed-note').forEach((nota) => {
-      const cls = nota.className || '';
-      // Detectar si es entrante (cliente) o saliente (vendedor).
-      const esEntrante = /incoming|in-message|chat_message_received|note_chat_in/i.test(cls);
-      const esSaliente = /outgoing|out-message|chat_message_sent|note_chat_out/i.test(cls);
+      const cls = (nota.className || '').toString();
+      if (cls.includes('feed-note-system')) return;
+      const isIn = cls.includes('feed-note-incoming');
+      const isOut = cls.includes('feed-note-outgoing');
+      if (!isIn && !isOut) return;
 
-      // Heurística adicional: si tiene .feed-note__author como el equipo.
-      let vendedor = null;
-      const aut = nota.querySelector('.feed-note__author, .feed-note__user-name, .feed-note__title');
-      if (aut) vendedor = (aut.innerText || '').trim() || null;
+      const autorEl = nota.querySelector('.feed-note__amojo-user');
+      const avatarEl = nota.querySelector('.feed-note__avatar');
+      const vendedor =
+        (autorEl && autorEl.getAttribute('title')) ||
+        (avatarEl && avatarEl.getAttribute('title')) ||
+        null;
 
-      const textoEl = nota.querySelector('.feed-note__body, .feed-note__text, .feed-note__content');
-      const texto = (textoEl?.innerText || nota.innerText || '').trim();
+      const parts = [];
+      nota.querySelectorAll('.feed-note__message_paragraph').forEach((p) => {
+        const t = (p.innerText || '').trim();
+        if (t) parts.push(t);
+      });
+      if (parts.length === 0) {
+        const body = nota.querySelector('.feed-note__body');
+        const t = (body?.innerText || '').trim();
+        if (t) parts.push(t);
+      }
+      const texto = parts.join('\n').trim();
       if (!texto) return;
 
-      // Capturar timestamp si está visible.
-      let ts = null;
-      const tsEl = nota.querySelector('.feed-note__time, .feed-note__date');
-      if (tsEl) ts = tsEl.innerText.trim();
+      const fecha = nota.querySelector('.feed-note__date')?.innerText?.trim() || null;
+      const tieneAdjunto = !!nota.querySelector('.drive-field__download-btn');
 
-      let role = 'unknown';
-      if (esEntrante) role = 'user';
-      else if (esSaliente) role = 'assistant';
-
-      // Detectar adjuntos.
-      const tieneAdjunto = !!nota.querySelector(
-        '.drive-field__download-btn, .feed-note-attach, .feed-note__file'
-      );
-
-      out.push({ role, content: texto, vendedor, ts, tiene_adjunto: tieneAdjunto });
+      out.push({
+        role: isIn ? 'user' : 'assistant',
+        content: texto,
+        vendedor: isOut ? vendedor : null,
+        fecha,
+        tiene_adjunto: tieneAdjunto,
+      });
     });
     return out;
   });
