@@ -13,10 +13,18 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-const NOMBRES_BOT = ['Robot', 'SalesBot', 'Bot'];
+const NOMBRES_BOT = ['Robot', 'SalesBot', 'Bot', 'Call Center'];
 function esBot(nombre) {
   if (!nombre) return false;
-  return NOMBRES_BOT.some((b) => nombre.includes(b));
+  // "Call Center" solo aparece solo cuando es genérico, no como sufijo de un vendedor real.
+  if (nombre === 'Call Center') return true;
+  return ['Robot', 'SalesBot', 'Bot'].some((b) => nombre.includes(b));
+}
+
+function normalizarVendedor(nombre) {
+  if (!nombre) return null;
+  // "Marietta Blanco (Call Center)" → "Marietta Blanco"
+  return nombre.replace(/\s*\(Call Center\)\s*$/i, '').trim();
 }
 
 function parseFechaDDMMYYYY(str) {
@@ -29,20 +37,27 @@ function parseFechaDDMMYYYY(str) {
 function extraerMensajes(html) {
   const $ = cheerio.load(html);
   const out = [];
-  $('.feed-note').each((_i, el) => {
+  // Solo procesamos divs CUYA clase EMPIEZA con "feed-note " (con espacio) — la nota raíz.
+  // No queremos .feed-note__body, .feed-note__header, etc (que son hijos).
+  $('div').each((_i, el) => {
     const cls = ($(el).attr('class') || '').toString();
-    if (!cls.includes('feed-note')) return;
-    // Saltear contenedores que no son mensajes (system, lead_created, etc).
+    // La clase del nodo raíz de una nota tiene "feed-note " seguido de modificadores.
+    // No empieza con "feed-note__" (eso es BEM child) ni "feed-note-wrapper" (eso es contenedor).
+    if (!/(^|\s)feed-note(\s|$)/.test(cls)) return;
+    if (cls.includes('feed-note__')) return;
+    if (cls.includes('feed-note-wrapper')) return;
+    if (cls.includes('feed-note-grouped-complex__')) return;
+    if (cls.includes('feed-note-fixer')) return;
+
+    // Saltear eventos del sistema (no son mensajes).
     if (cls.includes('feed-note-system')) return;
+
+    // Detectar tipo: incoming = cliente, external sin incoming = vendedor.
     const isIn = cls.includes('feed-note-incoming');
-    const isOut = cls.includes('feed-note-outgoing');
-    if (!isIn && !isOut) return;
+    const isExternal = cls.includes('feed-note-external');
+    if (!isIn && !isExternal) return; // Notas internas/automáticas: skip.
 
-    const author =
-      $(el).find('.feed-note__amojo-user').attr('title') ||
-      $(el).find('.feed-note__avatar').attr('title') ||
-      null;
-
+    // Extraer texto del mensaje.
     let textParts = [];
     $(el)
       .find('.feed-note__message_paragraph')
@@ -52,18 +67,26 @@ function extraerMensajes(html) {
       });
     if (textParts.length === 0) {
       const body = $(el).find('.feed-note__body').first().text().trim();
-      if (body) textParts.push(body);
+      if (body && body.length < 5000) textParts.push(body);
     }
     const text = textParts.join('\n').trim();
     if (!text) return;
 
+    // Autor: title de .feed-note__amojo-user (preferido) o .feed-note__avatar.
+    const author =
+      $(el).find('.feed-note__amojo-user').first().attr('title') ||
+      $(el).find('.feed-note__avatar').first().attr('title') ||
+      null;
+    const vendedor = isIn ? null : normalizarVendedor(author);
+
+    // Fecha del mensaje.
     const dateStr = $(el).find('.feed-note__date').first().text().trim();
     const fecha = parseFechaDDMMYYYY(dateStr);
 
     out.push({
       role: isIn ? 'user' : 'assistant',
       content: text,
-      vendedor: isOut ? author : null,
+      vendedor,
       fecha: dateStr || null,
       mes: fecha?.mes || null,
     });

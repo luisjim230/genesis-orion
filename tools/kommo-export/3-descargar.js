@@ -58,19 +58,17 @@ async function cargarTodaLaHistoria(page) {
 async function extraerNotas(page) {
   return await page.evaluate(() => {
     const out = [];
-    document.querySelectorAll('.feed-note').forEach((nota) => {
+    document.querySelectorAll('div').forEach((nota) => {
       const cls = (nota.className || '').toString();
+      if (!/(^|\s)feed-note(\s|$)/.test(cls)) return;
+      if (cls.includes('feed-note__')) return;
+      if (cls.includes('feed-note-wrapper')) return;
+      if (cls.includes('feed-note-grouped-complex__')) return;
+      if (cls.includes('feed-note-fixer')) return;
       if (cls.includes('feed-note-system')) return;
       const isIn = cls.includes('feed-note-incoming');
-      const isOut = cls.includes('feed-note-outgoing');
-      if (!isIn && !isOut) return;
-
-      const autorEl = nota.querySelector('.feed-note__amojo-user');
-      const avatarEl = nota.querySelector('.feed-note__avatar');
-      const vendedor =
-        (autorEl && autorEl.getAttribute('title')) ||
-        (avatarEl && avatarEl.getAttribute('title')) ||
-        null;
+      const isExt = cls.includes('feed-note-external');
+      if (!isIn && !isExt) return;
 
       const parts = [];
       nota.querySelectorAll('.feed-note__message_paragraph').forEach((p) => {
@@ -80,10 +78,16 @@ async function extraerNotas(page) {
       if (parts.length === 0) {
         const body = nota.querySelector('.feed-note__body');
         const t = (body?.innerText || '').trim();
-        if (t) parts.push(t);
+        if (t && t.length < 5000) parts.push(t);
       }
       const texto = parts.join('\n').trim();
       if (!texto) return;
+
+      const autor =
+        nota.querySelector('.feed-note__amojo-user')?.getAttribute('title') ||
+        nota.querySelector('.feed-note__avatar')?.getAttribute('title') ||
+        null;
+      const vendedor = isIn ? null : (autor ? autor.replace(/\s*\(Call Center\)\s*$/i, '').trim() : null);
 
       const fecha = nota.querySelector('.feed-note__date')?.innerText?.trim() || null;
       const tieneAdjunto = !!nota.querySelector('.drive-field__download-btn');
@@ -91,7 +95,7 @@ async function extraerNotas(page) {
       out.push({
         role: isIn ? 'user' : 'assistant',
         content: texto,
-        vendedor: isOut ? vendedor : null,
+        vendedor,
         fecha,
         tiene_adjunto: tieneAdjunto,
       });
