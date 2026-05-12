@@ -1,14 +1,10 @@
-// Paso 2 — listar leads con teléfono usando la API privada de Kommo.
+// Paso 2 — listar leads de TODOS los canales sociales (WhatsApp / Instagram / Facebook).
 // Uso: node 2-listar-leads.js
 //
-// Estrategia (basada en lo que funcionaba antes):
-//   1. Paginá /api/v4/contacts?with=leads — devuelve TODOS los contactos
-//      con sus campos custom (incluyendo PHONE) y a qué leads están vinculados.
-//   2. Quedate solo con los que tienen teléfono = potenciales clientes de WhatsApp.
-//   3. Filtrá por la fecha de creación del lead (rango del config).
-//   4. Volcá la lista única a leads-pendientes.json.
-//
-// La API responde con cookies de sesión, así que no necesitamos token.
+// Pagina /api/v4/contacts?with=leads&with=custom_fields_values y se queda con
+// los que tengan PHONE, IM, o cualquier custom field social (instagram, facebook,
+// messenger). El canal real se detecta DESPUÉS al reprocesar el HTML por el
+// ícono de origen — esta etapa solo arma la lista de candidatos.
 
 const { request } = require('playwright');
 const fs = require('fs');
@@ -20,6 +16,32 @@ function unix(fecha) {
   return Math.floor(new Date(fecha + 'T00:00:00').getTime() / 1000);
 }
 
+function detectarCanales(contacto) {
+  const canales = new Set();
+  const fields = contacto.custom_fields_values || [];
+  for (const f of fields) {
+    const code = (f.field_code || '').toUpperCase();
+    const name = (f.field_name || '').toLowerCase();
+
+    if (code === 'PHONE') {
+      const v = f.values?.[0]?.value;
+      if (v) canales.add('whatsapp');
+    }
+    if (code === 'IM') {
+      for (const val of f.values || []) {
+        const enumCode = (val.enum_code || '').toLowerCase();
+        if (enumCode.includes('instagram')) canales.add('instagram');
+        else if (enumCode.includes('facebook') || enumCode.includes('messenger')) canales.add('facebook');
+        else if (enumCode.includes('whatsapp')) canales.add('whatsapp');
+        else canales.add('im_otro');
+      }
+    }
+    if (name.includes('instagram')) canales.add('instagram');
+    if (name.includes('facebook') || name.includes('messenger')) canales.add('facebook');
+  }
+  return [...canales];
+}
+
 (async () => {
   if (!fs.existsSync(config.SESION_FILE)) {
     console.error(`✗ Falta ${config.SESION_FILE}. Corré: node 1-login.js`);
@@ -28,55 +50,45 @@ function unix(fecha) {
 
   const desdeUnix = unix(config.DESDE_FECHA);
   const hastaUnix = unix(config.HASTA_FECHA) + 24 * 3600;
-
   console.log(`Rango lead.created_at: ${config.DESDE_FECHA} → ${config.HASTA_FECHA}`);
 
   const api = await request.newContext({
     storageState: config.SESION_FILE,
     baseURL: BASE_URL,
-    extraHTTPHeaders: {
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
+    extraHTTPHeaders: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
   });
 
-  // Cargar lo previo si reanudamos.
+  // Cargar lo previo (acumulativo).
   let leads = [];
   const yaConocidos = new Set();
   if (fs.existsSync(config.LEADS_FILE)) {
     try {
       leads = JSON.parse(fs.readFileSync(config.LEADS_FILE, 'utf8'));
       leads.forEach((l) => yaConocidos.add(String(l.lead_id)));
-      console.log(`Ya había ${leads.length} leads en ${config.LEADS_FILE}, los conservo.`);
+      console.log(`Tenía ${leads.length} leads previos en ${config.LEADS_FILE}, los conservo.`);
     } catch {}
   }
 
-  console.log('\nPaginando /api/v4/contacts (con teléfono y leads vinculados)...');
+  console.log('\nPaginando /api/v4/contacts (todos los canales sociales)...');
   let pagina = 1;
   let contactosVistos = 0;
-  let conTelefono = 0;
-  let leadsNuevos = 0;
+  const conteoCanales = { whatsapp: 0, instagram: 0, facebook: 0, im_otro: 0 };
 
   while (true) {
     const url = `/api/v4/contacts?limit=250&page=${pagina}&with=leads`;
-    let resp;
-    try {
-      resp = await api.get(url);
-    } catch (err) {
-      console.error(`  ✗ Error red página ${pagina}: ${err.message}`);
+    const resp = await api.get(url).catch(() => null);
+    if (!resp) {
       await new Promise((r) => setTimeout(r, 3000));
       continue;
     }
-
     const status = resp.status();
     if (status === 204) break;
     if (status === 401 || status === 403) {
-      console.error(`  ✗ Sesión expirada (HTTP ${status}). Corré: node 1-login.js`);
+      console.error(`✗ Sesión expirada (HTTP ${status}). Corré: node 1-login.js`);
       break;
     }
     if (status !== 200) {
-      const body = await resp.text();
-      console.error(`  ✗ HTTP ${status} en página ${pagina}: ${body.slice(0, 200)}`);
+      console.error(`✗ HTTP ${status} en página ${pagina}`);
       break;
     }
 
@@ -86,29 +98,25 @@ function unix(fecha) {
 
     for (const c of contactos) {
       contactosVistos++;
-      const phone = (c.custom_fields_values || []).find((f) => f.field_code === 'PHONE');
-      if (!phone?.values?.[0]?.value) continue;
-      conTelefono++;
+      const canales = detectarCanales(c);
+      if (canales.length === 0) continue;
+      canales.forEach((cn) => { if (conteoCanales[cn] != null) conteoCanales[cn]++; });
 
-      const telefono = String(phone.values[0].value).replace(/\s/g, '');
       const leadsVinc = c._embedded?.leads || [];
       for (const lv of leadsVinc) {
         if (yaConocidos.has(String(lv.id))) continue;
-        // No tenemos created_at acá; lo filtramos cuando hagamos el matcheo
-        // contra la API de leads. Por ahora aceptamos.
         leads.push({
           lead_id: lv.id,
           contact_id: c.id,
           contact_name: c.name || '',
-          telefono,
+          canales_contacto: canales,
         });
         yaConocidos.add(String(lv.id));
-        leadsNuevos++;
       }
     }
 
     if (pagina % 10 === 0) {
-      console.log(`  página ${pagina} · contactos ${contactosVistos} · con tel ${conTelefono} · leads únicos ${leads.length}`);
+      console.log(`  página ${pagina} · contactos ${contactosVistos} · leads únicos acumulados ${leads.length}`);
       fs.writeFileSync(config.LEADS_FILE, JSON.stringify(leads, null, 2));
     }
 
@@ -118,16 +126,15 @@ function unix(fecha) {
   }
 
   console.log(`\nContactos revisados: ${contactosVistos}`);
-  console.log(`Con teléfono: ${conTelefono}`);
-  console.log(`Leads candidatos (potencial WhatsApp): ${leads.length}`);
+  console.log('Conteo por canal detectado en contactos:');
+  Object.entries(conteoCanales).forEach(([k, v]) => console.log(`  ${k}: ${v}`));
 
-  // Ahora filtramos por created_at del lead en el rango.
+  // Filtrar leads por fecha de creación.
   console.log('\nFiltrando por fecha de creación del lead...');
-  const idsBatch = [];
-  for (const l of leads) idsBatch.push(l.lead_id);
+  const ids = leads.map((l) => l.lead_id);
   const dentroRango = new Map();
-  for (let i = 0; i < idsBatch.length; i += 250) {
-    const slice = idsBatch.slice(i, i + 250);
+  for (let i = 0; i < ids.length; i += 250) {
+    const slice = ids.slice(i, i + 250);
     const qs = slice.map((id) => `filter[id][]=${id}`).join('&');
     const url = `/api/v4/leads?limit=250&${qs}&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
     const resp = await api.get(url);
@@ -137,7 +144,7 @@ function unix(fecha) {
         dentroRango.set(lead.id, { created_at: lead.created_at, name: lead.name });
       }
     }
-    if (i % 2500 === 0) console.log(`  ${i + slice.length}/${idsBatch.length}`);
+    if (i % 2500 === 0) console.log(`  ${i + slice.length}/${ids.length}`);
     await new Promise((r) => setTimeout(r, 120));
   }
 

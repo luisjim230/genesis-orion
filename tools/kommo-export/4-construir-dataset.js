@@ -1,11 +1,11 @@
-// Paso 4 — armar el dataset final para entrenar al agente.
+// Paso 4 — armar el dataset final separado por canal.
 // Uso: node 4-construir-dataset.js
 //
-// Genera:
-//   - dataset-entrenamiento.jsonl   (un lead por línea, formato chat)
-//   - dataset-por-vendedor/<Nombre>.jsonl
-//   - TODAS-LAS-CONVERSACIONES.{csv,txt,json}
-//   - estadisticas.txt              (conteos por mes, por vendedor)
+// Lee export/AAAA-MM/lead_X/conversacion.json y separa por el campo `canal`
+// que detectó 5-reprocesar.js. Genera 3 carpetas en el Escritorio:
+//   KOMMO <rango>/             (WhatsApp + desconocidos)
+//   KOMMO-INSTAGRAM <rango>/
+//   KOMMO-FACEBOOK <rango>/
 
 const fs = require('fs');
 const path = require('path');
@@ -47,27 +47,26 @@ function recorrerExport() {
   return out;
 }
 
-(async () => {
-  const convs = recorrerExport();
-  console.log(`Encontradas ${convs.length} conversaciones en ${config.EXPORT_DIR}/`);
-
-  const OUT = config.OUTPUT_DIR;
-  fs.mkdirSync(OUT, { recursive: true });
-  fs.mkdirSync(path.join(OUT, 'dataset-por-vendedor'), { recursive: true });
-  console.log(`Carpeta de salida: ${OUT}`);
+function escribirDataset(outDir, convs, label) {
+  if (convs.length === 0) {
+    console.log(`(${label}: 0 leads, salteando carpeta)`);
+    return;
+  }
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.mkdirSync(path.join(outDir, 'dataset-por-vendedor'), { recursive: true });
 
   // dataset-entrenamiento.jsonl
   const lineas = convs.map((c) =>
     JSON.stringify({
       lead_id: c.lead_id,
+      canal: c.canal || label,
       mes: c.mes,
       contact_name: c.contact_name || '',
       telefono: c.telefono || '',
       messages: c.messages || [],
     })
   );
-  fs.writeFileSync(path.join(OUT, 'dataset-entrenamiento.jsonl'), lineas.join('\n'));
-  console.log(`✓ dataset-entrenamiento.jsonl (${lineas.length} líneas)`);
+  fs.writeFileSync(path.join(outDir, 'dataset-entrenamiento.jsonl'), lineas.join('\n'));
 
   // Por vendedor.
   const porVendedor = new Map();
@@ -80,36 +79,35 @@ function recorrerExport() {
     }
   }
   for (const [v, msgs] of porVendedor) {
-    const f = path.join(OUT, 'dataset-por-vendedor', `${limpiarNombreArchivo(v)}.jsonl`);
+    const f = path.join(outDir, 'dataset-por-vendedor', `${limpiarNombreArchivo(v)}.jsonl`);
     fs.writeFileSync(f, msgs.map((m) => JSON.stringify(m)).join('\n'));
   }
-  console.log(`✓ dataset-por-vendedor/ (${porVendedor.size} vendedores)`);
 
-  // TODAS-LAS-CONVERSACIONES en 3 formatos.
-  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.json'), JSON.stringify(convs, null, 2));
+  fs.writeFileSync(path.join(outDir, 'TODAS-LAS-CONVERSACIONES.json'), JSON.stringify(convs, null, 2));
 
-  const csv = ['lead_id,mes,contact_name,telefono,total_mensajes'];
+  const csv = ['lead_id,canal,mes,contact_name,telefono,total_mensajes'];
   for (const c of convs) {
-    csv.push(`${c.lead_id},${c.mes},"${(c.contact_name || '').replace(/"/g, '""')}",${c.telefono || ''},${(c.messages || []).length}`);
+    csv.push(
+      `${c.lead_id},${c.canal || label},${c.mes},"${(c.contact_name || '').replace(/"/g, '""')}",${c.telefono || ''},${(c.messages || []).length}`
+    );
   }
-  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.csv'), csv.join('\n'));
+  fs.writeFileSync(path.join(outDir, 'TODAS-LAS-CONVERSACIONES.csv'), csv.join('\n'));
 
   const txt = [];
   for (const c of convs) {
-    txt.push(`═════ Lead ${c.lead_id} · ${c.mes} · ${c.contact_name || ''} ═════`);
+    txt.push(`═════ Lead ${c.lead_id} · ${c.canal || label} · ${c.mes} · ${c.contact_name || ''} ═════`);
     for (const m of c.messages || []) {
       const tag = m.role === 'user' ? 'CLIENTE' : (m.vendedor || 'EQUIPO');
       txt.push(`[${tag}] ${m.content}`);
     }
     txt.push('');
   }
-  fs.writeFileSync(path.join(OUT, 'TODAS-LAS-CONVERSACIONES.txt'), txt.join('\n'));
-  console.log(`✓ TODAS-LAS-CONVERSACIONES.{json,csv,txt}`);
+  fs.writeFileSync(path.join(outDir, 'TODAS-LAS-CONVERSACIONES.txt'), txt.join('\n'));
 
-  // Estadísticas.
   const porMes = new Map();
   for (const c of convs) porMes.set(c.mes, (porMes.get(c.mes) || 0) + 1);
   const stats = [
+    `Canal: ${label}`,
     `Rango: ${config.DESDE_FECHA} a ${config.HASTA_FECHA}`,
     `Total leads: ${convs.length}`,
     '',
@@ -120,8 +118,33 @@ function recorrerExport() {
   for (const [v, msgs] of [...porVendedor.entries()].sort((a, b) => b[1].length - a[1].length)) {
     stats.push(`  ${v}: ${msgs.length} mensajes`);
   }
-  fs.writeFileSync(path.join(OUT, 'estadisticas.txt'), stats.join('\n'));
-  console.log(`✓ estadisticas.txt\n`);
-  console.log(stats.join('\n'));
-  console.log(`\n✓ Todo guardado en: ${OUT}`);
+  fs.writeFileSync(path.join(outDir, 'estadisticas.txt'), stats.join('\n'));
+
+  console.log(`✓ ${label}: ${convs.length} leads · ${porVendedor.size} vendedores · ${outDir}`);
+}
+
+(async () => {
+  const convs = recorrerExport();
+  console.log(`Encontradas ${convs.length} conversaciones en ${config.EXPORT_DIR}/`);
+
+  const porCanal = { whatsapp: [], instagram: [], facebook: [], desconocido: [] };
+  for (const c of convs) {
+    const canal = c.canal || 'desconocido';
+    if (!porCanal[canal]) porCanal[canal] = [];
+    porCanal[canal].push(c);
+  }
+
+  console.log('\nDistribución por canal:');
+  Object.entries(porCanal).forEach(([k, v]) => console.log(`  ${k}: ${v.length} leads`));
+
+  // WhatsApp y desconocidos van juntos en la carpeta WhatsApp (mantenemos compat).
+  const whatsappYDesconocidos = [...porCanal.whatsapp, ...porCanal.desconocido];
+  escribirDataset(config.OUTPUT_DIR, whatsappYDesconocidos, 'WHATSAPP');
+  escribirDataset(config.OUTPUT_DIR_INSTAGRAM, porCanal.instagram, 'INSTAGRAM');
+  escribirDataset(config.OUTPUT_DIR_FACEBOOK, porCanal.facebook, 'FACEBOOK');
+
+  console.log('\n✓ Listo. Carpetas en ~/Desktop/:');
+  console.log(`  ${path.basename(config.OUTPUT_DIR)}/`);
+  console.log(`  ${path.basename(config.OUTPUT_DIR_INSTAGRAM)}/`);
+  console.log(`  ${path.basename(config.OUTPUT_DIR_FACEBOOK)}/`);
 })();
