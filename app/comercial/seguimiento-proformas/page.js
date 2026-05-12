@@ -988,11 +988,21 @@ export default function SeguimientoProformas() {
     return [...new Set(filas.map(f => f.vendedor).filter(Boolean))].sort();
   }, [filas]);
 
+  // Normaliza fecha a "YYYY-MM-DD" para comparar contra value de <input type="date">.
+  // Soporta strings ISO ("2026-05-11", "2026-05-11T00:00:00.000Z"), Date objects, o null.
+  const fechaISO = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v.slice(0, 10);
+    try { return new Date(v).toISOString().slice(0, 10); } catch { return ''; }
+  };
+
   // Filtros aplicados sobre Abiertas
   const filasAbiertasFiltradas = useMemo(() => {
     if (!filasAbiertas) return null;
     const profQ = String(filtros.proforma || '').trim();
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
+    const desde = String(filtros.fechaDesde || '').trim();
+    const hasta = String(filtros.fechaHasta || '').trim();
     let arr = filasAbiertas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
       if (filtros.tier && f.tier_nombre !== filtros.tier) return false;
@@ -1000,8 +1010,12 @@ export default function SeguimientoProformas() {
         const m = N(f.margen_pct);
         if (m < filtros.margenMin) return false;
       }
-      if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
-      if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
+      if (desde || hasta) {
+        const fISO = fechaISO(f.fecha);
+        if (!fISO) return false;
+        if (desde && fISO < desde) return false;
+        if (hasta && fISO > hasta) return false;
+      }
       if (profQ && !String(f.proforma).includes(profQ)) return false;
       if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
       return true;
@@ -1019,10 +1033,16 @@ export default function SeguimientoProformas() {
     if (!filasGanadas) return null;
     const profQ = String(filtros.proforma || '').trim();
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
+    const desde = String(filtros.fechaDesde || '').trim();
+    const hasta = String(filtros.fechaHasta || '').trim();
     let arr = filasGanadas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
-      if (filtros.fechaDesde && (!f.fecha || f.fecha < filtros.fechaDesde)) return false;
-      if (filtros.fechaHasta && (!f.fecha || f.fecha > filtros.fechaHasta)) return false;
+      if (desde || hasta) {
+        const fISO = fechaISO(f.fecha);
+        if (!fISO) return false;
+        if (desde && fISO < desde) return false;
+        if (hasta && fISO > hasta) return false;
+      }
       if (profQ && !String(f.proforma).includes(profQ)) return false;
       if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) return false;
       return true;
@@ -1030,6 +1050,18 @@ export default function SeguimientoProformas() {
     arr = [...arr].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     return arr;
   }, [filasGanadas, filtros]);
+
+  const hayFiltrosActivos = !!(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente);
+
+  const limpiarFiltros = () => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' });
+
+  // Resalta visualmente los inputs cuando tienen valor (feedback de que el filtro está activo)
+  const inputFiltro = (activo) => activo
+    ? { ...S.input, borderColor: C.gold, background: 'rgba(212,175,55,0.10)', boxShadow: '0 0 0 2px rgba(212,175,55,0.18)' }
+    : S.input;
+  const selectFiltro = (activo) => activo
+    ? { ...S.select, width: '100%', borderColor: C.gold, background: 'rgba(212,175,55,0.10)', boxShadow: '0 0 0 2px rgba(212,175,55,0.18)' }
+    : { ...S.select, width: '100%' };
 
   // KPIs (sobre filasAbiertasFiltradas)
   const kpis = useMemo(() => {
@@ -1104,7 +1136,7 @@ export default function SeguimientoProformas() {
           {/* Filtros */}
           <div style={{
             background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
-            borderRadius: 14, padding: 14, marginBottom: 18,
+            borderRadius: 14, padding: 14, marginBottom: 10,
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 14,
@@ -1112,7 +1144,7 @@ export default function SeguimientoProformas() {
             <div>
               <label style={S.label}>Vendedor</label>
               <select value={filtros.vendedor} onChange={e => setFiltros({ ...filtros, vendedor: e.target.value })}
-                style={{ ...S.select, width: '100%' }}>
+                style={selectFiltro(!!filtros.vendedor)}>
                 <option value="">Todos</option>
                 {vendedoresUnicos.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
@@ -1120,7 +1152,7 @@ export default function SeguimientoProformas() {
             <div>
               <label style={S.label}>Tier</label>
               <select value={filtros.tier} onChange={e => setFiltros({ ...filtros, tier: e.target.value })}
-                style={{ ...S.select, width: '100%' }}>
+                style={selectFiltro(!!filtros.tier)}>
                 <option value="">Todos</option>
                 <option value="Plata">Plata</option>
                 <option value="Oro">Oro</option>
@@ -1131,27 +1163,27 @@ export default function SeguimientoProformas() {
               <label style={S.label}>Fecha desde</label>
               <input type="date" value={filtros.fechaDesde}
                 onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
-                style={S.input} />
+                style={inputFiltro(!!filtros.fechaDesde)} />
             </div>
             <div>
               <label style={S.label}>Fecha hasta</label>
               <input type="date" value={filtros.fechaHasta}
                 onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
-                style={S.input} />
+                style={inputFiltro(!!filtros.fechaHasta)} />
             </div>
             <div>
               <label style={S.label}># Proforma</label>
               <input type="text" inputMode="numeric" value={filtros.proforma}
                 onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
                 placeholder="Ej: 136248"
-                style={S.input} />
+                style={inputFiltro(!!filtros.proforma)} />
             </div>
             <div>
               <label style={S.label}>Cliente</label>
               <input type="text" value={filtros.cliente}
                 onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
                 placeholder="Buscar por nombre..."
-                style={S.input} />
+                style={inputFiltro(!!filtros.cliente)} />
             </div>
             {esAdmin && (
               <div>
@@ -1162,11 +1194,20 @@ export default function SeguimientoProformas() {
                   style={{ width: '100%' }} />
               </div>
             )}
-            {(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente) && (
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button onClick={() => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' })}
-                  style={S.btnGhost}>Limpiar filtros</button>
-              </div>
+          </div>
+
+          {/* Contador de resultados + botón limpiar (siempre visible cuando hay filtros) */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10, flexWrap: 'wrap', marginBottom: 14, padding: '0 4px',
+          }}>
+            <div style={{ fontSize: '0.85rem', color: C.muted, fontWeight: 600 }}>
+              {filasAbiertasFiltradas
+                ? <>Mostrando <strong style={{ color: hayFiltrosActivos ? C.gold : C.text }}>{filasAbiertasFiltradas.length.toLocaleString('es-CR')}</strong> de {(filasAbiertas || []).length.toLocaleString('es-CR')} proformas</>
+                : 'Cargando…'}
+            </div>
+            {hayFiltrosActivos && (
+              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
             )}
           </div>
 
@@ -1184,7 +1225,7 @@ export default function SeguimientoProformas() {
         <div>
           <div style={{
             background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
-            borderRadius: 14, padding: 14, marginBottom: 18,
+            borderRadius: 14, padding: 14, marginBottom: 10,
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 14,
@@ -1192,7 +1233,7 @@ export default function SeguimientoProformas() {
             <div>
               <label style={S.label}>Vendedor</label>
               <select value={filtros.vendedor} onChange={e => setFiltros({ ...filtros, vendedor: e.target.value })}
-                style={{ ...S.select, width: '100%' }}>
+                style={selectFiltro(!!filtros.vendedor)}>
                 <option value="">Todos</option>
                 {vendedoresUnicos.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
@@ -1201,33 +1242,40 @@ export default function SeguimientoProformas() {
               <label style={S.label}>Fecha desde</label>
               <input type="date" value={filtros.fechaDesde}
                 onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
-                style={S.input} />
+                style={inputFiltro(!!filtros.fechaDesde)} />
             </div>
             <div>
               <label style={S.label}>Fecha hasta</label>
               <input type="date" value={filtros.fechaHasta}
                 onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
-                style={S.input} />
+                style={inputFiltro(!!filtros.fechaHasta)} />
             </div>
             <div>
               <label style={S.label}># Proforma</label>
               <input type="text" inputMode="numeric" value={filtros.proforma}
                 onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
                 placeholder="Ej: 136248"
-                style={S.input} />
+                style={inputFiltro(!!filtros.proforma)} />
             </div>
             <div>
               <label style={S.label}>Cliente</label>
               <input type="text" value={filtros.cliente}
                 onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
                 placeholder="Buscar por nombre..."
-                style={S.input} />
+                style={inputFiltro(!!filtros.cliente)} />
             </div>
-            {(filtros.vendedor || filtros.fechaDesde || filtros.fechaHasta || filtros.proforma || filtros.cliente) && (
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button onClick={() => setFiltros({ ...filtros, vendedor: '', fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' })}
-                  style={S.btnGhost}>Limpiar filtros</button>
-              </div>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10, flexWrap: 'wrap', marginBottom: 14, padding: '0 4px',
+          }}>
+            <div style={{ fontSize: '0.85rem', color: C.muted, fontWeight: 600 }}>
+              {filasGanadasFiltradas
+                ? <>Mostrando <strong style={{ color: hayFiltrosActivos ? C.gold : C.text }}>{filasGanadasFiltradas.length.toLocaleString('es-CR')}</strong> de {(filasGanadas || []).length.toLocaleString('es-CR')} ganadas</>
+                : 'Cargando…'}
+            </div>
+            {hayFiltrosActivos && (
+              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
             )}
           </div>
           <TablaProformas
