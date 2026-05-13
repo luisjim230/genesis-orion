@@ -50,7 +50,7 @@ function unix(fecha) {
   const porSource = {};
 
   while (true) {
-    const url = `/api/v4/leads?limit=250&page=${pagina}&with=contacts&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
+    const url = `/api/v4/leads?limit=250&page=${pagina}&with=contacts,source_id&filter[created_at][from]=${desdeUnix}&filter[created_at][to]=${hastaUnix}`;
     const resp = await api.get(url).catch(() => null);
     if (!resp) {
       await new Promise((r) => setTimeout(r, 3000));
