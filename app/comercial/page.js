@@ -226,17 +226,16 @@ function calcEficiencia(cumplMeta, cumplUtil, convCotiz, cumplSeg, partLlamadas)
 }
 
 function calcAllKpis(auto, manual, metaBase, numVendedores, ncMonto = 0) {
-  const ventasMes = N(auto?.ventas_mes);
+  const ventasMes = N(auto?.ventas_mes); // ya viene neto (ventas_sin_imp - notas_sin_imp del informe NEO)
   // Meta manual sobreescribe la histórica si existe
   const metaManual = N(manual?.meta_manual);
   const mb = metaManual > 0 ? metaManual : N(metaBase);
   const meta5 = mb * 1.05;
   const meta10 = mb * 1.10;
   const cumplMetaBase = mb > 0 ? ventasMes / mb : 0;
-  // Comisión sobre ventas netas
+  // Comisión sobre ventas netas (las NC ya están descontadas en ventasMes)
   const pctComision = N(manual?.pct_comision);
-  const ventasNetas = ventasMes - N(ncMonto);
-  const comision = pctComision > 0 ? ventasNetas * (pctComision / 100) : 0;
+  const comision = pctComision > 0 ? ventasMes * (pctComision / 100) : 0;
   const cumplMeta5 = meta5 > 0 ? ventasMes / meta5 : 0;
   const cumplMeta10 = meta10 > 0 ? ventasMes / meta10 : 0;
   const utilPct = N(auto?.utilidad_pct);
@@ -265,7 +264,7 @@ function calcAllKpis(auto, manual, metaBase, numVendedores, ncMonto = 0) {
     cotiz, ventasCotiz, convCotiz,
     segProg, segReal, cumplSeg,
     errores, puntaje, efiFinal, nota,
-    pctComision, comision, ventasNetas,
+    pctComision, comision,
     facturas: N(auto?.facturas_count),
     costoTotal: N(auto?.costo_total),
   };
@@ -738,13 +737,17 @@ export default function ComercialV2() {
     const baseData = informeData.length > 0
       ? informeData.map(r => ({
           vendedor:     r.vendedor,
-          ventas_mes:   N(r.ventas_netas),
+          ventas_mes:   N(r.ventas_netas), // ya neto (sin NC)
           utilidad_pct: N(r.pct_utilidad),
           utilidad_colones: N(r.utilidad),
           nc_monto:     N(r.notas_totales),
           nc_facturas:  0,
         }))
-      : ventasData;
+      : ventasData.map(r => ({
+          ...r,
+          // Fallback items facturados: subtotal es bruto, hay que restar NC para homologar con el informe
+          ventas_mes: Math.max(0, N(r.ventas_mes) - N(r.nc_monto)),
+        }));
 
     const numVendedoresCalc = vendedoresActivos && vendedoresActivos > 0 ? vendedoresActivos : baseData.length;
     const rows = baseData.map(v => {
