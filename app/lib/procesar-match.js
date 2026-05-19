@@ -55,9 +55,10 @@ export async function ejecutarMatch() {
       const fRecep = parseFecha(item.fecha_recepcion)
       const fOrden = parseFecha(fechaOrdenRaw)
       if (!fRecep || !fOrden) continue
-      const fRecepDia = new Date(fRecep); fRecepDia.setUTCHours(0, 0, 0, 0)
-      const fOrdenDia = new Date(fOrden); fOrdenDia.setUTCHours(0, 0, 0, 0)
-      if (fRecepDia < fOrdenDia) {
+      // Revertir si la "recepción" de NEO es anterior al timestamp real de la OC
+      // (típicamente la entrada de NEO del mismo día está a las 00:00 — antes de
+      // la OC que se hizo más tarde — y NO es una recepción real, es el upload).
+      if (fRecep < fOrden) {
         aRevertir.push({ id: item.id, cantidad_recibida: 0, estado_item: 'pendiente', fecha_recepcion: null })
         revertidos++
       }
@@ -135,11 +136,14 @@ export async function ejecutarMatch() {
     for (const item of itemsPorCodigo[cod]) {
       const fechaOrden = parseFecha(fechaOrdenMap[item.orden_id])
       if (!fechaOrden) { res.ignorados_por_fecha++; continue }
-      const fechaOrdenDia = new Date(fechaOrden); fechaOrdenDia.setUTCHours(0, 0, 0, 0)
       const cantOrdenada = parseFloat(item.cantidad_ordenada) || 0
       let cantRecibida = 0, fechaRecep = null
       for (const disp of disponibles) {
-        if (disp.fecha < fechaOrdenDia) continue
+        // Comparar con el timestamp completo de la OC: si NEO registró la
+        // compra antes del momento real de la OC, no puede ser su recepción
+        // (es típicamente el upload de la OC a NEO, que NEO registra como
+        // compra del mismo día a las 00:00).
+        if (disp.fecha < fechaOrden) continue
         if (disp.restante <= 0) continue
         if (cantRecibida >= cantOrdenada) break
         const consumir = Math.min(disp.restante, cantOrdenada - cantRecibida)
