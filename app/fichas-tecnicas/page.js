@@ -7,7 +7,8 @@ const CATS_DEFAULT = ['Panel Sandwich','Gypsum','PVC','Ferretería','Pintura','E
 
 export default function FichasTecnicas() {
   const { perfil } = useAuth()
-  const isAdmin = perfil?.rol === 'admin'
+  const USUARIOS_EXTRA = ['tony']
+  const isAdmin = perfil?.rol === 'admin' || USUARIOS_EXTRA.includes(perfil?.username)
   const [fichas, setFichas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState('Todos')
