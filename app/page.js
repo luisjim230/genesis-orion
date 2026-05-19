@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
 
@@ -63,13 +64,17 @@ function prevMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function KpiCard({ icon, label, value, sub, color, loading }) {
-  return (
+function KpiCard({ icon, label, value, sub, color, loading, href }) {
+  const inner = (
     <div style={{
       ...GLASS.card,
       padding: '18px 20px', display: 'flex', alignItems: 'flex-start', gap: 14,
       transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-    }}>
+      cursor: href ? 'pointer' : 'default',
+    }}
+      onMouseEnter={href ? (e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)' } : undefined}
+      onMouseLeave={href ? (e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)' } : undefined}
+    >
       <div style={{
         width: 42, height: 42, borderRadius: 12, flexShrink: 0,
         background: `linear-gradient(135deg, ${color}25, ${color}10)`,
@@ -86,6 +91,8 @@ function KpiCard({ icon, label, value, sub, color, loading }) {
       </div>
     </div>
   )
+  if (!href) return inner
+  return <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>{inner}</Link>
 }
 
 function SectionTitle({ children }) {
@@ -411,13 +418,13 @@ export default function DashboardPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
-        <KpiCard icon="🚢" label="Contenedores"   value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"   color="#0284c7" loading={loading} />
+        <KpiCard icon="🚢" label="Contenedores"   value={kpis.contenedoresActivos ?? '—'} sub="en tránsito activos"   color="#0284c7" loading={loading} href="/contenedores" />
         <KpiCard icon="✨" label="Tareas"
           value={(kpis.tareasPendientes ?? 0) + recurrentesHoy.length}
           sub={`${kpis.tareasPendientes ?? 0} activas · ${recurrentesHoy.length} recurrentes hoy`}
-          color="#7c3aed" loading={loading} />
-        <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} />
-        <KpiCard icon="📥" label="Por cobrar"     value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"    color="#0d9488" loading={loading} />
+          color="#7c3aed" loading={loading} href="/tareas" />
+        <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} href="/pagos" />
+        <KpiCard icon="📥" label="Por cobrar"     value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"    color="#0d9488" loading={loading} href="/finanzas" />
         <KpiCard
           icon={posPositiva ? '🟢' : '🔴'}
           label="Posición neta"
@@ -425,6 +432,7 @@ export default function DashboardPage() {
           sub={posPositiva ? 'Flujo positivo' : 'Revisar pagos'}
           color={posPositiva ? '#059669' : '#f43f5e'}
           loading={loading}
+          href="/finanzas"
         />
         <KpiCard
           icon="🏦"
@@ -433,6 +441,7 @@ export default function DashboardPage() {
           sub="saldo total colones"
           color="#5E2733"
           loading={loading}
+          href="/finanzas/bancos"
         />
         <KpiCard
           icon="💵"
@@ -441,6 +450,7 @@ export default function DashboardPage() {
           sub="saldo total dolares"
           color="#5E2733"
           loading={loading}
+          href="/finanzas/bancos"
         />
         <KpiCard
           icon="📦"
@@ -449,6 +459,7 @@ export default function DashboardPage() {
           sub="comprometido en transito"
           color="#0284c7"
           loading={loading}
+          href="/contenedores"
         />
         <KpiCard
           icon="⏳"
@@ -457,6 +468,7 @@ export default function DashboardPage() {
           sub="pendiente de pago"
           color="#f59e0b"
           loading={loading}
+          href="/pagos"
         />
         <KpiCard
           icon="📈"
@@ -465,6 +477,7 @@ export default function DashboardPage() {
           sub={`Utilidad: ${fmt_crc(kpis.utilidadMes)}`}
           color="#38A169"
           loading={loading}
+          href="/comercial"
         />
         <KpiCard
           icon="📅"
@@ -473,6 +486,7 @@ export default function DashboardPage() {
           sub={`Utilidad: ${fmt_crc(kpis.utilidadAnterior)}`}
           color="#718096"
           loading={loading}
+          href="/comercial"
         />
         <KpiCard
           icon="🏪"
@@ -481,6 +495,7 @@ export default function DashboardPage() {
           sub="a costo · solo existencias +"
           color="#8B5E3C"
           loading={loading}
+          href="/inventario"
         />
       </div>
 
