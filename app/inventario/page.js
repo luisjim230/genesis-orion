@@ -263,7 +263,28 @@ export default function Inventario() {
       listaLatest = listaRows.filter(r => r.fecha_carga === maxFechaL);
     }
 
-    // ── 3. Merge: base = catálogo completo, suplementar con min/max ──
+    // ── 3. Cargar promedio mensual de ventas (últimos 6 meses) ──
+    // Cubre items sin min/max para los que NEO no tiene promedio_mensual calculado.
+    try { await supabase.rpc('refresh_mv_consumo_mensual'); } catch(_) {}
+    const consumoByCod = {};
+    {
+      let offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('mv_consumo_mensual')
+          .select('codigo, promedio_mensual')
+          .range(offset, offset + BATCH - 1);
+        if (error || !data?.length) break;
+        for (const r of data) {
+          const key = (r.codigo || '').toString().trim().toUpperCase();
+          if (key) consumoByCod[key] = parseFloat(r.promedio_mensual) || 0;
+        }
+        if (data.length < BATCH) break;
+        offset += BATCH;
+      }
+    }
+
+    // ── 4. Merge: base = catálogo completo, suplementar con min/max y consumo real ──
     const fechaCargaMinmax = minmaxLatest[0]?.fecha_carga || null;
     const seen = new Set();
     let todos = [];
@@ -274,13 +295,15 @@ export default function Inventario() {
       if (seen.has(key)) continue;
       seen.add(key);
       const mm = minmaxByCod[key];
+      const promMinmax = parseFloat(mm?.promedio_mensual) || 0;
+      const promReal = consumoByCod[key] || 0;
       todos.push({
         codigo: codRaw,
         nombre: mm?.nombre || li.item || '',
         existencias: mm?.existencias ?? li.existencias ?? 0,
         minimo: mm?.minimo ?? 0,
         maximo: mm?.maximo ?? 0,
-        promedio_mensual: mm?.promedio_mensual ?? 0,
+        promedio_mensual: promMinmax > 0 ? promMinmax : promReal,
         ultimo_proveedor: mm?.ultimo_proveedor || (li.proveedor || '').trim() || null,
         ultimo_costo: mm?.ultimo_costo ?? li.costo_sin_imp ?? 0,
         activo: mm?.activo ?? li.activo,

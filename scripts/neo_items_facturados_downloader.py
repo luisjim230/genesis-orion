@@ -327,6 +327,12 @@ def subir_a_supabase(excel_path):
                                    prefer="return=minimal")
     if refresh_status and refresh_status < 300:
         log.info("  ↻ vista materializada refrescada")
+
+    # Refrescar promedio mensual de ventas (últimos 6m) usado por Compras.
+    refresh_consumo = supa_request("POST", "rpc/refresh_mv_consumo_mensual", {},
+                                    prefer="return=minimal")
+    if refresh_consumo and refresh_consumo < 300:
+        log.info("  ↻ mv_consumo_mensual refrescada")
     else:
         log.warning(f"  ⚠ refresh de vista materializada falló (status={refresh_status})")
 
