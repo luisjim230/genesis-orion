@@ -212,30 +212,88 @@ export default function Inventario() {
     try { await fetch('/api/procesar-match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch(_) {}
     // Fetch paginado directo a la tabla (el RPC no respeta .range())
     const BATCH = 1000;
-    let todos = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('neo_minimos_maximos')
-        .select('codigo, nombre, existencias, minimo, maximo, promedio_mensual, ultimo_proveedor, ultimo_costo, activo, categoria, fecha_carga')
-        .range(offset, offset + BATCH - 1);
-      if (error || !data?.length) break;
-      todos = [...todos, ...data];
-      if (data.length < BATCH) break;
-      offset += BATCH;
+
+    // ── 1. Cargar min/max (sólo los items que NEO tiene bajo control) ──
+    let minmaxRows = [];
+    {
+      let offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('neo_minimos_maximos')
+          .select('codigo, nombre, existencias, minimo, maximo, promedio_mensual, ultimo_proveedor, ultimo_costo, activo, categoria, fecha_carga')
+          .range(offset, offset + BATCH - 1);
+        if (error || !data?.length) break;
+        minmaxRows = [...minmaxRows, ...data];
+        if (data.length < BATCH) break;
+        offset += BATCH;
+      }
     }
-    // Filtrar solo el snapshot más reciente
-    if (todos.length) {
-      const maxFecha = todos.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
-      todos = todos.filter(r => r.fecha_carga === maxFecha);
-      // Deduplicar por código — evita que un código importado dos veces aparezca doble
-      const seen = new Set();
-      todos = todos.filter(r => {
-        const key = (r.codigo || '').trim().toUpperCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
+    // Quedarse con snapshot más reciente
+    let minmaxLatest = [];
+    if (minmaxRows.length) {
+      const maxFecha = minmaxRows.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
+      minmaxLatest = minmaxRows.filter(r => r.fecha_carga === maxFecha);
+    }
+    const minmaxByCod = {};
+    for (const r of minmaxLatest) {
+      const key = (r.codigo || '').trim().toUpperCase();
+      if (!key || minmaxByCod[key]) continue;
+      minmaxByCod[key] = r;
+    }
+
+    // ── 2. Cargar catálogo completo (incluye items sin min/max) ──
+    let listaRows = [];
+    {
+      let offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('neo_lista_items')
+          .select('codigo_interno, item, categoria, proveedor, existencias, costo_sin_imp, activo, fecha_carga')
+          .eq('activo', 'Sí')
+          .range(offset, offset + BATCH - 1);
+        if (error || !data?.length) break;
+        listaRows = [...listaRows, ...data];
+        if (data.length < BATCH) break;
+        offset += BATCH;
+      }
+    }
+    let listaLatest = [];
+    if (listaRows.length) {
+      const maxFechaL = listaRows.reduce((max, r) => r.fecha_carga > max ? r.fecha_carga : max, '');
+      listaLatest = listaRows.filter(r => r.fecha_carga === maxFechaL);
+    }
+
+    // ── 3. Merge: base = catálogo completo, suplementar con min/max ──
+    const fechaCargaMinmax = minmaxLatest[0]?.fecha_carga || null;
+    const seen = new Set();
+    let todos = [];
+    for (const li of listaLatest) {
+      const codRaw = (li.codigo_interno || '').toString().trim();
+      if (!codRaw) continue;
+      const key = codRaw.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const mm = minmaxByCod[key];
+      todos.push({
+        codigo: codRaw,
+        nombre: mm?.nombre || li.item || '',
+        existencias: mm?.existencias ?? li.existencias ?? 0,
+        minimo: mm?.minimo ?? 0,
+        maximo: mm?.maximo ?? 0,
+        promedio_mensual: mm?.promedio_mensual ?? 0,
+        ultimo_proveedor: mm?.ultimo_proveedor || (li.proveedor || '').trim() || null,
+        ultimo_costo: mm?.ultimo_costo ?? li.costo_sin_imp ?? 0,
+        activo: mm?.activo ?? li.activo,
+        categoria: mm?.categoria || li.categoria || null,
+        fecha_carga: fechaCargaMinmax || li.fecha_carga,
       });
+    }
+    // Items con min/max pero que no están en catálogo activo (raro): sumarlos igual
+    for (const mm of minmaxLatest) {
+      const key = (mm.codigo || '').trim().toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      todos.push(mm);
     }
     if (!todos?.length) { setLoading(false); return; }
     setFechaCarga(todos[0]?.fecha_carga);
