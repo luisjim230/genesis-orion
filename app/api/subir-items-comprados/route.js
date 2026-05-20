@@ -151,7 +151,32 @@ export async function POST(request) {
       match = { error: e.message };
     }
 
-    return NextResponse.json({ ok: true, total, periodo, esNuevoPeriodo, fecha_carga: fechaCarga, match });
+    // Refrescar todas las vistas derivadas: sin esto los módulos siguen
+    // mostrando datos viejos hasta el cron diario.
+    let refreshOk = false;
+    let refreshDetalle = null;
+    try {
+      const db = getDb();
+      const tareas = [
+        db.rpc('refresh_profecias_panel'),
+        db.rpc('refresh_mv_consumo_mensual'),
+        db.rpc('refresh_mv_items_por_vend_mes'),
+        db.rpc('bi_recalcular_resumen'),
+      ];
+      const res = await Promise.allSettled(tareas);
+      const fallidas = res.filter(r => r.status === 'rejected' || r.value?.error);
+      refreshOk = fallidas.length === 0;
+      refreshDetalle = res.map((r, i) => ({
+        rpc: ['refresh_profecias_panel','refresh_mv_consumo_mensual','refresh_mv_items_por_vend_mes','bi_recalcular_resumen'][i],
+        ok: r.status === 'fulfilled' && !r.value?.error,
+        error: r.status === 'rejected' ? r.reason?.message : r.value?.error?.message || null,
+      }));
+      if (!refreshOk) console.warn('[subir-items-comprados] algunos refresh fallaron:', refreshDetalle);
+    } catch (e) {
+      console.warn('[subir-items-comprados] refresh excepción:', e.message);
+    }
+
+    return NextResponse.json({ ok: true, total, periodo, esNuevoPeriodo, fecha_carga: fechaCarga, match, vistas_refrescadas: refreshOk, refresh_detalle: refreshDetalle });
   } catch (e) {
     console.error('[API subir-items-comprados] Error:', e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });

@@ -99,10 +99,15 @@ function ProfeciasInner() {
     setRefrescando(true);
     setRefreshMsg(null);
     try {
-      const r = await fetch('/api/profecias/refresh', { method: 'POST' });
+      const r = await fetch('/api/refresh-all', { method: 'POST' });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || 'Error');
-      setRefreshMsg(`Recalculado en ${(j.ms / 1000).toFixed(1)}s.`);
+      if (!r.ok) throw new Error(j.error || 'Error');
+      const fallidas = (j.detalle || []).filter(d => !d.ok).map(d => d.rpc);
+      if (fallidas.length) {
+        setRefreshMsg(`Recalculado en ${(j.ms / 1000).toFixed(1)}s. Fallaron: ${fallidas.join(', ')}`);
+      } else {
+        setRefreshMsg(`Recalculado en ${(j.ms / 1000).toFixed(1)}s (${j.exitosas}/${j.total} vistas).`);
+      }
       await cargar();
     } catch (e) {
       setRefreshMsg('Error: ' + e.message);

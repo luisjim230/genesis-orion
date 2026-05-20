@@ -108,15 +108,29 @@ export async function POST(request) {
       total += batch.length;
     }
 
-    // Refrescar profecias_panel: sin esto el módulo Profecías sigue mostrando
-    // las existencias viejas hasta el cron de las 5am.
+    // Refrescar todas las vistas derivadas: sin esto los módulos siguen
+    // mostrando datos viejos hasta el cron diario.
     let refreshOk = false;
+    let refreshDetalle = null;
     try {
-      const { error: rErr } = await getDb().rpc('refresh_profecias_panel');
-      refreshOk = !rErr;
-      if (rErr) console.warn('[subir-inventario] refresh_profecias_panel falló:', rErr.message);
+      const db = getDb();
+      const tareas = [
+        db.rpc('refresh_profecias_panel'),
+        db.rpc('refresh_mv_consumo_mensual'),
+        db.rpc('refresh_mv_items_por_vend_mes'),
+        db.rpc('bi_recalcular_resumen'),
+      ];
+      const res = await Promise.allSettled(tareas);
+      const fallidas = res.filter(r => r.status === 'rejected' || r.value?.error);
+      refreshOk = fallidas.length === 0;
+      refreshDetalle = res.map((r, i) => ({
+        rpc: ['refresh_profecias_panel','refresh_mv_consumo_mensual','refresh_mv_items_por_vend_mes','bi_recalcular_resumen'][i],
+        ok: r.status === 'fulfilled' && !r.value?.error,
+        error: r.status === 'rejected' ? r.reason?.message : r.value?.error?.message || null,
+      }));
+      if (!refreshOk) console.warn('[subir-inventario] algunos refresh fallaron:', refreshDetalle);
     } catch (e) {
-      console.warn('[subir-inventario] refresh_profecias_panel excepción:', e.message);
+      console.warn('[subir-inventario] refresh excepción:', e.message);
     }
 
     return NextResponse.json({
@@ -125,7 +139,8 @@ export async function POST(request) {
       con_proveedor: conProv,
       sin_proveedor: records.length - conProv,
       fecha_carga: fechaCarga,
-      profecias_refrescada: refreshOk,
+      vistas_refrescadas: refreshOk,
+      refresh_detalle: refreshDetalle,
     });
 
   } catch (e) {
