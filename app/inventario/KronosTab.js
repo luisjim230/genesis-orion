@@ -151,35 +151,41 @@ export default function KronosTab({ calc, transitoMap }) {
   async function cargarConsumoHistorico() {
     setCargandoHistorial(true);
     try {
+      // Ventana fija de 6 meses, igual que mv_consumo_mensual.
+      // El bug viejo dividía las unidades totales entre los meses CON ventas
+      // (ej: 60 unidades vendidas en 2 de 6 meses → 30/mes en vez de 10/mes),
+      // inflando el consumo y disparando falsos rojos.
+      const VENTANA_MESES = 6;
+      const desde = new Date();
+      desde.setMonth(desde.getMonth() - VENTANA_MESES);
+      const cutoff = desde.toISOString().slice(0, 10);
+
       const { data: ps } = await supabase
         .from('neo_items_facturados')
         .select('periodo_reporte')
         .not('periodo_reporte', 'is', null)
+        .gte('fecha', cutoff)
         .limit(1000);
       const periodosUnicos = [...new Set((ps || []).map(r => r.periodo_reporte))].sort();
       setPeriodos(periodosUnicos);
 
-      if (!periodosUnicos.length) { setCargandoHistorial(false); return; }
-
       let offset = 0;
       const BATCH = 1000;
       const acum = {};
-      const precios = {};
 
       while (true) {
         const { data, error } = await supabase
           .from('neo_items_facturados')
           .select('codigo_interno,cantidad_facturada,cantidad_devuelta,fecha,precio_unitario,costo_unitario')
+          .gte('fecha', cutoff)
           .range(offset, offset + BATCH - 1);
         if (error || !data || !data.length) break;
         data.forEach(r => {
           const cod = (r.codigo_interno || '').toString().trim();
           if (!cod) return;
           const qty = (parseFloat(r.cantidad_facturada) || 0) - (parseFloat(r.cantidad_devuelta) || 0);
-          const mes = r.fecha ? r.fecha.slice(0, 7) : null;
-          if (!acum[cod]) acum[cod] = { totalUnidades: 0, meses: new Set(), precioSum: 0, costoSum: 0, cnt: 0 };
+          if (!acum[cod]) acum[cod] = { totalUnidades: 0, precioSum: 0, costoSum: 0, cnt: 0 };
           acum[cod].totalUnidades += qty;
-          if (mes) acum[cod].meses.add(mes);
           if (r.precio_unitario) { acum[cod].precioSum += parseFloat(r.precio_unitario) || 0; acum[cod].cnt++; }
           if (r.costo_unitario) acum[cod].costoSum += parseFloat(r.costo_unitario) || 0;
         });
@@ -190,7 +196,7 @@ export default function KronosTab({ calc, transitoMap }) {
       const consumo = {};
       const pMap = {};
       Object.entries(acum).forEach(([cod, v]) => {
-        consumo[cod] = v.totalUnidades / (v.meses.size || 1);
+        if (v.totalUnidades > 0) consumo[cod] = v.totalUnidades / VENTANA_MESES;
         if (v.cnt > 0) pMap[cod] = { precio: v.precioSum / v.cnt, costo: v.costoSum / v.cnt };
       });
       setConsumoHistorico(consumo);
