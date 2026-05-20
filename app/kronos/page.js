@@ -9,8 +9,6 @@ export default function KronosPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
   const [progreso, setProgreso] = useState(0);
-  const [sincronizando, setSincronizando] = useState(false);
-  const [syncMsg, setSyncMsg] = useState(null);
 
   async function cargarDatos() {
     setCargando(true);
@@ -58,49 +56,16 @@ export default function KronosPage() {
 
   useEffect(() => { cargarDatos(); }, []);
 
-  async function sincronizarTodo() {
-    setSincronizando(true);
-    setSyncMsg(null);
-    try {
-      const r = await fetch('/api/refresh-all', { method: 'POST' });
-      const j = await r.json();
-      const fallidas = (j.detalle || []).filter(d => !d.ok).map(d => d.rpc);
-      if (fallidas.length) setSyncMsg(`Sincronizado en ${(j.ms / 1000).toFixed(1)}s. Fallaron: ${fallidas.join(', ')}`);
-      else setSyncMsg(`Sincronizado en ${(j.ms / 1000).toFixed(1)}s (${j.exitosas}/${j.total} vistas).`);
-      await cargarDatos();
-    } catch (e) {
-      setSyncMsg('Error: ' + e.message);
-    } finally {
-      setSincronizando(false);
-      setTimeout(() => setSyncMsg(null), 6000);
-    }
-  }
-
   return (
     <div style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#2a3a50', margin: 0 }}>
-            📈 Proyección de inventario
-          </h1>
-          <p style={{ fontSize: '0.82rem', color: '#666', margin: '6px 0 0' }}>
-            Cobertura de stock por producto y fecha estimada de quiebre según lead time por proveedor.
-          </p>
-        </div>
-        <button
-          onClick={sincronizarTodo}
-          disabled={sincronizando || cargando}
-          style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--orange)', background: 'white', color: 'var(--orange)', fontWeight: 600, fontSize: '0.82rem', cursor: sincronizando ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}
-        >
-          {sincronizando ? '⏳ Sincronizando...' : '🔄 Sincronizar todo'}
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#2a3a50', margin: 0 }}>
+          📈 Proyección de inventario
+        </h1>
+        <p style={{ fontSize: '0.82rem', color: '#666', margin: '6px 0 0' }}>
+          Cobertura de stock por producto y fecha estimada de quiebre según lead time por proveedor.
+        </p>
       </div>
-
-      {syncMsg && (
-        <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: '#F0FFF4', border: '1px solid #9AE6B4', color: '#22543D', fontSize: '0.82rem' }}>
-          {syncMsg}
-        </div>
-      )}
 
       {cargando && (
         <div style={{ textAlign: 'center', padding: 60, color: '#666' }}>

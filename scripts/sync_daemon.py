@@ -157,6 +157,20 @@ def procesar_solicitud(req):
         except Exception as e:
             log.warning(f"  ⚠️ procesar-match falló (no crítico): {e}")
 
+    # Refrescar todas las vistas derivadas (profecias_panel, mv_consumo_mensual,
+    # mv_items_por_vend_mes, bi_resumen_producto) cuando un sync termina OK.
+    # Sin esto los módulos siguen mostrando datos viejos.
+    if status == "completed":
+        try:
+            url = f"{APP_URL}/api/refresh-all"
+            req_http = urllib.request.Request(url, data=b'{}', method="POST")
+            req_http.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req_http, timeout=300) as r:
+                body = r.read().decode()
+                log.info(f"  🔁 refresh-all: {body[:200]}")
+        except Exception as e:
+            log.warning(f"  ⚠️ refresh-all falló (no crítico): {e}")
+
 
 # ─── SCHEDULER INTEGRADO ──────────────────────────────────────────────────────
 # Todos los días a las 8:00 y 16:00. Reemplaza a los LaunchAgents individuales.
@@ -230,6 +244,17 @@ def check_schedule():
     for key in SCHEDULE_SCRIPTS:
         ejecutar_script(key)
     log.info("⏰ Sync programado completado")
+
+    # Refrescar todas las vistas derivadas tras el batch programado.
+    try:
+        url = f"{APP_URL}/api/refresh-all"
+        req_http = urllib.request.Request(url, data=b'{}', method="POST")
+        req_http.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req_http, timeout=300) as r:
+            body = r.read().decode()
+            log.info(f"⏰ refresh-all post-batch: {body[:200]}")
+    except Exception as e:
+        log.warning(f"⏰ refresh-all post-batch falló (no crítico): {e}")
 
 
 def main():
