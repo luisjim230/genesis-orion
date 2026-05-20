@@ -695,7 +695,11 @@ export default function Inventario() {
           <h1 className="module-title">🪐 Saturno – Inventario</h1>
           <p className="module-sub">El Análisis de Stock · Corporación Rojimo</p>
         </div>
-        <button className="btn-outline" onClick={() => { setDatos([]); setCalc([]); cargarDatos(); }}>🔄 Reiniciar</button>
+        <button className="btn-outline" onClick={async () => {
+          setDatos([]); setCalc([]);
+          try { await fetch('/api/refresh-all', { method: 'POST' }); } catch(_) {}
+          cargarDatos();
+        }}>🔄 Sincronizar todo</button>
       </div>
 
       {msg && <div className={msg.tipo === 'ok' ? 'success-banner' : 'error-banner'}>{msg.tipo === 'ok' ? '✅' : '❌'} {msg.t}</div>}

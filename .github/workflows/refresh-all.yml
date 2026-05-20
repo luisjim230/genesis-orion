@@ -1,0 +1,48 @@
+name: Refresh All Views
+
+on:
+  schedule:
+    # 5am Costa Rica = 11:00 UTC (después del sync diario de NEO en la Mac)
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh profecias_panel + mv_consumo_mensual + mv_items_por_vend_mes + bi_resumen_producto
+        run: |
+          set -e
+          SUPABASE_URL="https://xeeieqjqmtoiutfnltqu.supabase.co"
+          AUTH="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+          fallidas=0
+
+          refrescar() {
+            local rpc=$1
+            echo "→ $rpc"
+            local response=$(curl -sS --max-time 300 -w '\n%{http_code}' -X POST \
+              "$SUPABASE_URL/rest/v1/rpc/$rpc" \
+              -H "apikey: $AUTH" \
+              -H "Authorization: Bearer $AUTH" \
+              -H "Content-Type: application/json" \
+              -d '{}')
+            local body=$(echo "$response" | head -n -1)
+            local status=$(echo "$response" | tail -n 1)
+            echo "  HTTP $status  $body"
+            if [ "$status" != "200" ] && [ "$status" != "204" ]; then
+              echo "  ❌ $rpc falló"
+              fallidas=$((fallidas+1))
+            fi
+          }
+
+          refrescar refresh_profecias_panel
+          refrescar refresh_mv_consumo_mensual
+          refrescar refresh_mv_items_por_vend_mes
+          refrescar bi_recalcular_resumen
+
+          echo ""
+          if [ "$fallidas" -gt 0 ]; then
+            echo "Refresh terminó con $fallidas fallas"
+            exit 1
+          fi
+          echo "Todas las vistas refrescadas OK"
