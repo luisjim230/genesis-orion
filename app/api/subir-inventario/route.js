@@ -108,12 +108,24 @@ export async function POST(request) {
       total += batch.length;
     }
 
+    // Refrescar profecias_panel: sin esto el módulo Profecías sigue mostrando
+    // las existencias viejas hasta el cron de las 5am.
+    let refreshOk = false;
+    try {
+      const { error: rErr } = await getDb().rpc('refresh_profecias_panel');
+      refreshOk = !rErr;
+      if (rErr) console.warn('[subir-inventario] refresh_profecias_panel falló:', rErr.message);
+    } catch (e) {
+      console.warn('[subir-inventario] refresh_profecias_panel excepción:', e.message);
+    }
+
     return NextResponse.json({
       ok: true,
       total,
       con_proveedor: conProv,
       sin_proveedor: records.length - conProv,
       fecha_carga: fechaCarga,
+      profecias_refrescada: refreshOk,
     });
 
   } catch (e) {
