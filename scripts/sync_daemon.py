@@ -26,7 +26,7 @@ except ImportError:
 
 SUPA_URL = os.getenv("SUPABASE_URL",      "https://xeeieqjqmtoiutfnltqu.supabase.co")
 SUPA_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlZWllcWpxbXRvaXV0Zm5sdHF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MjA2NTMsImV4cCI6MjA4ODI5NjY1M30.SqYdotAkZOyMARsZb1XutfgYiH9Ig2qoHOD8j6oPy00")
-APP_URL  = os.getenv("APP_URL", "https://genesis-orion.vercel.app")
+APP_URL  = os.getenv("APP_URL", "https://sol.depositojimenez.com")
 
 PYTHON  = "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
 SCRIPTS = BASE
