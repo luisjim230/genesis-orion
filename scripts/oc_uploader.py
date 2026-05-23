@@ -239,22 +239,47 @@ async def verificar_empresa(page):
         log.warning(f"verificar_empresa: {e} — continuando igual")
 
 async def navegar_nueva_oc(page):
-    """Navega a Proveeduría → Órdenes de compra → Nueva."""
+    """Navega a Proveeduría → Órdenes de compra → Nueva.
+
+    NEO es un ASP.NET legacy con polling AJAX constante: wait_for_load_state
+    ("networkidle") a veces nunca se asienta y tira "Timeout 30000ms exceeded".
+    Como este paso corre antes de tocar nada en NEO, un flake acá congelaba la
+    OC tras 3 intentos (obtener_pendientes filtra intentos<3) sin que se haya
+    escrito nada. Por eso: navegamos con domcontentloaded (confiable), esperamos
+    el botón +Nuevo de forma explícita, y reintentamos la navegación ante un flake.
+    """
     tok = get_token(page.url)
     base = get_neo_base(page.url)
     url_oc = f"{base}/NEOBusiness/{tok}/Paginas/Modulos/Proveeduria/OrdenCompraPA.aspx?IdOpcion=105027&IdEntidad=0"
     log.info(f"Navegando a OC: {url_oc}")
-    await page.goto(url_oc)
-    await page.wait_for_load_state("networkidle")
-    await page.wait_for_timeout(1500)
 
-    # Hacer clic en +Nuevo
-    nuevo = page.locator("input[value='Nuevo'], a:has-text('Nuevo'), button:has-text('Nuevo'), input[value='+Nuevo']")
-    await nuevo.first.wait_for(state="visible", timeout=10000)
-    await nuevo.first.click()
-    await page.wait_for_load_state("networkidle")
-    await page.wait_for_timeout(1500)
-    log.info("Pantalla 'Registrar Orden de Compra' abierta")
+    nuevo_sel = "input[value='Nuevo'], a:has-text('Nuevo'), button:has-text('Nuevo'), input[value='+Nuevo']"
+    ultimo_error = None
+    for intento in range(3):
+        try:
+            await page.goto(url_oc, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(1500)
+
+            # Hacer clic en +Nuevo
+            nuevo = page.locator(nuevo_sel)
+            await nuevo.first.wait_for(state="visible", timeout=15000)
+            await nuevo.first.click()
+            await page.wait_for_timeout(1500)
+            # El networkidle post-clic es best-effort: si el polling de NEO no
+            # se asienta, seguimos igual (el siguiente paso espera sus propios
+            # elementos con wait_for(visible)).
+            try:
+                await page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+            await page.wait_for_timeout(1000)
+            log.info("Pantalla 'Registrar Orden de Compra' abierta")
+            return
+        except Exception as e:
+            ultimo_error = e
+            log.warning(f"  Navegación a Nueva OC falló (intento {intento+1}/3): {e} — reintentando")
+            await page.wait_for_timeout(2000)
+    raise ultimo_error
 
 async def buscar_y_seleccionar_proveedor(page, nombre_proveedor):
     """
