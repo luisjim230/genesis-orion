@@ -439,7 +439,9 @@ async def main():
             log.info("Descargando Excel...")
             dest = DOWNLOAD_DIR / f"minimos_maximos_{date.today().strftime('%Y%m%d_%H%M')}.xlsx"
 
-            async with page.expect_download(timeout=60000) as dl_info:
+            # NEO tarda en generar el Excel de este reporte (el más pesado);
+            # con 60s se quedaba corto cuando NEO va lento. 180s da margen.
+            async with page.expect_download(timeout=180000) as dl_info:
                 await iframe.get_by_role("cell", name="Exportar", exact=True).click()
 
             dl = await dl_info.value
