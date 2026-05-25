@@ -131,7 +131,7 @@ async def descargar():
 
         # ── Login ──────────────────────────────────────────────────────────────
         log.info("Abriendo NEO...")
-        await page.goto(NEO_URL)
+        await page.goto(NEO_URL, wait_until="domcontentloaded", timeout=60000)
         await page.get_by_role("textbox", name="Usuario o correo electrónico").fill(NEO_USUARIO)
         await page.get_by_role("textbox", name="Contraseña").fill(NEO_CLAVE)
         await page.get_by_role("button", name="Ingresar").click()
