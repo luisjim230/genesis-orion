@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
+import { calcularTransito } from '../../../lib/transito.js';
 
 let _sb;
 function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
@@ -62,16 +63,8 @@ export async function POST(request) {
       offset += 1000;
     }
 
-    // 2. Tránsito
-    const { data: tData } = await getDb().from('ordenes_compra_items')
-      .select('codigo,cantidad_ordenada,cantidad_recibida,estado_item')
-      .in('estado_item', ['pendiente', 'parcial']);
-    const tMap = {};
-    (tData || []).forEach(i => {
-      const c = (i.codigo || '').trim();
-      const p = Math.max((parseFloat(i.cantidad_ordenada) || 0) - (parseFloat(i.cantidad_recibida) || 0), 0);
-      if (c && p > 0) tMap[c] = (tMap[c] || 0) + p;
-    });
+    // 2. Tránsito (con corte de antigüedad — ver lib/transito.js)
+    const { tMap } = await calcularTransito(getDb());
 
     // 3. Calcular alertas
     const calc = calcularAlertas(todos, tMap, dias);

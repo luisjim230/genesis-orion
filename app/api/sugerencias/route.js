@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { ejecutarMatch } from '../../lib/procesar-match.js'
+import { calcularTransito } from '../../../lib/transito.js'
 let _supabase; function supabase() { if (!_supabase) _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _supabase; }
 export async function POST(req) {
   try {
@@ -79,13 +80,7 @@ export async function POST(req) {
       const k=String(mm.codigo||'').trim().toUpperCase()
       if(k && !seenCod.has(k)){ seenCod.add(k); todos.push(mm) }
     }
-    const {data:tData}=await supabase().from('ordenes_compra_items').select('codigo,cantidad_ordenada,cantidad_recibida,estado_item').in('estado_item',['pendiente','parcial'])
-    const tMap={}, tUnidades={}
-    for(const i of (tData||[])){
-      const c=String(i.codigo||'').trim()
-      const p=Math.max((parseFloat(i.cantidad_ordenada)||0)-(parseFloat(i.cantidad_recibida)||0),0)
-      if(c&&p>0){ tMap[c]=(tMap[c]||0)+p }
-    }
+    const { tMap } = await calcularTransito(supabase())
     const totalUnidades=Object.values(tMap).reduce((s,v)=>s+v,0)
     const diasNum=parseInt(dias)||36
     const resultados=[]
