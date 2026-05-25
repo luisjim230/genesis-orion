@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/useAuth';
+import { puedeVerBoveda } from '../lib/boveda';
 
 const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
 const ALL_NAV=[
@@ -16,6 +17,7 @@ const ALL_NAV=[
   {group:'Gestión',items:[{href:'/tareas',key:'tareas',icon:'✅',name:'Tareas'},{href:'/tareas-equipo',key:'tareas-equipo',icon:'📋',name:'Tareas Equipo'},{href:'/social',key:'social',icon:'📱',name:'Redes Sociales'},{href:'/kommo-proveedores',key:'kommo-proveedores',icon:'📲',name:'WhatsApp Proveedores'}]},
   {group:'Herramientas',items:[{href:'/ponderacion',key:'ponderacion',icon:'⚖️',name:'Promedios ponderados'},{href:'/materiales',key:'materiales',icon:'🧱',name:'Cálculo de materiales'},{href:'/fichas-tecnicas',key:'fichas-tecnicas',icon:'📋',name:'Fichas Técnicas'},{href:'/garantias',key:'garantias',icon:'🔄',name:'Devoluciones y Garantías'},{href:'/encomiendas',key:'encomiendas',icon:'📦',name:'Encomiendas'}]},
   {group:'Recursos Humanos',items:[{href:'/rrhh',key:'rrhh',icon:'👔',name:'Personal'}]},
+  {group:'Seguridad',items:[{href:'/boveda',key:'boveda',icon:'🔐',name:'Bóveda de Accesos',bovedaOnly:true}]},
   {group:'Admin',items:[{href:'/admin',key:'admin',icon:'👥',name:'Usuarios',adminOnly:true}]},
 ];
 const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8a84b',logistica:'#b794f4'};
@@ -43,7 +45,7 @@ export default function Sidebar(){
   const [collapsed,setCollapsed]=useState(false);
   const [search, setSearch] = useState('');
   const [profeciasPendientes, setProfeciasPendientes] = useState(0);
-  const {perfil,loading,logout,puedeVer}=useAuth();
+  const {user,perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
 
   useEffect(()=>{
@@ -63,7 +65,7 @@ export default function Sidebar(){
 
   const badgesPorKey={profecias:profeciasPendientes};
   const navAll=ALL_NAV
-    .map(g=>({...g,items:g.items.filter(i=>i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))}))
+    .map(g=>({...g,items:g.items.filter(i=>i.bovedaOnly?puedeVerBoveda(user):i.adminOnly?perfil?.rol==='admin':puedeVer(i.key))}))
     .map(g=>({...g,items:g.items.map(i=>({...i,badge:badgesPorKey[i.key]||0}))}))
     .filter(g=>g.items.length>0);
   // Normaliza para búsqueda insensible a tildes y mayúsculas.

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../lib/useAuth';
+import { puedeVerBoveda } from '../lib/boveda';
 
 // Misma estructura que sidebar.js — key debe coincidir con la key del sidebar
 const ALL_NAV = [
@@ -36,6 +37,7 @@ const ALL_NAV = [
   { href: '/encomiendas',       icon: '📦', name: 'Encomiendas', key: 'encomiendas' },
   { href: '/rrhh',              icon: '👥', name: 'Recursos Humanos', key: 'rrhh' },
   { href: '/vendedores',        icon: '🏷️', name: 'Vendedores', key: 'vendedores' },
+  { href: '/boveda',            icon: '🔐', name: 'Bóveda de Accesos', key: 'boveda', bovedaOnly: true },
   { href: '/admin',             icon: '⚙️', name: 'Usuarios', key: 'admin', adminOnly: true },
 ];
 
@@ -46,10 +48,11 @@ export default function MobileNav() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const pathname = usePathname();
-  const { perfil, loading, puedeVer } = useAuth();
+  const { user, perfil, loading, puedeVer } = useAuth();
 
   // Filtrar por permisos del usuario — igual que el sidebar de desktop
   const NAV_PERMITIDOS = loading ? [] : ALL_NAV.filter(item => {
+    if (item.bovedaOnly) return puedeVerBoveda(user);
     if (item.adminOnly) return perfil?.rol === 'admin';
     return puedeVer(item.key);
   });
