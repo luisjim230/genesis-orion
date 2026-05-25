@@ -6,12 +6,14 @@ import ParetoTab from './ParetoTab';
 import MatrizTab from './MatrizTab';
 import AlertasTab from './AlertasTab';
 import MuertosTab from './MuertosTab';
+import OrigenTab from './OrigenTab';
 
 const TABS = [
   { id: 'pareto',   label: '📊 Pareto Ventas / Utilidad' },
   { id: 'matriz',   label: '🎯 Matriz ABC × Margen' },
   { id: 'alertas',  label: '🚨 Alertas de Margen' },
   { id: 'muertos',  label: '🪦 Productos Muertos' },
+  { id: 'origen',   label: '🌍 Origen' },
 ];
 
 export default function PricingPage() {
@@ -182,7 +184,9 @@ export default function PricingPage() {
         </div>
       )}
 
-      {loading && dataset.length === 0 ? (
+      {tab === 'origen' ? (
+        <OrigenTab />
+      ) : loading && dataset.length === 0 ? (
         <div style={{ padding: 60, textAlign: 'center', color: '#6b7280' }}>Cargando dataset…</div>
       ) : (
         <>
