@@ -37,6 +37,7 @@ export async function POST(req) {
     p_descripcion: b.descripcion || null,
     p_actor_id: actor.id,
     p_actor_nombre: actor.nombre,
+    p_fecha_pago: b.fecha_pago || null,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, id: data });
@@ -64,6 +65,7 @@ export async function PATCH(req) {
     p_descripcion: b.descripcion || null,
     p_actor_id: actor.id,
     p_actor_nombre: actor.nombre,
+    p_fecha_pago: b.fecha_pago || null,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

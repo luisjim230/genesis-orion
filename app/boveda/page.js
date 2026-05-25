@@ -11,7 +11,7 @@ const C = {
   shadow: '0 1px 4px rgba(94,39,51,0.06)',
 };
 
-const EMPTY_FORM = { titulo: '', categoria: '', usuario: '', correo: '', clave: '', descripcion: '' };
+const EMPTY_FORM = { titulo: '', categoria: '', usuario: '', correo: '', clave: '', descripcion: '', fecha_pago: '' };
 
 // Emoji según palabra clave de la categoría/título (solo decorativo).
 function pico(a) {
@@ -33,6 +33,24 @@ function fmtFecha(s) {
       day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
     });
   } catch { return s; }
+}
+
+// Fecha de pago (date "YYYY-MM-DD"): se formatea sin pasar por Date para no
+// correrla un día por zona horaria.
+function fmtFechaPago(s) {
+  const p = String(s || '').slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (s || '');
+}
+function vencimientoPago(s) {
+  const p = String(s || '').slice(0, 10).split('-');
+  if (p.length !== 3) return null;
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const dias = Math.round((d - hoy) / 86400000);
+  if (dias < 0) return { color: '#c0392b', nota: 'vencido' };
+  if (dias === 0) return { color: '#c0392b', nota: 'hoy' };
+  if (dias <= 7) return { color: '#b8860b', nota: `en ${dias}d` };
+  return { color: C.text, nota: '' };
 }
 
 export default function BovedaPage() {
@@ -93,6 +111,7 @@ export default function BovedaPage() {
       titulo: a.titulo || '', categoria: a.categoria || '',
       usuario: a.usuario_acceso || '', correo: a.correo || '',
       clave: '', descripcion: a.descripcion || '',
+      fecha_pago: a.fecha_pago_licencia ? String(a.fecha_pago_licencia).slice(0, 10) : '',
     });
     setShowForm(true);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -287,6 +306,7 @@ export default function BovedaPage() {
             <Campo label="Categoría" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} placeholder="Ej: Redes / Banco / Sistema" />
             <Campo label="Usuario" value={form.usuario} onChange={(v) => setForm({ ...form, usuario: v })} placeholder="usuario o teléfono" />
             <Campo label="Correo asociado" value={form.correo} onChange={(v) => setForm({ ...form, correo: v })} placeholder="correo@ejemplo.com" />
+            <Campo type="date" label="Pago de licencia (opcional)" value={form.fecha_pago} onChange={(v) => setForm({ ...form, fecha_pago: v })} />
             <Campo full label={editId ? 'Clave (dejá vacío para no cambiarla)' : 'Clave'} value={form.clave} onChange={(v) => setForm({ ...form, clave: v })} placeholder="contraseña / PIN / código" />
             <Campo full textarea label="Descripción / Notas" value={form.descripcion} onChange={(v) => setForm({ ...form, descripcion: v })} placeholder="¿A qué da acceso? ¿A quién le llega el código de verificación? Notas útiles…" />
           </div>
@@ -358,6 +378,19 @@ export default function BovedaPage() {
                   )}
                 </div>
 
+                {a.fecha_pago_licencia && (() => {
+                  const v = vencimientoPago(a.fecha_pago_licencia);
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: `1px solid ${C.borderSoft}` }}>
+                      <span style={rkStyle}>Pago lic.</span>
+                      <span style={{ flex: 1, fontSize: '0.84rem', color: v ? v.color : C.text, fontWeight: 600 }}>
+                        📅 {fmtFechaPago(a.fecha_pago_licencia)}
+                        {v && v.nota && <span style={{ fontWeight: 500, fontSize: '0.74rem' }}> · {v.nota}</span>}
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {a.descripcion && (
                   <div style={{ display: 'flex', gap: 10, padding: '10px 16px' }}>
                     <span style={rkStyle}>Notas</span>
@@ -396,7 +429,7 @@ function Fila({ k, v, onCopy }) {
   );
 }
 
-function Campo({ label, value, onChange, placeholder, full, textarea }) {
+function Campo({ label, value, onChange, placeholder, full, textarea, type }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, gridColumn: full ? '1 / -1' : 'auto' }}>
       <label style={{ fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.muted }}>{label}</label>
@@ -404,7 +437,7 @@ function Campo({ label, value, onChange, placeholder, full, textarea }) {
         <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={2}
           style={{ ...inputStyle, resize: 'vertical', minHeight: 48 }} />
       ) : (
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
+        <input type={type || 'text'} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
       )}
     </div>
   );
