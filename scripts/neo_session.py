@@ -60,8 +60,11 @@ async def relogin_si_hace_falta(page, usuario, clave, log, intentos=3):
                 if tok_match:
                     tok = tok_match.group(0)
                     home = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/NEO/Home.aspx"
-                    await page.goto(home)
-                    await page.wait_for_load_state("networkidle")
+                    await page.goto(home, wait_until="domcontentloaded", timeout=60000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
                     await page.wait_for_timeout(2000)
         except Exception as e:
             log.error(f"  Relogin falló: {e}")
