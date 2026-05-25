@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { calcularTransito } from '../../lib/transito';
 import KronosTab from '../inventario/KronosTab';
 
 export default function KronosPage() {
@@ -32,18 +33,7 @@ export default function KronosPage() {
         offset += BATCH;
       }
 
-      const { data: transito, error: eTrans } = await supabase
-        .from('ordenes_compra_items')
-        .select('codigo, cantidad_ordenada, cantidad_recibida, estado_item')
-        .neq('estado_item', 'recibido');
-      if (eTrans) throw eTrans;
-
-      const tMap = {};
-      (transito || []).forEach(t => {
-        const pendiente = (parseFloat(t.cantidad_ordenada) || 0) - (parseFloat(t.cantidad_recibida) || 0);
-        if (pendiente > 0) tMap[t.codigo] = (tMap[t.codigo] || 0) + pendiente;
-      });
-
+      const { tMap } = await calcularTransito(supabase);
       setTransitoMap(tMap);
       setCalc(allInv);
     } catch (err) {
