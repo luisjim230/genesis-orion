@@ -269,7 +269,7 @@ async def main():
         try:
             # ── 1. LOGIN ──────────────────────────────────────────────────────
             log.info("Abriendo NEO...")
-            await page.goto(NEO_URL)
+            await page.goto(NEO_URL, wait_until="domcontentloaded", timeout=60000)
             await page.wait_for_load_state("networkidle")
 
             # Sesión activa en otro dispositivo
@@ -329,7 +329,7 @@ async def main():
             if tok_match:
                 tok = tok_match.group(0)
                 home = f"https://neo1.neotecnologias.com/NEOBusiness/{tok}/Paginas/Modulos/NEO/Home.aspx"
-                await page.goto(home)
+                await page.goto(home, wait_until="domcontentloaded", timeout=60000)
                 await page.wait_for_load_state("networkidle")
                 await page.wait_for_timeout(2000)
 
