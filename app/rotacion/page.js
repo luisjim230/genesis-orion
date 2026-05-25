@@ -72,7 +72,7 @@ export default function RotacionPage() {
           .from('neo_minimos_maximos')
           .select('*')
           .eq('fecha_carga', fc)
-          .eq('activo', 'Activo')
+          .eq('activo', 'Sí')
           .range(offset, offset + 999);
         if (!data?.length) break;
         todos = [...todos, ...data];
