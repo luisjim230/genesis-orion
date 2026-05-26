@@ -146,9 +146,15 @@ const RESULTADO_LABEL = {
 
 function fmtFecha(d) {
   if (!d) return '—';
+  // Las fechas de proforma son tipo DATE (sin hora). Formatear los componentes
+  // Y-M-D directamente evita el corrimiento de zona horaria (UTC → CR) que hacía
+  // que cada fecha se mostrara un día antes de la real.
+  const s = String(d).slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
   try {
     return new Date(d).toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return String(d).slice(0, 10); }
+  } catch { return s; }
 }
 function fmtFechaHora(d) {
   if (!d) return '—';
@@ -1024,6 +1030,97 @@ function PodioVendedores({ filasGanadas, fechaDesde, fechaHasta }) {
   );
 }
 
+// ── Resumen por vendedor (vista de supervisor) ──────────────────────────────
+function ResumenVendedores({ resumen, esAdmin, onPick }) {
+  const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
+  if (!resumen) return <Spinner />;
+  if (resumen.length === 0) return <Empty msg="Sin datos" sub="No hay proformas en el período seleccionado." />;
+
+  const cambiarOrden = (col) => setOrden(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' }));
+  const get = (r, col) => {
+    if (col === 'vendedor') return String(r.vendedor).toLowerCase();
+    if (col === 'conversion') return r.total ? r.facturadas / r.total : 0;
+    return r[col] ?? 0;
+  };
+  const filas = [...resumen].sort((a, b) => {
+    const va = get(a, orden.col), vb = get(b, orden.col);
+    if (va < vb) return orden.dir === 'asc' ? -1 : 1;
+    if (va > vb) return orden.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const tot = resumen.reduce((s, r) => ({
+    total: s.total + r.total, facturadas: s.facturadas + r.facturadas,
+    enSeguimiento: s.enSeguimiento + r.enSeguimiento, bronce: s.bronce + r.bronce,
+    atrasadas: s.atrasadas + r.atrasadas, montoEnJuego: s.montoEnJuego + r.montoEnJuego,
+    montoFacturado: s.montoFacturado + r.montoFacturado,
+  }), { total: 0, facturadas: 0, enSeguimiento: 0, bronce: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 });
+
+  const H = ({ col, label, align = 'right' }) => {
+    const activo = orden.col === col;
+    return (
+      <th onClick={() => cambiarOrden(col)}
+        style={{ ...S.th, textAlign: align, cursor: 'pointer', userSelect: 'none', color: activo ? C.gold : undefined }}>
+        {label}{activo ? (orden.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+      </th>
+    );
+  };
+
+  return (
+    <div style={{ ...S.card, padding: 0, overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+        <thead>
+          <tr>
+            <H col="vendedor" label="Vendedor" align="left" />
+            <H col="total" label="Proformas" />
+            <H col="facturadas" label="Facturadas" />
+            <H col="enSeguimiento" label="En seguim." />
+            <H col="bronce" label="Bronce" />
+            <H col="atrasadas" label="Atrasadas" />
+            <H col="conversion" label="Conversión" />
+            {esAdmin && <H col="montoFacturado" label="Monto facturado" />}
+            {esAdmin && <H col="montoEnJuego" label="Monto en juego" />}
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map(r => {
+            const conv = r.total ? (r.facturadas / r.total * 100) : 0;
+            return (
+              <tr key={r.vendedor} onClick={() => onPick && onPick(r.vendedor)}
+                style={{ cursor: onPick ? 'pointer' : 'default', transition: 'background .15s' }}
+                onMouseEnter={e => { if (onPick) e.currentTarget.style.background = 'rgba(200,168,75,0.06)'; }}
+                onMouseLeave={e => { if (onPick) e.currentTarget.style.background = 'transparent'; }}>
+                <td style={{ ...S.td, fontWeight: 700 }}>{r.vendedor}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{r.total.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', color: C.green, fontWeight: 700 }}>{r.facturadas.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', color: C.blue }}>{r.enSeguimiento.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', color: C.muted }}>{r.bronce.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', color: r.atrasadas > 0 ? C.red : C.muted, fontWeight: r.atrasadas > 0 ? 700 : 400 }}>{r.atrasadas.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: conv >= 50 ? C.green : conv >= 25 ? C.orange : C.muted }}>{conv.toFixed(0)}%</td>
+                {esAdmin && <td style={{ ...S.td, textAlign: 'right' }}>{CRC(r.montoFacturado)}</td>}
+                {esAdmin && <td style={{ ...S.td, textAlign: 'right', color: C.gold, fontWeight: 700 }}>{CRC(r.montoEnJuego)}</td>}
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: 'rgba(200,168,75,0.10)' }}>
+            <td style={{ ...S.td, fontWeight: 800 }}>TOTAL · {resumen.length} vend.</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.total.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.green }}>{tot.facturadas.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.blue }}>{tot.enSeguimiento.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.bronce.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: tot.atrasadas > 0 ? C.red : undefined }}>{tot.atrasadas.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.total ? (tot.facturadas / tot.total * 100).toFixed(0) : 0}%</td>
+            {esAdmin && <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{CRC(tot.montoFacturado)}</td>}
+            {esAdmin && <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.gold }}>{CRC(tot.montoEnJuego)}</td>}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ── Página principal ────────────────────────────────────────────────────────
 // Usuarios autorizados a ver información sensible (utilidad, margen, costos)
 // además de cualquier usuario con rol 'admin'.
@@ -1038,19 +1135,31 @@ export default function SeguimientoProformas() {
   const [drawerProf, setDrawerProf] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Carga datos del panel
+  // Carga datos del panel.
+  // Supabase corta cada query en 1000 filas. La vista tiene miles de proformas,
+  // así que paginamos con .range() hasta traerlas todas; de lo contrario solo se
+  // cargaban las más recientes y las proformas viejas desaparecían del panel.
   const cargar = useCallback(async () => {
     setFilas(null);
-    const { data, error } = await supabase
-      .from('hermes_panel_view')
-      .select('*')
-      .order('fecha', { ascending: false });
-    if (error) {
-      console.error('[Hermes] Error al cargar panel:', error);
-      setFilas([]);
-      return;
+    const PAGE = 1000;
+    let desde = 0;
+    let todas = [];
+    for (;;) {
+      const { data, error } = await supabase
+        .from('hermes_panel_view')
+        .select('*')
+        .order('fecha', { ascending: false })
+        .range(desde, desde + PAGE - 1);
+      if (error) {
+        console.error('[Hermes] Error al cargar panel:', error);
+        setFilas(todas);
+        return;
+      }
+      todas = todas.concat(data || []);
+      if (!data || data.length < PAGE) break;
+      desde += PAGE;
     }
-    setFilas(data || []);
+    setFilas(todas);
   }, []);
 
   useEffect(() => { cargar(); }, [cargar, refreshTick]);
@@ -1193,6 +1302,57 @@ export default function SeguimientoProformas() {
     return { count, monto, utilidad, margenAvg, atrasadas };
   }, [filasAbiertasFiltradas]);
 
+  // Resumen por vendedor: panorama completo (total / facturadas / en seguimiento /
+  // Bronce) respetando el rango de fechas y la búsqueda, para que el supervisor vea
+  // el volumen real de cada quien sin que ninguna proforma se pierda de vista.
+  const resumenVendedores = useMemo(() => {
+    if (!filas) return null;
+    const desdeMs = fechaMs(filtros.fechaDesde);
+    const hastaMs = fechaMs(filtros.fechaHasta);
+    const cliQ = String(filtros.cliente || '').trim().toLowerCase();
+    const profQ = String(filtros.proforma || '').trim();
+    const map = {};
+    for (const f of filas) {
+      if (!Number.isNaN(desdeMs) || !Number.isNaN(hastaMs)) {
+        const fMs = fechaMs(f.fecha);
+        if (Number.isNaN(fMs)) continue;
+        if (!Number.isNaN(desdeMs) && fMs < desdeMs) continue;
+        if (!Number.isNaN(hastaMs) && fMs > hastaMs) continue;
+      }
+      if (profQ && !String(f.proforma).includes(profQ)) continue;
+      if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) continue;
+      const v = f.vendedor || 'Sin asignar';
+      if (!map[v]) map[v] = { vendedor: v, total: 0, facturadas: 0, enSeguimiento: 0, bronce: 0, sinTier: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 };
+      const r = map[v];
+      r.total++;
+      if (f.facturada) {
+        r.facturadas++;
+        r.montoFacturado += N(f.monto_total);
+      } else if (f.tier_nombre === 'Bronce') {
+        r.bronce++;
+      } else if (!f.tier_nombre) {
+        r.sinTier++;
+      } else {
+        r.enSeguimiento++;
+        r.montoEnJuego += N(f.monto_total);
+        if (f.semaforo === 'atrasado' || f.semaforo === 'sin_contactar') r.atrasadas++;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [filas, filtros.fechaDesde, filtros.fechaHasta, filtros.cliente, filtros.proforma]);
+
+  // Resumen del vendedor seleccionado (para el aviso en la pestaña Abiertas).
+  const resumenVendedorSel = useMemo(() => {
+    if (!filtros.vendedor || !resumenVendedores) return null;
+    return resumenVendedores.find(r => r.vendedor === filtros.vendedor) || null;
+  }, [filtros.vendedor, resumenVendedores]);
+
+  // Click en una fila del resumen → filtra ese vendedor y salta a Abiertas.
+  const verVendedorEnSeguimiento = useCallback((v) => {
+    setFiltros(prev => ({ ...prev, vendedor: v === 'Sin asignar' ? '' : v }));
+    setTab('abiertas');
+  }, []);
+
   // Auth gate
   if (authLoading) return <div style={S.page}><Spinner /></div>;
   if (!perfil || !puedeVer('seguimiento-proformas')) return (
@@ -1218,6 +1378,7 @@ export default function SeguimientoProformas() {
         {[
           { key: 'abiertas',      label: 'Abiertas' },
           { key: 'ganadas',       label: 'Ganadas' },
+          { key: 'resumen',       label: 'Resumen' },
           { key: 'configuracion', label: 'Configuración' },
         ].map(t => (
           <button key={t.key}
@@ -1332,6 +1493,22 @@ export default function SeguimientoProformas() {
             )}
           </div>
 
+          {/* Aviso de panorama: al filtrar por vendedor, explica dónde está el resto
+              de sus proformas (facturadas / Bronce) para que no parezca que faltan. */}
+          {resumenVendedorSel && resumenVendedorSel.total > resumenVendedorSel.enSeguimiento && (
+            <div style={{
+              background: 'rgba(59,110,165,0.08)', border: '1px solid rgba(59,110,165,0.25)',
+              borderRadius: 12, padding: '10px 14px', marginBottom: 14,
+              fontSize: '0.84rem', color: C.text, lineHeight: 1.5,
+            }}>
+              <strong>{resumenVendedorSel.vendedor}</strong> tiene <strong>{resumenVendedorSel.total.toLocaleString('es-CR')}</strong> proformas en este período:{' '}
+              <strong style={{ color: C.green }}>{resumenVendedorSel.facturadas.toLocaleString('es-CR')}</strong> facturadas <span style={{ color: C.muted }}>(pestaña Ganadas)</span>
+              {resumenVendedorSel.bronce > 0 && <> · <strong>{resumenVendedorSel.bronce.toLocaleString('es-CR')}</strong> Bronce <span style={{ color: C.muted }}>(monto chico, no se siguen)</span></>}
+              {resumenVendedorSel.sinTier > 0 && <> · <strong>{resumenVendedorSel.sinTier.toLocaleString('es-CR')}</strong> sin tier</>}
+              {' '}· <strong style={{ color: C.blue }}>{resumenVendedorSel.enSeguimiento.toLocaleString('es-CR')}</strong> en seguimiento <span style={{ color: C.muted }}>(la lista de acá abajo)</span>.
+            </div>
+          )}
+
           <TablaProformas
             datos={filasAbiertasFiltradas}
             onRow={p => setDrawerProf(p)}
@@ -1405,6 +1582,63 @@ export default function SeguimientoProformas() {
             onRow={p => setDrawerProf(p)}
             mostrarSeguimientos={false}
             esAdmin={esAdmin}
+          />
+        </div>
+      )}
+
+      {/* Tab: Resumen por vendedor */}
+      {tab === 'resumen' && (
+        <div>
+          <div style={{
+            background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
+            borderRadius: 14, padding: 14, marginBottom: 10,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 14,
+          }}>
+            <div>
+              <label style={S.label}>Fecha desde</label>
+              <input type="date" value={filtros.fechaDesde}
+                onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
+                style={inputFiltro(!!filtros.fechaDesde)} />
+            </div>
+            <div>
+              <label style={S.label}>Fecha hasta</label>
+              <input type="date" value={filtros.fechaHasta}
+                onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
+                style={inputFiltro(!!filtros.fechaHasta)} />
+            </div>
+            <div>
+              <label style={S.label}>Cliente</label>
+              <input type="text" value={filtros.cliente}
+                onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
+                placeholder="Buscar por nombre..."
+                style={inputFiltro(!!filtros.cliente)} />
+            </div>
+            <div>
+              <label style={S.label}># Proforma</label>
+              <input type="text" inputMode="numeric" value={filtros.proforma}
+                onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
+                placeholder="Ej: 136248"
+                style={inputFiltro(!!filtros.proforma)} />
+            </div>
+          </div>
+          {chipsFiltros()}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10, flexWrap: 'wrap', marginBottom: 14, padding: '0 4px',
+          }}>
+            <div style={{ fontSize: '0.85rem', color: C.muted, fontWeight: 600 }}>
+              Panorama completo por vendedor en el período. Tocá una fila para ver sus proformas en seguimiento.
+            </div>
+            {hayFiltrosActivos && (
+              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
+            )}
+          </div>
+          <ResumenVendedores
+            resumen={resumenVendedores}
+            esAdmin={esAdmin}
+            onPick={verVendedorEnSeguimiento}
           />
         </div>
       )}
