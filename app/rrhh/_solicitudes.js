@@ -8,7 +8,10 @@ const TIPO_MAP = {
   permiso_sin_goce: { label: 'Permiso sin goce', color: '#8b5cf6' },
   cita_medica: { label: 'Cita médica', color: '#06b6d4' },
   permiso_urgente: { label: 'Permiso urgente', color: '#ef4444' },
+  incapacidad: { label: 'Incapacidad', color: '#ec4899' },
 }
+
+const TIPO_FALLBACK = { label: 'Otro', color: '#94a3b8' }
 
 const ESTADO_MAP = {
   pendiente: { label: 'Pendiente', color: '#f97316' },
@@ -330,24 +333,48 @@ export function TabCalendario({ solicitudes }) {
           }}>
             {d && <>
               <div style={{ fontSize: '0.78em', fontWeight: 600, color: TEXT, marginBottom: 2 }}>{d}</div>
-              {(calEvents[d] || []).map((ev, j) => (
-                <div key={j} style={{
-                  background: ev.estado === 'aprobado' ? '#22c55e' : '#f97316',
-                  color: '#fff', borderRadius: 4, padding: '1px 4px', fontSize: '0.6em',
-                  marginBottom: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                }}>{ev.nombre?.split(' ')[0]}{ev.modalidad === 'por_horas' ? ' (hrs)' : ''}</div>
-              ))}
+              {(calEvents[d] || []).map((ev, j) => {
+                const t = TIPO_MAP[ev.tipo] || TIPO_FALLBACK
+                const aprobado = ev.estado === 'aprobado'
+                return (
+                  <div key={j}
+                    title={`${ev.nombre} · ${t.label} · ${aprobado ? 'Aprobado' : 'Pendiente'}`}
+                    style={{
+                      background: aprobado ? t.color : t.color + '26',
+                      color: aprobado ? '#fff' : t.color,
+                      border: aprobado ? `1px solid ${t.color}` : `1px dashed ${t.color}`,
+                      borderRadius: 4, padding: '1px 4px', fontSize: '0.6em', fontWeight: 700,
+                      marginBottom: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                    }}>{ev.nombre?.split(' ')[0]}{ev.modalidad === 'por_horas' ? ' (hrs)' : ''}</div>
+                )
+              })}
             </>}
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 20, marginTop: 16, justifyContent: 'center' }}>
-        {[['#22c55e', 'Aprobado'], ['#f97316', 'Pendiente']].map(([c, l]) => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8em', color: MUTED }}>
-            <div style={{ width: 14, height: 14, borderRadius: 4, background: c }} />
-            {l}
+      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+        {/* Leyenda de tipos: cada tipo de solicitud tiene su propio color */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.72em', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tipo</span>
+          {Object.values(TIPO_MAP).map(t => (
+            <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8em', color: MUTED }}>
+              <div style={{ width: 14, height: 14, borderRadius: 4, background: t.color }} />
+              {t.label}
+            </div>
+          ))}
+        </div>
+        {/* Leyenda de estado: relleno = aprobado, borde punteado = pendiente */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.72em', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8em', color: MUTED }}>
+            <div style={{ width: 14, height: 14, borderRadius: 4, background: '#64748b', border: '1px solid #64748b' }} />
+            Aprobado (relleno)
           </div>
-        ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8em', color: MUTED }}>
+            <div style={{ width: 14, height: 14, borderRadius: 4, background: '#64748b26', border: '1px dashed #64748b' }} />
+            Pendiente (punteado)
+          </div>
+        </div>
       </div>
     </div>
   )
