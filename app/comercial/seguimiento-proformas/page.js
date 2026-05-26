@@ -1110,43 +1110,79 @@ function PodioVendedores({ filasGanadas, fechaDesde, fechaHasta }) {
 }
 
 // ── Resumen por vendedor (vista de supervisor) ──────────────────────────────
+const COL_VACIO = { vendedor: '', total: '', facturadas: '', enSeguimiento: '', bronce: '', atrasadas: '', conversion: '', montoFacturado: '', montoEnJuego: '' };
+
 function ResumenVendedores({ resumen, esAdmin, onPick }) {
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
+  const [showFilters, setShowFilters] = useState(false);
+  const [colF, setColF] = useState({ ...COL_VACIO });
   if (!resumen) return <Spinner />;
   if (resumen.length === 0) return <Empty msg="Sin datos" sub="No hay proformas en el período seleccionado." />;
 
   const cambiarOrden = (col) => setOrden(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' }));
+  const setCF = (k, v) => setColF(prev => ({ ...prev, [k]: v }));
+  const convDe = (r) => r.total ? (r.facturadas / r.total * 100) : 0;
+  const num = (v) => parseFloat(v) || 0;
   const get = (r, col) => {
     if (col === 'vendedor') return String(r.vendedor).toLowerCase();
-    if (col === 'conversion') return r.total ? r.facturadas / r.total : 0;
+    if (col === 'conversion') return convDe(r);
     return r[col] ?? 0;
   };
-  const filas = [...resumen].sort((a, b) => {
+
+  const filtrados = resumen.filter(r => {
+    if (colF.vendedor && !String(r.vendedor).toLowerCase().includes(colF.vendedor.trim().toLowerCase())) return false;
+    if (colF.total && r.total < num(colF.total)) return false;
+    if (colF.facturadas && r.facturadas < num(colF.facturadas)) return false;
+    if (colF.enSeguimiento && r.enSeguimiento < num(colF.enSeguimiento)) return false;
+    if (colF.bronce && r.bronce < num(colF.bronce)) return false;
+    if (colF.atrasadas && r.atrasadas < num(colF.atrasadas)) return false;
+    if (colF.conversion && convDe(r) < num(colF.conversion)) return false;
+    if (colF.montoFacturado && r.montoFacturado < num(colF.montoFacturado)) return false;
+    if (colF.montoEnJuego && r.montoEnJuego < num(colF.montoEnJuego)) return false;
+    return true;
+  });
+
+  const filas = [...filtrados].sort((a, b) => {
     const va = get(a, orden.col), vb = get(b, orden.col);
     if (va < vb) return orden.dir === 'asc' ? -1 : 1;
     if (va > vb) return orden.dir === 'asc' ? 1 : -1;
     return 0;
   });
 
-  const tot = resumen.reduce((s, r) => ({
+  const tot = filtrados.reduce((s, r) => ({
     total: s.total + r.total, facturadas: s.facturadas + r.facturadas,
     enSeguimiento: s.enSeguimiento + r.enSeguimiento, bronce: s.bronce + r.bronce,
     atrasadas: s.atrasadas + r.atrasadas, montoEnJuego: s.montoEnJuego + r.montoEnJuego,
     montoFacturado: s.montoFacturado + r.montoFacturado,
   }), { total: 0, facturadas: 0, enSeguimiento: 0, bronce: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 });
 
+  const colSpan = 7 + (esAdmin ? 2 : 0);
+
   const H = ({ col, label, align = 'right' }) => {
     const activo = orden.col === col;
+    const flecha = activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅';
     return (
       <th onClick={() => cambiarOrden(col)}
+        title="Tocá para ordenar"
         style={{ ...S.th, textAlign: align, cursor: 'pointer', userSelect: 'none', color: activo ? C.gold : undefined }}>
-        {label}{activo ? (orden.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+        {label}<span style={{ opacity: activo ? 1 : 0.3, marginLeft: 3, fontSize: '0.9em' }}>{flecha}</span>
       </th>
     );
   };
 
   return (
-    <div style={{ ...S.card, padding: 0, overflowX: 'auto' }}>
+    <div style={{ ...S.card, padding: 0 }}>
+      <div style={{
+        padding: '8px 12px', borderBottom: '1px solid rgba(200,168,75,0.14)',
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      }}>
+        <button onClick={() => setShowFilters(v => !v)}
+          style={{ ...S.btnGhost, padding: '5px 14px', fontSize: '0.78rem', borderColor: showFilters ? C.gold : undefined, color: showFilters ? C.gold : C.text }}>
+          {showFilters ? '▾ Ocultar filtros por columna' : '⛃ Filtrar por columna'}
+        </button>
+        <span style={{ fontSize: '0.74rem', color: C.muted }}>Tocá un título de columna para ordenar ⇅</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
         <thead>
           <tr>
@@ -1160,8 +1196,30 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
             {esAdmin && <H col="montoFacturado" label="Monto facturado" />}
             {esAdmin && <H col="montoEnJuego" label="Monto en juego" />}
           </tr>
+          {showFilters && (
+            <tr>
+              <th style={filterTh}>
+                <input value={colF.vendedor} onChange={e => setCF('vendedor', e.target.value)} placeholder="Buscar..." style={miniCtrl} />
+              </th>
+              <th style={filterTh}><input value={colF.total} onChange={e => setCF('total', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.facturadas} onChange={e => setCF('facturadas', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.enSeguimiento} onChange={e => setCF('enSeguimiento', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.bronce} onChange={e => setCF('bronce', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.atrasadas} onChange={e => setCF('atrasadas', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.conversion} onChange={e => setCF('conversion', e.target.value)} inputMode="numeric" placeholder="≥ %" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              {esAdmin && <th style={filterTh}><input value={colF.montoFacturado} onChange={e => setCF('montoFacturado', e.target.value)} inputMode="numeric" placeholder="≥ ₡" style={{ ...miniCtrl, textAlign: 'right' }} /></th>}
+              {esAdmin && <th style={filterTh}><input value={colF.montoEnJuego} onChange={e => setCF('montoEnJuego', e.target.value)} inputMode="numeric" placeholder="≥ ₡" style={{ ...miniCtrl, textAlign: 'right' }} /></th>}
+            </tr>
+          )}
         </thead>
         <tbody>
+          {filas.length === 0 && (
+            <tr>
+              <td colSpan={colSpan} style={{ ...S.td, textAlign: 'center', padding: 40, color: C.muted }}>
+                Ningún vendedor coincide con los filtros.
+              </td>
+            </tr>
+          )}
           {filas.map(r => {
             const conv = r.total ? (r.facturadas / r.total * 100) : 0;
             return (
@@ -1184,7 +1242,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
         </tbody>
         <tfoot>
           <tr style={{ background: 'rgba(200,168,75,0.10)' }}>
-            <td style={{ ...S.td, fontWeight: 800 }}>TOTAL · {resumen.length} vend.</td>
+            <td style={{ ...S.td, fontWeight: 800 }}>TOTAL · {filtrados.length} vend.</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.total.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.green }}>{tot.facturadas.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.blue }}>{tot.enSeguimiento.toLocaleString('es-CR')}</td>
@@ -1196,6 +1254,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   );
 }
@@ -1681,63 +1740,6 @@ export default function SeguimientoProformas() {
             setFiltros={setFiltros}
             vendedoresUnicos={vendedoresUnicos}
             tiersUnicos={tiersUnicos}
-          />
-        </div>
-      )}
-
-      {/* Tab: Resumen por vendedor */}
-      {tab === 'resumen' && (
-        <div>
-          <div style={{
-            background: '#fff', border: '1px solid rgba(200,168,75,0.18)',
-            borderRadius: 14, padding: 14, marginBottom: 10,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 14,
-          }}>
-            <div>
-              <label style={S.label}>Fecha desde</label>
-              <input type="date" value={filtros.fechaDesde}
-                onChange={e => setFiltros({ ...filtros, fechaDesde: e.target.value })}
-                style={inputFiltro(!!filtros.fechaDesde)} />
-            </div>
-            <div>
-              <label style={S.label}>Fecha hasta</label>
-              <input type="date" value={filtros.fechaHasta}
-                onChange={e => setFiltros({ ...filtros, fechaHasta: e.target.value })}
-                style={inputFiltro(!!filtros.fechaHasta)} />
-            </div>
-            <div>
-              <label style={S.label}>Cliente</label>
-              <input type="text" value={filtros.cliente}
-                onChange={e => setFiltros({ ...filtros, cliente: e.target.value })}
-                placeholder="Buscar por nombre..."
-                style={inputFiltro(!!filtros.cliente)} />
-            </div>
-            <div>
-              <label style={S.label}># Proforma</label>
-              <input type="text" inputMode="numeric" value={filtros.proforma}
-                onChange={e => setFiltros({ ...filtros, proforma: e.target.value })}
-                placeholder="Ej: 136248"
-                style={inputFiltro(!!filtros.proforma)} />
-            </div>
-          </div>
-          {chipsFiltros()}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: 10, flexWrap: 'wrap', marginBottom: 14, padding: '0 4px',
-          }}>
-            <div style={{ fontSize: '0.85rem', color: C.muted, fontWeight: 600 }}>
-              Panorama completo por vendedor en el período. Tocá una fila para ver sus proformas en seguimiento.
-            </div>
-            {hayFiltrosActivos && (
-              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
-            )}
-          </div>
-          <ResumenVendedores
-            resumen={resumenVendedores}
-            esAdmin={esAdmin}
-            onPick={verVendedorEnSeguimiento}
           />
         </div>
       )}
