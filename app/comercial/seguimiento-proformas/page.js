@@ -840,6 +840,24 @@ const filterTh = {
   borderBottom: '1px solid rgba(200,168,75,0.18)', verticalAlign: 'middle',
 };
 
+// Encabezado ordenable. Definido a nivel de módulo (no dentro del render) para
+// que React no lo remonte en cada cambio de estado y el click siempre responda.
+function SortHeader({ col, label, align = 'left', orden, onSort }) {
+  const activo = orden?.col === col;
+  const flecha = activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅';
+  return (
+    <th onClick={() => onSort(col)}
+      title="Tocá para ordenar"
+      style={{
+        ...S.th, textAlign: align, cursor: 'pointer',
+        userSelect: 'none', whiteSpace: 'nowrap',
+        color: activo ? C.gold : undefined,
+      }}>
+      {label}<span style={{ opacity: activo ? 1 : 0.3, marginLeft: 3, fontSize: '0.9em' }}>{flecha}</span>
+    </th>
+  );
+}
+
 function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = false, filtros = null, setFiltros = null, vendedoresUnicos = [], tiersUnicos = [] }) {
   const [orden, setOrden] = useState(null); // { col, dir: 'asc' | 'desc' }
   const [showFilters, setShowFilters] = useState(false);
@@ -847,11 +865,7 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
   if (!datos) return <Spinner />;
 
   const cambiarOrden = (col) => {
-    setOrden(o => {
-      if (!o || o.col !== col) return { col, dir: 'asc' };
-      if (o.dir === 'asc') return { col, dir: 'desc' };
-      return null; // tercer click → quita el orden y vuelve al default
-    });
+    setOrden(o => (o && o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
   };
 
   const cmp = (a, b, col) => {
@@ -883,22 +897,6 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
 
   const setF = (k, v) => setFiltros(prev => ({ ...prev, [k]: v }));
 
-  const HeaderCell = ({ col, label, align = 'left' }) => {
-    const activo = orden?.col === col;
-    const flecha = activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅';
-    return (
-      <th onClick={() => cambiarOrden(col)}
-        title="Tocá para ordenar"
-        style={{
-          ...S.th, textAlign: align, cursor: 'pointer',
-          userSelect: 'none', whiteSpace: 'nowrap',
-          color: activo ? C.gold : undefined,
-        }}>
-        {label}<span style={{ opacity: activo ? 1 : 0.3, marginLeft: 3, fontSize: '0.9em' }}>{flecha}</span>
-      </th>
-    );
-  };
-
   const colSpan = 8 + (esAdmin ? 2 : 0) + (mostrarSeguimientos ? 1 : 0);
 
   return (
@@ -919,17 +917,17 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
         <thead>
           <tr>
-            <HeaderCell col="estado"   label="Estado" />
-            <HeaderCell col="proforma" label="#" />
-            <HeaderCell col="fecha"    label="Fecha" />
-            <HeaderCell col="cliente"  label="Cliente" />
-            <HeaderCell col="vendedor" label="Vendedor" />
-            <HeaderCell col="tier"     label="Tier" />
-            <HeaderCell col="monto"    label="Monto" align="right" />
-            {esAdmin && <HeaderCell col="margen"   label="Margen %" align="right" />}
-            {esAdmin && <HeaderCell col="utilidad" label="Utilidad" align="right" />}
-            <HeaderCell col="dias"     label="Días" align="center" />
-            {mostrarSeguimientos && <HeaderCell col="seg" label="Seg." align="center" />}
+            <SortHeader col="estado"   label="Estado"   orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="proforma" label="#"        orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="fecha"    label="Fecha"    orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="cliente"  label="Cliente"  orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="vendedor" label="Vendedor" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="tier"     label="Tier"     orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="monto"    label="Monto"    orden={orden} onSort={cambiarOrden} align="right" />
+            {esAdmin && <SortHeader col="margen"   label="Margen %" orden={orden} onSort={cambiarOrden} align="right" />}
+            {esAdmin && <SortHeader col="utilidad" label="Utilidad" orden={orden} onSort={cambiarOrden} align="right" />}
+            <SortHeader col="dias"     label="Días"     orden={orden} onSort={cambiarOrden} align="center" />
+            {mostrarSeguimientos && <SortHeader col="seg" label="Seg." orden={orden} onSort={cambiarOrden} align="center" />}
           </tr>
           {puedeFiltrar && showFilters && (
             <tr>
@@ -1158,18 +1156,6 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
 
   const colSpan = 7 + (esAdmin ? 2 : 0);
 
-  const H = ({ col, label, align = 'right' }) => {
-    const activo = orden.col === col;
-    const flecha = activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅';
-    return (
-      <th onClick={() => cambiarOrden(col)}
-        title="Tocá para ordenar"
-        style={{ ...S.th, textAlign: align, cursor: 'pointer', userSelect: 'none', color: activo ? C.gold : undefined }}>
-        {label}<span style={{ opacity: activo ? 1 : 0.3, marginLeft: 3, fontSize: '0.9em' }}>{flecha}</span>
-      </th>
-    );
-  };
-
   return (
     <div style={{ ...S.card, padding: 0 }}>
       <div style={{
@@ -1186,15 +1172,15 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
         <thead>
           <tr>
-            <H col="vendedor" label="Vendedor" align="left" />
-            <H col="total" label="Proformas" />
-            <H col="facturadas" label="Facturadas" />
-            <H col="enSeguimiento" label="En seguim." />
-            <H col="bronce" label="Bronce" />
-            <H col="atrasadas" label="Atrasadas" />
-            <H col="conversion" label="Conversión" />
-            {esAdmin && <H col="montoFacturado" label="Monto facturado" />}
-            {esAdmin && <H col="montoEnJuego" label="Monto en juego" />}
+            <SortHeader col="vendedor" label="Vendedor" align="left" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="total" label="Proformas" align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="facturadas" label="Facturadas" align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="enSeguimiento" label="En seguim." align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="bronce" label="Bronce" align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="atrasadas" label="Atrasadas" align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="conversion" label="Conversión" align="right" orden={orden} onSort={cambiarOrden} />
+            {esAdmin && <SortHeader col="montoFacturado" label="Monto facturado" align="right" orden={orden} onSort={cambiarOrden} />}
+            {esAdmin && <SortHeader col="montoEnJuego" label="Monto en juego" align="right" orden={orden} onSort={cambiarOrden} />}
           </tr>
           {showFilters && (
             <tr>
