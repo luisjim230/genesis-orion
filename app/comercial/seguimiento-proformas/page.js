@@ -828,10 +828,23 @@ function TabConfig() {
 }
 
 // ── Tab: Tabla de proformas (Abiertas / Ganadas) ────────────────────────────
-function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = false }) {
+// Estados de semáforo que tiene sentido ofrecer como filtro de columna.
+const ESTADOS_FILTRO = ['sin_contactar', 'atrasado', 'toca_hoy', 'al_dia', 'completo', 'ganada'];
+const miniCtrl = {
+  width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6,
+  border: '1px solid #cbd5e1', fontSize: '0.74rem', fontFamily: 'Rubik, sans-serif',
+  background: '#fff', color: C.text, outline: 'none',
+};
+const filterTh = {
+  padding: '6px 8px', background: 'rgba(255,255,255,0.55)',
+  borderBottom: '1px solid rgba(200,168,75,0.18)', verticalAlign: 'middle',
+};
+
+function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = false, filtros = null, setFiltros = null, vendedoresUnicos = [], tiersUnicos = [] }) {
   const [orden, setOrden] = useState(null); // { col, dir: 'asc' | 'desc' }
+  const [showFilters, setShowFilters] = useState(false);
+  const puedeFiltrar = !!(filtros && setFiltros);
   if (!datos) return <Spinner />;
-  if (datos.length === 0) return <Empty msg="Sin proformas" sub="No hay proformas que coincidan con los filtros." />;
 
   const cambiarOrden = (col) => {
     setOrden(o => {
@@ -868,23 +881,41 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
     ? [...datos].sort((a, b) => cmp(a, b, orden.col) * (orden.dir === 'asc' ? 1 : -1))
     : datos;
 
+  const setF = (k, v) => setFiltros(prev => ({ ...prev, [k]: v }));
+
   const HeaderCell = ({ col, label, align = 'left' }) => {
     const activo = orden?.col === col;
-    const flecha = activo ? (orden.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    const flecha = activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅';
     return (
       <th onClick={() => cambiarOrden(col)}
+        title="Tocá para ordenar"
         style={{
           ...S.th, textAlign: align, cursor: 'pointer',
           userSelect: 'none', whiteSpace: 'nowrap',
           color: activo ? C.gold : undefined,
         }}>
-        {label}{flecha}
+        {label}<span style={{ opacity: activo ? 1 : 0.3, marginLeft: 3, fontSize: '0.9em' }}>{flecha}</span>
       </th>
     );
   };
 
+  const colSpan = 8 + (esAdmin ? 2 : 0) + (mostrarSeguimientos ? 1 : 0);
+
   return (
-    <div style={{ ...S.card, padding: 0, overflowX: 'auto' }}>
+    <div style={{ ...S.card, padding: 0 }}>
+      {puedeFiltrar && (
+        <div style={{
+          padding: '8px 12px', borderBottom: '1px solid rgba(200,168,75,0.14)',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <button onClick={() => setShowFilters(v => !v)}
+            style={{ ...S.btnGhost, padding: '5px 14px', fontSize: '0.78rem', borderColor: showFilters ? C.gold : undefined, color: showFilters ? C.gold : C.text }}>
+            {showFilters ? '▾ Ocultar filtros por columna' : '⛃ Filtrar por columna'}
+          </button>
+          <span style={{ fontSize: '0.74rem', color: C.muted }}>Tocá un título de columna para ordenar ⇅</span>
+        </div>
+      )}
+      <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
         <thead>
           <tr>
@@ -900,8 +931,55 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
             <HeaderCell col="dias"     label="Días" align="center" />
             {mostrarSeguimientos && <HeaderCell col="seg" label="Seg." align="center" />}
           </tr>
+          {puedeFiltrar && showFilters && (
+            <tr>
+              <th style={filterTh}>
+                <select value={filtros.estado} onChange={e => setF('estado', e.target.value)} style={{ ...miniCtrl, cursor: 'pointer' }}>
+                  <option value="">Todos</option>
+                  {ESTADOS_FILTRO.map(s => <option key={s} value={s}>{SEMAFORO[s]?.label || s}</option>)}
+                </select>
+              </th>
+              <th style={filterTh}>
+                <input value={filtros.proforma} onChange={e => setF('proforma', e.target.value)} inputMode="numeric" placeholder="#" style={miniCtrl} />
+              </th>
+              <th style={filterTh}></th>
+              <th style={filterTh}>
+                <input value={filtros.cliente} onChange={e => setF('cliente', e.target.value)} placeholder="Buscar..." style={miniCtrl} />
+              </th>
+              <th style={filterTh}>
+                <select value={filtros.vendedor} onChange={e => setF('vendedor', e.target.value)} style={{ ...miniCtrl, cursor: 'pointer' }}>
+                  <option value="">Todos</option>
+                  {vendedoresUnicos.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </th>
+              <th style={filterTh}>
+                <select value={filtros.tier} onChange={e => setF('tier', e.target.value)} style={{ ...miniCtrl, cursor: 'pointer' }}>
+                  <option value="">Todos</option>
+                  {(tiersUnicos.length ? tiersUnicos : ['Plata', 'Oro', 'Platino']).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </th>
+              <th style={filterTh}>
+                <input value={filtros.montoMin} onChange={e => setF('montoMin', e.target.value)} inputMode="numeric" placeholder="≥ monto" style={{ ...miniCtrl, textAlign: 'right' }} />
+              </th>
+              {esAdmin && (
+                <th style={filterTh}>
+                  <input value={filtros.margenMin || ''} onChange={e => setF('margenMin', Number(e.target.value) || 0)} inputMode="numeric" placeholder="≥ %" style={{ ...miniCtrl, textAlign: 'right' }} />
+                </th>
+              )}
+              {esAdmin && <th style={filterTh}></th>}
+              <th style={filterTh}></th>
+              {mostrarSeguimientos && <th style={filterTh}></th>}
+            </tr>
+          )}
         </thead>
         <tbody>
+          {filas.length === 0 && (
+            <tr>
+              <td colSpan={colSpan} style={{ ...S.td, textAlign: 'center', padding: 40, color: C.muted }}>
+                No hay proformas que coincidan con los filtros.
+              </td>
+            </tr>
+          )}
           {filas.map(p => (
             <tr key={p.proforma}
               onClick={() => onRow && onRow(p)}
@@ -934,6 +1012,7 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -1131,7 +1210,7 @@ export default function SeguimientoProformas() {
   const esAdmin = perfil?.rol === 'admin' || VER_UTILIDAD_USERNAMES.includes(perfil?.username);
   const [tab, setTab] = useState('abiertas');
   const [filas, setFilas] = useState(null);
-  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' });
+  const [filtros, setFiltros] = useState({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '', estado: '', montoMin: '' });
   const [drawerProf, setDrawerProf] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -1181,6 +1260,11 @@ export default function SeguimientoProformas() {
     return [...new Set(filas.map(f => f.vendedor).filter(Boolean))].sort();
   }, [filas]);
 
+  const tiersUnicos = useMemo(() => {
+    if (!filas) return [];
+    return [...new Set(filas.map(f => f.tier_nombre).filter(Boolean))];
+  }, [filas]);
+
   // Convierte "YYYY-MM-DD" o ISO string o Date a timestamp (ms al inicio del día UTC).
   // Compara fechas robustamente sin caer en problemas de strings con/sin ceros.
   const fechaMs = (v) => {
@@ -1199,9 +1283,12 @@ export default function SeguimientoProformas() {
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
     const desdeMs = fechaMs(filtros.fechaDesde);
     const hastaMs = fechaMs(filtros.fechaHasta);
+    const montoMin = N(filtros.montoMin);
     let arr = filasAbiertas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
       if (filtros.tier && f.tier_nombre !== filtros.tier) return false;
+      if (filtros.estado && f.semaforo !== filtros.estado) return false;
+      if (montoMin > 0 && N(f.monto_total) < montoMin) return false;
       if (filtros.margenMin > 0) {
         const m = N(f.margen_pct);
         if (m < filtros.margenMin) return false;
@@ -1231,8 +1318,10 @@ export default function SeguimientoProformas() {
     const cliQ = String(filtros.cliente || '').trim().toLowerCase();
     const desdeMs = fechaMs(filtros.fechaDesde);
     const hastaMs = fechaMs(filtros.fechaHasta);
+    const montoMin = N(filtros.montoMin);
     let arr = filasGanadas.filter(f => {
       if (filtros.vendedor && f.vendedor !== filtros.vendedor) return false;
+      if (montoMin > 0 && N(f.monto_total) < montoMin) return false;
       if (!Number.isNaN(desdeMs) || !Number.isNaN(hastaMs)) {
         const fMs = fechaMs(f.fecha);
         if (Number.isNaN(fMs)) return false;
@@ -1247,15 +1336,17 @@ export default function SeguimientoProformas() {
     return arr;
   }, [filasGanadas, filtros]);
 
-  const hayFiltrosActivos = !!(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente);
+  const hayFiltrosActivos = !!(filtros.vendedor || filtros.tier || filtros.fechaDesde || filtros.fechaHasta || filtros.margenMin > 0 || filtros.proforma || filtros.cliente || filtros.estado || filtros.montoMin);
 
-  const limpiarFiltros = () => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '' });
+  const limpiarFiltros = () => setFiltros({ vendedor: '', tier: '', margenMin: 0, fechaDesde: '', fechaHasta: '', proforma: '', cliente: '', estado: '', montoMin: '' });
 
   // Chips visibles de filtros activos (sirven como feedback de que el estado captura el input).
   const chipsFiltros = () => {
     const items = [];
     if (filtros.vendedor) items.push({ k: 'vendedor', label: `Vendedor: ${filtros.vendedor}` });
+    if (filtros.estado) items.push({ k: 'estado', label: `Estado: ${SEMAFORO[filtros.estado]?.label || filtros.estado}` });
     if (filtros.tier) items.push({ k: 'tier', label: `Tier: ${filtros.tier}` });
+    if (filtros.montoMin) items.push({ k: 'montoMin', label: `Monto ≥ ${CRCnoSym(filtros.montoMin)}` });
     if (filtros.fechaDesde) items.push({ k: 'fechaDesde', label: `Desde: ${filtros.fechaDesde}` });
     if (filtros.fechaHasta) items.push({ k: 'fechaHasta', label: `Hasta: ${filtros.fechaHasta}` });
     if (filtros.margenMin > 0) items.push({ k: 'margenMin', label: `Margen ≥ ${filtros.margenMin}%` });
@@ -1514,6 +1605,10 @@ export default function SeguimientoProformas() {
             onRow={p => setDrawerProf(p)}
             mostrarSeguimientos={true}
             esAdmin={esAdmin}
+            filtros={filtros}
+            setFiltros={setFiltros}
+            vendedoresUnicos={vendedoresUnicos}
+            tiersUnicos={tiersUnicos}
           />
         </div>
       )}
@@ -1582,6 +1677,10 @@ export default function SeguimientoProformas() {
             onRow={p => setDrawerProf(p)}
             mostrarSeguimientos={false}
             esAdmin={esAdmin}
+            filtros={filtros}
+            setFiltros={setFiltros}
+            vendedoresUnicos={vendedoresUnicos}
+            tiersUnicos={tiersUnicos}
           />
         </div>
       )}
