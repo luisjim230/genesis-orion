@@ -77,9 +77,29 @@ export async function middleware(req) {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // RESTO DEL MIDDLEWARE: lógica original sin cambios.
-  // Aplica a sol.depositojimenez.com y a cualquier otro host (preview, dev).
+  // RESTO DEL MIDDLEWARE.
+  // Rutas que NO requieren chequeo de sesión: salimos antes de tocar Supabase
+  // Auth. Es clave para /api y /_next, que se piden con mucha frecuencia
+  // (polling del sidebar, prefetch de Next, assets). Llamar a getSession() en
+  // cada una de esas requests dispara refresh de token contra GoTrue y, con
+  // varios usuarios concurrentes, su rate limit ("Too many requests") hacía
+  // que el middleware fallara y la app entera respondiera 504.
+  // (Nota: /api nunca estuvo protegido por el middleware; cada route maneja su
+  // propia auth, así que saltearlo acá no cambia la seguridad.)
   // ────────────────────────────────────────────────────────────────────────
+  const { pathname } = req.nextUrl;
+  if (
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/marcar-interno') ||
+    pathname.startsWith('/s/')
+  ) {
+    return NextResponse.next({ request: { headers: req.headers } });
+  }
+
+  // Solo para páginas protegidas: validamos sesión (y de paso refrescamos las
+  // cookies de sesión en la respuesta).
   let res = NextResponse.next({ request: { headers: req.headers } });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -96,8 +116,6 @@ export async function middleware(req) {
     }
   );
   const { data: { session } } = await supabase.auth.getSession();
-  const { pathname } = req.nextUrl;
-  if (pathname.startsWith('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.startsWith('/marcar-interno') || pathname.startsWith('/s/')) return res;
   if (!session) return NextResponse.redirect(new URL('/login', req.url));
   return res;
 }
