@@ -48,7 +48,14 @@ export default function Sidebar(){
   const {user,perfil,loading,logout,puedeVer}=useAuth();
   const pathname=usePathname();
 
+  // El badge de Profecías solo importa para quien ve ese módulo. Antes este
+  // efecto polleaba /api/profecias/aprobaciones-resumen cada 30s en TODAS las
+  // pestañas de TODOS los usuarios (incluidos los vendedores que ni ven
+  // Profecías), generando muchísimo tráfico. Ahora solo pollea si corresponde,
+  // y cada 2 min.
+  const verProfecias = puedeVer('profecias');
   useEffect(()=>{
+    if(!verProfecias) return;
     let cancelado=false;
     async function cargar(){
       try{
@@ -59,9 +66,9 @@ export default function Sidebar(){
       }catch(_){}
     }
     cargar();
-    const id=setInterval(cargar, 30000);
+    const id=setInterval(cargar, 120000);
     return ()=>{ cancelado=true; clearInterval(id); };
-  },[pathname]);
+  },[verProfecias]);
 
   const badgesPorKey={profecias:profeciasPendientes};
   const navAll=ALL_NAV
