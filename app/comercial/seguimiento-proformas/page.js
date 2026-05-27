@@ -1263,6 +1263,11 @@ export default function SeguimientoProformas() {
   // Supabase corta cada query en 1000 filas. La vista tiene miles de proformas,
   // así que paginamos con .range() hasta traerlas todas; de lo contrario solo se
   // cargaban las más recientes y las proformas viejas desaparecían del panel.
+  // IMPORTANTE: el orden necesita un desempate único (proforma), porque ordenar
+  // solo por `fecha` no es estable entre páginas y se colaban proformas
+  // duplicadas (o se saltaban). Las duplicadas rompían el render de React al
+  // filtrar (keys repetidas → filas viejas que no se actualizaban). Igual
+  // deduplicamos por proforma como red de seguridad.
   const cargar = useCallback(async () => {
     setFilas(null);
     const PAGE = 1000;
@@ -1273,17 +1278,23 @@ export default function SeguimientoProformas() {
         .from('hermes_panel_view')
         .select('*')
         .order('fecha', { ascending: false })
+        .order('proforma', { ascending: false })
         .range(desde, desde + PAGE - 1);
       if (error) {
         console.error('[Hermes] Error al cargar panel:', error);
-        setFilas(todas);
-        return;
+        break;
       }
       todas = todas.concat(data || []);
       if (!data || data.length < PAGE) break;
       desde += PAGE;
     }
-    setFilas(todas);
+    const vistos = new Set();
+    const unicas = todas.filter(r => {
+      if (vistos.has(r.proforma)) return false;
+      vistos.add(r.proforma);
+      return true;
+    });
+    setFilas(unicas);
   }, []);
 
   useEffect(() => { cargar(); }, [cargar, refreshTick]);
