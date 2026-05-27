@@ -2,25 +2,31 @@ name: Refresh All Views
 
 on:
   schedule:
-    # 5am Costa Rica = 11:00 UTC (después del sync diario de NEO en la Mac)
+    # 5am Costa Rica = 11:00 UTC (después del sync diario de NEO en la Mac).
+    # Se corre 1 vez al día y fuera de horario laboral a propósito: el refresh de
+    # mv_items_por_vend_mes es pesado (~200s sobre 776k filas) y, si corriera en
+    # horario de trabajo, dejaría lenta a toda la app mientras dura.
     - cron: '0 11 * * *'
   workflow_dispatch:
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Refresh profecias_panel + mv_consumo_mensual + mv_items_por_vend_mes + bi_resumen_producto
+        id: refresh
         run: |
           set -e
           SUPABASE_URL="https://xeeieqjqmtoiutfnltqu.supabase.co"
           AUTH="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
           fallidas=0
+          detalle=""
 
           refrescar() {
             local rpc=$1
             echo "→ $rpc"
-            local response=$(curl -sS --max-time 300 -w '\n%{http_code}' -X POST \
+            local response=$(curl -sS --max-time 600 -w '\n%{http_code}' -X POST \
               "$SUPABASE_URL/rest/v1/rpc/$rpc" \
               -H "apikey: $AUTH" \
               -H "Authorization: Bearer $AUTH" \
@@ -32,6 +38,7 @@ jobs:
             if [ "$status" != "200" ] && [ "$status" != "204" ]; then
               echo "  ❌ $rpc falló"
               fallidas=$((fallidas+1))
+              detalle="${detalle} ${rpc}(HTTP ${status})"
             fi
           }
 
@@ -41,8 +48,25 @@ jobs:
           refrescar bi_recalcular_resumen
 
           echo ""
+          echo "detalle=${detalle}" >> "$GITHUB_OUTPUT"
           if [ "$fallidas" -gt 0 ]; then
-            echo "Refresh terminó con $fallidas fallas"
+            echo "Refresh terminó con $fallidas fallas:${detalle}"
             exit 1
           fi
           echo "Todas las vistas refrescadas OK"
+
+      # Si el refresh falló (cualquier vista o un error inesperado del job),
+      # avisar por Telegram para saber que las existencias / datos derivados
+      # quedaron desactualizados.
+      - name: Avisar por Telegram si falló
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          DET="${{ steps.refresh.outputs.detalle }}"
+          MSG="⚠️ SOL — el refresh diario de vistas FALLÓ.${DET:+ Vistas con error:${DET}.} Las existencias del módulo Origen y los datos derivados pueden quedar desactualizados. Revisá la corrida en GitHub Actions → Refresh All Views."
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" \
+            -d "disable_web_page_preview=true" || true
