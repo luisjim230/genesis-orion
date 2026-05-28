@@ -4,42 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../lib/useAuth';
 import { puedeVerBoveda } from '../lib/boveda';
-
-// Misma estructura que sidebar.js — key debe coincidir con la key del sidebar
-const ALL_NAV = [
-  { href: '/',                  icon: '⊞',  name: 'Dashboard', key: 'dashboard' },
-  { href: '/inventario',        icon: '📦', name: 'Compras', key: 'inventario' },
-  { href: '/trazabilidad',      icon: '🔴', name: 'Trazabilidad', key: 'trazabilidad' },
-  { href: '/kronos',            icon: '📈', name: 'Proyección', key: 'kronos' },
-  { href: '/reportes',          icon: '📊', name: 'Reportes', key: 'reportes' },
-  { href: '/comercial',         icon: '💼', name: 'Comercial', key: 'comercial' },
-  { href: '/comercial/seguimiento-proformas', icon: '📋', name: 'Seguimiento de Proformas', key: 'seguimiento-proformas' },
-  { href: '/cif',               icon: '🧮', name: 'Importación', key: 'cif' },
-  { href: '/contenedores',      icon: '🚢', name: 'Cargas', key: 'contenedores' },
-  { href: '/aduana',            icon: '🛃', name: 'Aduana · TLC China', key: 'aduana' },
-  { href: '/mercado',           icon: '⚡', name: 'Mercado', key: 'mercado' },
-  { href: '/radar',             icon: '📡', name: 'RADAR', key: 'radar' },
-  { href: '/campanas',          icon: '📣', name: 'Campañas', key: 'campanas' },
-  { href: '/metricas-web',      icon: '📊', name: 'Métricas Web', key: 'metricas-web' },
-  { href: '/cajas-aurora',      icon: '🌅', name: 'Cajas', key: 'cajas-aurora' },
-  { href: '/entregas',          icon: '🚛', name: 'Entregas', key: 'entregas' },
-  { href: '/finanzas',          icon: '💰', name: 'Finanzas', key: 'finanzas' },
-  { href: '/finanzas/bancos',   icon: '🏦', name: 'Bancos', key: 'bancos' },
-  { href: '/pagos',             icon: '💸', name: 'Pagos', key: 'pagos' },
-  { href: '/tareas',            icon: '✅', name: 'Tareas', key: 'tareas' },
-  { href: '/tareas-equipo',     icon: '📋', name: 'Tareas Equipo', key: 'tareas-equipo' },
-  { href: '/social',            icon: '📱', name: 'Redes Sociales', key: 'social' },
-  { href: '/kommo-proveedores', icon: '📲', name: 'WhatsApp Proveedores', key: 'kommo-proveedores' },
-  { href: '/ponderacion',       icon: '⚖️', name: 'Ponderados', key: 'ponderacion' },
-  { href: '/materiales',        icon: '🧱', name: 'Materiales', key: 'materiales' },
-  { href: '/fichas-tecnicas',   icon: '📄', name: 'Fichas Técnicas', key: 'fichas-tecnicas' },
-  { href: '/garantias',         icon: '🔄', name: 'Garantías', key: 'garantias' },
-  { href: '/encomiendas',       icon: '📦', name: 'Encomiendas', key: 'encomiendas' },
-  { href: '/rrhh',              icon: '👥', name: 'Recursos Humanos', key: 'rrhh' },
-  { href: '/vendedores',        icon: '🏷️', name: 'Vendedores', key: 'vendedores' },
-  { href: '/boveda',            icon: '🔐', name: 'Bóveda de Accesos', key: 'boveda', bovedaOnly: true },
-  { href: '/admin',             icon: '⚙️', name: 'Usuarios', key: 'admin', adminOnly: true },
-];
+import { ALL_NAV_FLAT as ALL_NAV } from './nav-modules';
 
 // Quita tildes y pasa a minúscula para búsqueda fuzzy
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
