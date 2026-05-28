@@ -1,0 +1,51 @@
+name: Recordatorio Disk IO (post-incidente 27 may)
+
+# Recordatorio de una sola vez: manda un mensaje de Telegram el 28-may-2026 a
+# las 9am Costa Rica (15:00 UTC) para revisar que el consumo (Disk IO / CPU)
+# volvio a la normalidad tras sacar el cron que lo disparo.
+# El cron corre todos los dias a esa hora, pero el guard de fecha hace que solo
+# dispare el 28-may. Despues queda inofensivo (no manda nada). Se puede borrar
+# este archivo tranquilamente luego del 28.
+
+on:
+  schedule:
+    - cron: '0 15 * * *'   # 09:00 Costa Rica (UTC-6)
+  workflow_dispatch:        # permite dispararlo a mano para probar
+
+jobs:
+  recordatorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enviar recordatorio (solo el 28-may-2026 CR, o disparo manual)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          HOY_CR=$(TZ=America/Costa_Rica date +%F)
+          if [ "$HOY_CR" != "2026-05-28" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "Hoy es $HOY_CR, no es el dia del recordatorio. Salgo."
+            exit 0
+          fi
+
+          MSG="$(cat <<'EOF'
+          ☀️ Recordatorio (SOL) — revisar consumo despues del incidente de ayer
+
+          Ayer un proceso automatico mal configurado (corria cada 5 min) disparo CPU y Disk IO. Ya lo elimine y optimice el refresh. Esto es solo para confirmar que volvio a la normalidad.
+
+          Pasos (con el equipo ya trabajando):
+          1) Supabase → proyecto genesis-rojimo → Settings → Infrastructure.
+          2) Mira 2 graficas:
+             • Disk IO consumed per day → deberia estar BAJO (como el ~3% de los dias normales), no agotandose.
+             • Max CPU per day → deberia estar en ~25-40%, no clavado en 100%.
+          3) Si ambos estan bajos → quedo resuelto, NO hace falta pagar upgrade.
+          4) Si Disk IO o CPU siguen altos con uso normal → avisale a Claude y evaluan subir el compute.
+
+          (Si no llego alerta de fallo del refresh de las 5am, ese tambien corrio bien.)
+          EOF
+          )"
+
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" \
+            -d "disable_web_page_preview=true"
