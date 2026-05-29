@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { fmtCRC, fmtPct, fmtNum } from '../../lib/pricing';
+import { ORIGEN_COLOR } from './OrigenTab';
 
 const SEMAFORO = {
   CRITICO: { color: '#C0392B', label: 'CRÍTICO' },
@@ -10,6 +11,13 @@ const SEMAFORO = {
   Exceso:  { color: '#9ca3af', label: 'Exceso' },
 };
 const PERIODOS = [12, 24, 36];
+const ORIGENES = [
+  { id: 'todos',     label: 'Todos los orígenes' },
+  { id: 'nacional',  label: 'Nacional' },
+  { id: 'importado', label: 'Importado' },
+  { id: 'combo',     label: 'Combo' },
+];
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 export default function OrigenRiesgo() {
   const [meses, setMeses] = useState(12);
@@ -17,6 +25,7 @@ export default function OrigenRiesgo() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filtroSem, setFiltroSem] = useState('todos'); // todos | criticos | alerta+
+  const [filtroOrigen, setFiltroOrigen] = useState('todos'); // todos | nacional | importado | combo
   const [search, setSearch] = useState('');
   const [filtroProv, setFiltroProv] = useState('Todos');
   const [sort, setSort] = useState({ key: null, dir: null }); // null = orden natural (urgencia)
@@ -26,7 +35,7 @@ export default function OrigenRiesgo() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const { data, error } = await supabase.rpc('sol_riesgo_quiebre_importado', { util_min: 200000, meses });
+        const { data, error } = await supabase.rpc('sol_riesgo_quiebre', { util_min: 200000, meses, origen_filtro: filtroOrigen });
         if (error) throw error;
         if (!cancel) setData(Array.isArray(data) ? data : []);
       } catch (e) {
@@ -36,11 +45,12 @@ export default function OrigenRiesgo() {
       }
     })();
     return () => { cancel = true; };
-  }, [meses]);
+  }, [meses, filtroOrigen]);
 
   const COLS = useMemo(() => ([
     { key: 'producto',        label: 'Producto',          align: 'left',   type: 'str' },
     { key: 'proveedor',       label: 'Proveedor',         align: 'left',   type: 'str' },
+    { key: 'origen',          label: 'Origen',            align: 'center', type: 'str' },
     { key: 'lead_dias',       label: 'Lead (días)',       align: 'right',  type: 'num' },
     { key: 'venta_12m',       label: `Venta ${meses}m`,   align: 'right',  type: 'num' },
     { key: 'utilidad_12m',    label: `Utilidad ${meses}m`, align: 'right', type: 'num' },
@@ -93,13 +103,13 @@ export default function OrigenRiesgo() {
   };
 
   const exportCSV = () => {
-    const headers = ['Codigo', 'Producto', 'Proveedor', 'Lead (dias)', `Venta ${meses}m`, `Utilidad ${meses}m`, 'Margen %', 'Existencias', 'Cobertura (meses)', 'Semaforo'];
+    const headers = ['Codigo', 'Producto', 'Proveedor', 'Origen', 'Lead (dias)', `Venta ${meses}m`, `Utilidad ${meses}m`, 'Margen %', 'Existencias', 'Cobertura (meses)', 'Semaforo'];
     const esc = (v) => {
       const s = v == null ? '' : String(v);
       return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     const lines = sorted.map(r => [
-      r.codigo_interno, r.producto, r.proveedor, r.lead_dias, r.venta_12m, r.utilidad_12m,
+      r.codigo_interno, r.producto, r.proveedor, r.origen, r.lead_dias, r.venta_12m, r.utilidad_12m,
       r.margen_pct, r.existencias, r.meses_cobertura ?? '', r.semaforo,
     ].map(esc).join(','));
     const csv = '﻿' + [headers.join(','), ...lines].join('\n');
@@ -107,7 +117,7 @@ export default function OrigenRiesgo() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `riesgo_quiebre_importado_${meses}m_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `riesgo_quiebre_${filtroOrigen}_${meses}m_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -141,6 +151,11 @@ export default function OrigenRiesgo() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
         <input type="text" placeholder="Buscar producto, proveedor o código…" value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, minWidth: 280 }} />
+
+        <select value={filtroOrigen} onChange={e => { setFiltroOrigen(e.target.value); setFiltroProv('Todos'); }}
+          style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 700, color: ORIGEN_COLOR[filtroOrigen] || '#1f2937' }}>
+          {ORIGENES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
 
         <select value={filtroProv} onChange={e => setFiltroProv(e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer', maxWidth: 260 }}>
@@ -198,6 +213,15 @@ export default function OrigenRiesgo() {
                   <tr key={r.codigo_interno} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td style={cell} title={r.producto}>{(r.producto || '').slice(0, 70)}</td>
                     <td style={{ ...cell, color: '#6b7280', fontSize: 11 }}>{r.proveedor}</td>
+                    <td style={{ ...cell, textAlign: 'center' }}>
+                      {r.origen ? (
+                        <span style={{
+                          display: 'inline-block', padding: '2px 9px', borderRadius: 12, fontSize: 10,
+                          fontWeight: 700, color: 'white', whiteSpace: 'nowrap',
+                          background: ORIGEN_COLOR[r.origen] || '#9ca3af',
+                        }}>{cap(r.origen)}</span>
+                      ) : '—'}
+                    </td>
                     <td style={cellR}>{fmtNum(r.lead_dias, 0)}</td>
                     <td style={cellR}>{fmtCRC(r.venta_12m)}</td>
                     <td style={cellR}>{fmtCRC(r.utilidad_12m)}</td>
