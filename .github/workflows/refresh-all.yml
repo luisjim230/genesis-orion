@@ -26,23 +26,45 @@ jobs:
           fallidas=0
           detalle=""
 
+          # Refresca una vista con reintentos. Las vistas pesadas hacen TRUNCATE o
+          # REFRESH MATERIALIZED VIEW (toman locks); si justo en ese instante la
+          # sync de NEO o un lector tienen tomada la tabla, Postgres cancela la
+          # operación por timeout (lock/statement) y PostgREST devuelve HTTP 5xx.
+          # Eso es transitorio e inofensivo: el dato sigue consistente y al
+          # reintentar unos segundos después suele pasar. Solo se cuenta como
+          # falla real (y dispara alerta de Telegram) si sigue fallando tras
+          # agotar los reintentos.
           refrescar() {
             local rpc=$1
-            echo "→ $rpc"
-            local response=$(curl -sS --max-time 600 -w '\n%{http_code}' -X POST \
-              "$SUPABASE_URL/rest/v1/rpc/$rpc" \
-              -H "apikey: $AUTH" \
-              -H "Authorization: Bearer $AUTH" \
-              -H "Content-Type: application/json" \
-              -d '{}')
-            local body=$(echo "$response" | head -n -1)
-            local status=$(echo "$response" | tail -n 1)
-            echo "  HTTP $status  $body"
-            if [ "$status" != "200" ] && [ "$status" != "204" ]; then
-              echo "  ❌ $rpc falló"
-              fallidas=$((fallidas+1))
-              detalle="${detalle} ${rpc}(HTTP ${status})"
-            fi
+            local intentos=4 espera=15 i=1 response body status
+            while [ "$i" -le "$intentos" ]; do
+              echo "→ $rpc (intento $i/$intentos)"
+              response=$(curl -sS --max-time 600 -w '\n%{http_code}' -X POST \
+                "$SUPABASE_URL/rest/v1/rpc/$rpc" \
+                -H "apikey: $AUTH" \
+                -H "Authorization: Bearer $AUTH" \
+                -H "Content-Type: application/json" \
+                -d '{}') || true
+              body=$(echo "$response" | head -n -1)
+              status=$(echo "$response" | tail -n 1)
+              echo "  HTTP $status  $body"
+              if [ "$status" = "200" ] || [ "$status" = "204" ]; then
+                return 0
+              fi
+              # ¿Error transitorio? (statement/lock timeout, deadlock,
+              # serialización, demasiadas conexiones, o cualquier 5xx/sin código).
+              if echo "$body" | grep -qiE '57014|55P03|40P01|40001|53300|lock timeout|statement timeout|deadlock|canceling statement' \
+                 || [ -z "$status" ] || [ "${status:0:1}" = "5" ]; then
+                echo "  ↻ error transitorio; reintento en ${espera}s"
+                sleep "$espera"; espera=$((espera*2)); i=$((i+1)); continue
+              fi
+              # Error no transitorio (4xx, error de SQL real): no tiene sentido reintentar.
+              break
+            done
+            echo "  ❌ $rpc falló (HTTP ${status}) tras ${i} intento(s)"
+            fallidas=$((fallidas+1))
+            detalle="${detalle} ${rpc}(HTTP ${status})"
+            return 0
           }
 
           refrescar refresh_profecias_panel
