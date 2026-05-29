@@ -42,20 +42,35 @@ export default function OrigenClasificar({ usuario }) {
   );
 }
 
+// El campo `tipo` de proveedores_leadtime distingue extranjero vs nacional.
+// Lo derivamos del origen para mantener consistencia (combo se trata como nacional/interno).
+const tipoDeOrigen = (origen) => (origen === 'importado' ? 'extranjero' : 'nacional');
+const norm = (s) => (s || '').trim().toUpperCase();
+
 function PorProveedor({ usuario, notify }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(null);
+  const [nuevo, setNuevo] = useState({ proveedor: '', origen: 'nacional', pais: '', lead: '8' });
+  const [agregando, setAgregando] = useState(false);
 
   const cargar = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('clasificacion_origen_proveedor')
-      .select('*')
-      .order('venta_12m', { ascending: false });
-    if (error) notify(error.message, false);
-    setRows(Array.isArray(data) ? data : []);
+    const [clasif, leads] = await Promise.all([
+      supabase.from('clasificacion_origen_proveedor').select('*').order('venta_12m', { ascending: false }),
+      supabase.from('proveedores_leadtime').select('proveedor, lead_time_dias, activo'),
+    ]);
+    if (clasif.error) notify(clasif.error.message, false);
+    if (leads.error) notify(leads.error.message, false);
+    // Mapa de lead time por nombre normalizado (guarda el nombre exacto para escribir en su lugar).
+    const ltMap = new Map();
+    for (const l of (leads.data || [])) ltMap.set(norm(l.proveedor), { nombre: l.proveedor, dias: l.lead_time_dias });
+    const merged = (clasif.data || []).map(r => {
+      const lt = ltMap.get(norm(r.proveedor));
+      return { ...r, lead_time_dias: lt?.dias ?? null, lt_proveedor: lt?.nombre ?? null };
+    });
+    setRows(merged);
     setLoading(false);
   };
 
@@ -78,8 +93,75 @@ function PorProveedor({ usuario, notify }) {
     notify(`Proveedor "${prov}" actualizado`);
   };
 
+  // Guarda/edita el lead time (días) de un proveedor en proveedores_leadtime.
+  const guardarLead = async (row, diasStr) => {
+    const dias = parseInt(diasStr, 10);
+    if (!Number.isFinite(dias) || dias < 0) { notify('Lead time inválido', false); return; }
+    if (dias === (row.lead_time_dias ?? -1)) return; // sin cambios
+    setSaving(row.proveedor);
+    const nombreLT = row.lt_proveedor || row.proveedor; // si ya existe, lo actualiza en su lugar
+    const reg = { proveedor: nombreLT, lead_time_dias: dias, tipo: tipoDeOrigen(row.origen), activo: true };
+    const { error } = await supabase.from('proveedores_leadtime').upsert(reg, { onConflict: 'proveedor' });
+    setSaving(null);
+    if (error) { notify(error.message, false); return; }
+    setRows(rs => rs.map(r => (r.proveedor === row.proveedor ? { ...r, lead_time_dias: dias, lt_proveedor: nombreLT } : r)));
+    notify(`Lead time de "${row.proveedor}" = ${dias} días`);
+  };
+
+  const agregarProveedor = async () => {
+    const prov = nuevo.proveedor.trim();
+    if (prov.length < 2) { notify('Escribí el nombre del proveedor', false); return; }
+    if (rows.some(r => norm(r.proveedor) === norm(prov))) { notify('Ese proveedor ya existe', false); return; }
+    setAgregando(true);
+    const ahora = new Date().toISOString();
+    const cl = await supabase.from('clasificacion_origen_proveedor').upsert({
+      proveedor: prov, origen: nuevo.origen, pais: nuevo.pais.trim() || null,
+      fuente_clasificacion: 'manual', clasificado_por: usuario, actualizado_en: ahora,
+    }, { onConflict: 'proveedor' });
+    if (cl.error) { setAgregando(false); notify(cl.error.message, false); return; }
+    const dias = parseInt(nuevo.lead, 10);
+    if (Number.isFinite(dias) && dias >= 0) {
+      const lt = await supabase.from('proveedores_leadtime').upsert({
+        proveedor: prov, lead_time_dias: dias, tipo: tipoDeOrigen(nuevo.origen), activo: true, notas: 'alta manual',
+      }, { onConflict: 'proveedor' });
+      if (lt.error) { setAgregando(false); notify(lt.error.message, false); return; }
+    }
+    setAgregando(false);
+    setNuevo({ proveedor: '', origen: 'nacional', pais: '', lead: '8' });
+    notify(`Proveedor "${prov}" agregado`);
+    cargar();
+  };
+
+  const inp = { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12 };
+
   return (
     <div>
+      {/* Alta manual de proveedor */}
+      <div style={{ background: '#EFE6D9', border: '1px solid #e3d4c0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6E2238', marginBottom: 10 }}>➕ Agregar proveedor manualmente</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <input type="text" placeholder="Nombre del proveedor" value={nuevo.proveedor}
+            onChange={e => setNuevo(n => ({ ...n, proveedor: e.target.value }))}
+            style={{ ...inp, minWidth: 240 }} />
+          <select value={nuevo.origen} onChange={e => setNuevo(n => ({ ...n, origen: e.target.value }))}
+            style={{ ...inp, cursor: 'pointer', fontWeight: 700, color: ORIGEN_COLOR[nuevo.origen] || '#1f2937' }}>
+            {ORIGEN_PROV.map(o => <option key={o} value={o}>{cap(o)}</option>)}
+          </select>
+          <input type="text" placeholder="País (opcional)" value={nuevo.pais}
+            onChange={e => setNuevo(n => ({ ...n, pais: e.target.value }))}
+            style={{ ...inp, width: 130 }} />
+          <input type="number" min="0" placeholder="Lead días" value={nuevo.lead}
+            onChange={e => setNuevo(n => ({ ...n, lead: e.target.value }))}
+            title="Días de espera para reponer (lead time)"
+            style={{ ...inp, width: 100 }} />
+          <button onClick={agregarProveedor} disabled={agregando}
+            style={{
+              padding: '7px 16px', fontSize: 12, fontWeight: 700, border: 'none', borderRadius: 8,
+              background: agregando ? '#9ca3af' : '#6E2238', color: 'white', cursor: agregando ? 'not-allowed' : 'pointer',
+            }}>{agregando ? 'Agregando…' : 'Agregar'}</button>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <input type="text" placeholder="Buscar proveedor…" value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, minWidth: 260 }} />
@@ -91,7 +173,7 @@ function PorProveedor({ usuario, notify }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#5E2733', zIndex: 2 }}>
             <tr>
-              {[['Proveedor', 'left'], ['Venta 12m', 'right'], ['Origen', 'left'], ['País', 'left'], ['Notas', 'left']].map(([h, al]) => (
+              {[['Proveedor', 'left'], ['Venta 12m', 'right'], ['Origen', 'left'], ['Lead (días)', 'right'], ['País', 'left'], ['Notas', 'left']].map(([h, al]) => (
                 <th key={h} style={{ padding: '8px 10px', color: 'white', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, textAlign: al, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -112,6 +194,12 @@ function PorProveedor({ usuario, notify }) {
                     {ORIGEN_PROV.map(o => <option key={o} value={o}>{cap(o)}</option>)}
                   </select>
                 </td>
+                <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                  <input type="number" min="0" defaultValue={r.lead_time_dias ?? ''} placeholder="—"
+                    onBlur={e => guardarLead(r, e.target.value)}
+                    title="Días de espera para reponer (lead time)"
+                    style={{ padding: '5px 8px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, width: 70, textAlign: 'right' }} />
+                </td>
                 <td style={{ padding: '6px 10px' }}>
                   <input defaultValue={r.pais || ''} placeholder="—"
                     onBlur={e => { const v = e.target.value.trim(); if (v !== (r.pais || '')) guardar(r.proveedor, { pais: v }); }}
@@ -125,7 +213,7 @@ function PorProveedor({ usuario, notify }) {
               </tr>
             ))}
             {filtered.length === 0 && !loading && (
-              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Sin proveedores</td></tr>
+              <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Sin proveedores</td></tr>
             )}
           </tbody>
         </table>
