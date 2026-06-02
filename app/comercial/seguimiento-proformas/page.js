@@ -127,7 +127,8 @@ const SEMAFORO = {
   al_dia:        { label: 'Al día',        bg: '#d1fae5', text: '#065f46',     emoji: '🟢', orden: 4 },
   completo:      { label: 'Completo',      bg: '#dbeafe', text: '#1d4ed8',     emoji: '✓',  orden: 5 },
   ganada:        { label: 'Facturada',     bg: '#ede9fe', text: '#6b21a8',     emoji: '💰', orden: 6 },
-  sin_tier:      { label: 'Sin tier',      bg: '#f1f5f9', text: '#64748b',     emoji: '—',  orden: 7 },
+  perdida:       { label: 'Perdida',       bg: '#fee2e2', text: '#991b1b',     emoji: '✖', orden: 7 },
+  sin_tier:      { label: 'Sin tier',      bg: '#f1f5f9', text: '#64748b',     emoji: '—',  orden: 8 },
 };
 
 const CANALES = ['whatsapp', 'llamada', 'email', 'presencial', 'otro'];
@@ -829,7 +830,7 @@ function TabConfig() {
 
 // ── Tab: Tabla de proformas (Abiertas / Ganadas) ────────────────────────────
 // Estados de semáforo que tiene sentido ofrecer como filtro de columna.
-const ESTADOS_FILTRO = ['sin_contactar', 'atrasado', 'toca_hoy', 'al_dia', 'completo', 'ganada'];
+const ESTADOS_FILTRO = ['sin_contactar', 'atrasado', 'toca_hoy', 'al_dia', 'completo', 'perdida', 'ganada'];
 const miniCtrl = {
   width: '100%', boxSizing: 'border-box', padding: '4px 6px', borderRadius: 6,
   border: '1px solid #cbd5e1', fontSize: '0.74rem', fontFamily: 'Rubik, sans-serif',
@@ -1108,7 +1109,7 @@ function PodioVendedores({ filasGanadas, fechaDesde, fechaHasta }) {
 }
 
 // ── Resumen por vendedor (vista de supervisor) ──────────────────────────────
-const COL_VACIO = { vendedor: '', total: '', facturadas: '', enSeguimiento: '', bronce: '', atrasadas: '', conversion: '', montoFacturado: '', montoEnJuego: '' };
+const COL_VACIO = { vendedor: '', total: '', facturadas: '', enSeguimiento: '', perdidas: '', bronce: '', atrasadas: '', conversion: '', montoFacturado: '', montoEnJuego: '' };
 
 function ResumenVendedores({ resumen, esAdmin, onPick }) {
   const [orden, setOrden] = useState({ col: 'total', dir: 'desc' });
@@ -1132,6 +1133,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
     if (colF.total && r.total < num(colF.total)) return false;
     if (colF.facturadas && r.facturadas < num(colF.facturadas)) return false;
     if (colF.enSeguimiento && r.enSeguimiento < num(colF.enSeguimiento)) return false;
+    if (colF.perdidas && r.perdidas < num(colF.perdidas)) return false;
     if (colF.bronce && r.bronce < num(colF.bronce)) return false;
     if (colF.atrasadas && r.atrasadas < num(colF.atrasadas)) return false;
     if (colF.conversion && convDe(r) < num(colF.conversion)) return false;
@@ -1149,12 +1151,13 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
 
   const tot = filtrados.reduce((s, r) => ({
     total: s.total + r.total, facturadas: s.facturadas + r.facturadas,
-    enSeguimiento: s.enSeguimiento + r.enSeguimiento, bronce: s.bronce + r.bronce,
+    enSeguimiento: s.enSeguimiento + r.enSeguimiento, perdidas: s.perdidas + r.perdidas,
+    bronce: s.bronce + r.bronce,
     atrasadas: s.atrasadas + r.atrasadas, montoEnJuego: s.montoEnJuego + r.montoEnJuego,
     montoFacturado: s.montoFacturado + r.montoFacturado,
-  }), { total: 0, facturadas: 0, enSeguimiento: 0, bronce: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 });
+  }), { total: 0, facturadas: 0, enSeguimiento: 0, perdidas: 0, bronce: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 });
 
-  const colSpan = 7 + (esAdmin ? 2 : 0);
+  const colSpan = 8 + (esAdmin ? 2 : 0);
 
   return (
     <div style={{ ...S.card, padding: 0 }}>
@@ -1176,6 +1179,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
             <SortHeader col="total" label="Proformas" align="right" orden={orden} onSort={cambiarOrden} />
             <SortHeader col="facturadas" label="Facturadas" align="right" orden={orden} onSort={cambiarOrden} />
             <SortHeader col="enSeguimiento" label="En seguim." align="right" orden={orden} onSort={cambiarOrden} />
+            <SortHeader col="perdidas" label="Perdidas" align="right" orden={orden} onSort={cambiarOrden} />
             <SortHeader col="bronce" label="Bronce" align="right" orden={orden} onSort={cambiarOrden} />
             <SortHeader col="atrasadas" label="Atrasadas" align="right" orden={orden} onSort={cambiarOrden} />
             <SortHeader col="conversion" label="Conversión" align="right" orden={orden} onSort={cambiarOrden} />
@@ -1190,6 +1194,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
               <th style={filterTh}><input value={colF.total} onChange={e => setCF('total', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
               <th style={filterTh}><input value={colF.facturadas} onChange={e => setCF('facturadas', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
               <th style={filterTh}><input value={colF.enSeguimiento} onChange={e => setCF('enSeguimiento', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
+              <th style={filterTh}><input value={colF.perdidas} onChange={e => setCF('perdidas', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
               <th style={filterTh}><input value={colF.bronce} onChange={e => setCF('bronce', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
               <th style={filterTh}><input value={colF.atrasadas} onChange={e => setCF('atrasadas', e.target.value)} inputMode="numeric" placeholder="≥" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
               <th style={filterTh}><input value={colF.conversion} onChange={e => setCF('conversion', e.target.value)} inputMode="numeric" placeholder="≥ %" style={{ ...miniCtrl, textAlign: 'right' }} /></th>
@@ -1217,6 +1222,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
                 <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{r.total.toLocaleString('es-CR')}</td>
                 <td style={{ ...S.td, textAlign: 'right', color: C.green, fontWeight: 700 }}>{r.facturadas.toLocaleString('es-CR')}</td>
                 <td style={{ ...S.td, textAlign: 'right', color: C.blue }}>{r.enSeguimiento.toLocaleString('es-CR')}</td>
+                <td style={{ ...S.td, textAlign: 'right', color: r.perdidas > 0 ? C.red : C.muted, fontWeight: r.perdidas > 0 ? 700 : 400 }}>{r.perdidas.toLocaleString('es-CR')}</td>
                 <td style={{ ...S.td, textAlign: 'right', color: C.muted }}>{r.bronce.toLocaleString('es-CR')}</td>
                 <td style={{ ...S.td, textAlign: 'right', color: r.atrasadas > 0 ? C.red : C.muted, fontWeight: r.atrasadas > 0 ? 700 : 400 }}>{r.atrasadas.toLocaleString('es-CR')}</td>
                 <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: conv >= 50 ? C.green : conv >= 25 ? C.orange : C.muted }}>{conv.toFixed(0)}%</td>
@@ -1232,6 +1238,7 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.total.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.green }}>{tot.facturadas.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: C.blue }}>{tot.enSeguimiento.toLocaleString('es-CR')}</td>
+            <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: tot.perdidas > 0 ? C.red : undefined }}>{tot.perdidas.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.bronce.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800, color: tot.atrasadas > 0 ? C.red : undefined }}>{tot.atrasadas.toLocaleString('es-CR')}</td>
             <td style={{ ...S.td, textAlign: 'right', fontWeight: 800 }}>{tot.total ? (tot.facturadas / tot.total * 100).toFixed(0) : 0}%</td>
@@ -1469,12 +1476,15 @@ export default function SeguimientoProformas() {
       if (profQ && !String(f.proforma).includes(profQ)) continue;
       if (cliQ && !String(f.cliente || '').toLowerCase().includes(cliQ)) continue;
       const v = f.vendedor || 'Sin asignar';
-      if (!map[v]) map[v] = { vendedor: v, total: 0, facturadas: 0, enSeguimiento: 0, bronce: 0, sinTier: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 };
+      if (!map[v]) map[v] = { vendedor: v, total: 0, facturadas: 0, enSeguimiento: 0, perdidas: 0, bronce: 0, sinTier: 0, atrasadas: 0, montoEnJuego: 0, montoFacturado: 0 };
       const r = map[v];
       r.total++;
       if (f.facturada) {
         r.facturadas++;
         r.montoFacturado += N(f.monto_total);
+      } else if (f.semaforo === 'perdida') {
+        // Proforma cerrada como perdida: deja de contar como "en seguimiento".
+        r.perdidas++;
       } else if (f.tier_nombre === 'Bronce') {
         r.bronce++;
       } else if (!f.tier_nombre) {
