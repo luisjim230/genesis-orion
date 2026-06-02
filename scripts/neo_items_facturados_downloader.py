@@ -16,7 +16,7 @@ Cómo correr manualmente:
 Horario automático: definir en LaunchAgent (por configurar).
 """
 
-import os, sys, asyncio, logging, json, urllib.request, urllib.error
+import os, sys, asyncio, logging, json, re, urllib.request, urllib.error
 import unicodedata
 from pathlib import Path
 from datetime import datetime, date
@@ -300,6 +300,31 @@ def subir_a_supabase(excel_path):
     df["mes"]             = periodo  # requerido por mv_items_por_vend_mes y RPCs
 
     registros = json.loads(df.to_json(orient="records", force_ascii=False))
+
+    # ── Idempotencia: reemplazar el período abierto en vez de acumular ─────────
+    # NEO trae el mes completo acumulado en cada corrida. El constraint único es
+    # (factura, codigo_interno, bodega); como `bodega` viene NULL en muchas
+    # líneas y Postgres trata NULL como distinto en índices únicos, el upsert NO
+    # deduplica esas filas y se acumulaban decenas de copias por noche (en mayo
+    # 2026 llegó a 90 cargas, +104% inflado). Solución: borrar TODO el período
+    # abierto y reinsertar el pull fresco → queda exactamente una copia.
+    # Solo se toca el período con formato 'YYYY-MM' (el del mes en curso); nunca
+    # los snapshots históricos 'Día ...'. El delete corre recién acá, después de
+    # validar que el reporte trae datos (total >= 5), para no vaciar el mes si la
+    # descarga vino vacía o rota.
+    if re.fullmatch(r"\d{4}-\d{2}", periodo):
+        del_status = supa_request(
+            "DELETE",
+            f"{TABLA}?periodo_reporte=eq.{periodo}",
+            prefer="return=minimal",
+        )
+        if del_status and del_status < 300:
+            log.info(f"  🧹 Período {periodo} limpiado antes de reinsertar (idempotente)")
+        else:
+            log.error(f"  ❌ No se pudo limpiar el período {periodo} (status={del_status}) — abortando para no duplicar")
+            return False
+    else:
+        log.warning(f"  ⚠ periodo '{periodo}' sin formato YYYY-MM — no se limpia (seguridad)")
 
     # ── Upsert: insertar o actualizar por (factura, codigo_interno, bodega) ───
     log.info(f"Insertando/actualizando {total:,} registros...")
