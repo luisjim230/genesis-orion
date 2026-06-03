@@ -162,12 +162,14 @@ export async function POST(request) {
         db.rpc('refresh_mv_consumo_mensual'),
         db.rpc('refresh_mv_items_por_vend_mes'),
         db.rpc('bi_recalcular_resumen'),
+        // Revisión de Compras: recalcula utilidad de hoy y auto-resuelve alertas (§7.1)
+        db.rpc('recalcular_revision_compras'),
       ];
       const res = await Promise.allSettled(tareas);
       const fallidas = res.filter(r => r.status === 'rejected' || r.value?.error);
       refreshOk = fallidas.length === 0;
       refreshDetalle = res.map((r, i) => ({
-        rpc: ['refresh_profecias_panel','refresh_mv_consumo_mensual','refresh_mv_items_por_vend_mes','bi_recalcular_resumen'][i],
+        rpc: ['refresh_profecias_panel','refresh_mv_consumo_mensual','refresh_mv_items_por_vend_mes','bi_recalcular_resumen','recalcular_revision_compras'][i],
         ok: r.status === 'fulfilled' && !r.value?.error,
         error: r.status === 'rejected' ? r.reason?.message : r.value?.error?.message || null,
       }));
