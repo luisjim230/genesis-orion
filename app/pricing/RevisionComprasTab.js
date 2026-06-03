@@ -21,6 +21,15 @@ import { fmtCRC, fmtPct, fmtNum } from '../../lib/pricing';
 
 const ACENTO = '#ED6E2E'; // naranja de marca, solo en botón de acción
 
+// Formatea una fecha ('2026-05-20' o '2026-05-26 00:00:00') a DD/MM/YYYY
+function fmtFecha(v) {
+  if (!v) return null;
+  const s = String(v).slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return s;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
 // markup (sobre costo) → margen (sobre venta)
 function markupAMargen(mk) {
   const m = Number(mk);
@@ -28,19 +37,23 @@ function markupAMargen(mk) {
   return (m / (1 + m / 100));
 }
 
-// Clasificación visual de una fila de "Compras del día"
+// Clasificación visual de una fila de "Compras del día".
+// El estado real lo decide el RPC; acá solo elegimos etiqueta/color/orden.
 function clasificar(r, piso, umbral) {
   const mk = Number(r.markup_actual_pct);
   const meta = r.markup_meta_pct != null ? Number(r.markup_meta_pct) : null;
-  if (r.estado === 'marcado') return { key: 'marcado', sev: 7, emoji: '✅', label: 'Marcado (pendiente en NEO)', color: '#6b7280', faded: true };
-  if (!isFinite(mk))          return { key: 'ok', sev: 8, emoji: '⚪', label: 'Sin datos vivos', color: '#9ca3af' };
-  if (mk < 0)                 return { key: 'perdida', sev: 0, emoji: '🔴', label: 'Pérdida — vendiendo bajo costo', color: '#dc2626' };
-  if (mk < piso)              return { key: 'bajo_piso', sev: 1, emoji: '🔴', label: `Bajo el piso de ${piso}%`, color: '#dc2626' };
-  if (r.estado === 'inflada') return { key: 'inflada', sev: 3, emoji: '🟢', label: 'Utilidad inflada — podés bajar y competir', color: '#16a34a' };
-  if (meta != null && mk < meta - umbral) return { key: 'cayo', sev: 2, emoji: '🟠', label: 'Cayó bajo tu meta', color: '#f97316' };
-  if (r.estado === 'sano')        return { key: 'sano', sev: 4, emoji: '🔵', label: 'Subió costo, sigue sano', color: '#2563eb' };
-  if (r.estado === 'oportunidad') return { key: 'oportunidad', sev: 5, emoji: '🟢', label: 'Bajó costo / oportunidad', color: '#16a34a' };
-  return { key: 'ok', sev: 6, emoji: '⚪', label: 'Sin cambios / OK', color: '#9ca3af' };
+  const faded = r.estado === 'marcado';
+  let c;
+  if (!isFinite(mk))          c = { key: 'ok', sev: 8, emoji: '⚪', label: 'Sin datos vivos', color: '#9ca3af' };
+  else if (mk < 0)            c = { key: 'perdida', sev: 0, emoji: '🔴', label: 'Pérdida — vendiendo bajo costo', color: '#dc2626' };
+  else if (mk < piso)         c = { key: 'bajo_piso', sev: 1, emoji: '🔴', label: `Bajo el piso de ${piso}%`, color: '#dc2626' };
+  else if (r.estado === 'inflada' || (faded && meta != null && mk > meta + 5))
+                              c = { key: 'inflada', sev: 3, emoji: '🟢', label: 'Utilidad inflada — podés bajar y competir', color: '#16a34a' };
+  else if (meta != null && mk < meta - umbral)
+                              c = { key: 'cayo', sev: 2, emoji: '🟠', label: 'Cayó bajo tu meta', color: '#f97316' };
+  else                        c = { key: 'ok', sev: 6, emoji: '⚪', label: 'Sin cambios / OK', color: '#9ca3af' };
+  if (faded) return { ...c, sev: c.sev + 10, faded: true, label: 'Marcado — pendiente de aplicar en NEO', emoji: '✅', color: '#6b7280' };
+  return c;
 }
 
 export default function RevisionComprasTab() {
@@ -143,11 +156,13 @@ export default function RevisionComprasTab() {
     }
   };
 
+  // "Ya lo revisé": dismiss durable. Sale de la lista y no vuelve salvo que
+  // se vuelva crítico (pérdida / bajo el piso). El sync respeta este 'resuelto'.
   const marcarRevisado = async (r) => {
     await supabase.from('pricing_revision_compras')
-      .update({ estado: 'marcado', actualizado_en: new Date().toISOString() })
+      .update({ estado: 'resuelto', resuelto_en: new Date().toISOString(), actualizado_en: new Date().toISOString() })
       .eq('codigo_interno', r.codigo_interno);
-    setDiaRows(rows => rows.map(x => x.codigo_interno === r.codigo_interno ? { ...x, estado: 'marcado' } : x));
+    setDiaRows(rows => rows.filter(x => x.codigo_interno !== r.codigo_interno));
   };
 
   const ocultar = async (r) => {
@@ -175,15 +190,16 @@ export default function RevisionComprasTab() {
   }, [diaRows, piso, umbral, search]);
 
   const kpis = useMemo(() => {
-    let perdida = 0, bajoPiso = 0, cayo = 0, oportInfla = 0;
+    let perdida = 0, bajoPiso = 0, cayo = 0, inflada = 0;
     diaRows.forEach(r => {
+      if (r.estado === 'marcado') return; // ya en proceso, no cuenta como pendiente
       const c = clasificar(r, piso, umbral);
       if (c.key === 'perdida') perdida++;
       else if (c.key === 'bajo_piso') bajoPiso++;
       else if (c.key === 'cayo') cayo++;
-      else if (c.key === 'oportunidad' || c.key === 'inflada') oportInfla++;
+      else if (c.key === 'inflada') inflada++;
     });
-    return { comprados: diaRows.length, perdida, bajoPiso, cayo, oportInfla };
+    return { enRevision: diaRows.length, perdida, bajoPiso, cayo, inflada };
   }, [diaRows, piso, umbral]);
 
   const urgentes = kpis.perdida + kpis.bajoPiso;
@@ -253,11 +269,11 @@ export default function RevisionComprasTab() {
         <>
           {/* KPIs del día */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
-            <KpiCard label="Ítems comprados (hoy)" value={fmtNum(kpis.comprados)} color="#5E2733" />
+            <KpiCard label="En revisión activa" value={fmtNum(kpis.enRevision)} color="#5E2733" />
             <KpiCard label="🔴 Pérdida" value={fmtNum(kpis.perdida)} color="#dc2626" />
             <KpiCard label={`🔴 Bajo el piso ${piso}%`} value={fmtNum(kpis.bajoPiso)} color="#dc2626" />
             <KpiCard label="🟠 Cayó utilidad" value={fmtNum(kpis.cayo)} color="#f97316" />
-            <KpiCard label="🟢 Oportunidad / inflada" value={fmtNum(kpis.oportInfla)} color="#16a34a" />
+            <KpiCard label="🟢 Utilidad inflada" value={fmtNum(kpis.inflada)} color="#16a34a" />
           </div>
 
           {urgentes > 0 && (
@@ -373,8 +389,6 @@ function TarjetaDia({ r, piso, copiado, onCopiar, onRevisar, onOcultar }) {
     if (cat.key === 'inflada') {
       const z = metaMk != null ? fmtPct(metaMk) : 'tu meta';
       sugerencia = <>Podés <b>bajar</b> a <b>{fmtCRC(r.precio_sugerido)}</b> y seguís ganando {z} de markup — más competitivo.</>;
-    } else if (cat.key === 'oportunidad') {
-      sugerencia = <>Bajó el costo: podés <b>dejar el precio</b> y ganar más margen, o <b>bajar a {fmtCRC(r.precio_sugerido)}</b> para competir.</>;
     } else if (cat.key === 'perdida' || cat.key === 'bajo_piso' || cat.key === 'cayo') {
       const z = metaMk != null ? fmtPct(Math.max(metaMk, piso)) : `${piso}%`;
       sugerencia = <>Para volver a {z} de utilidad: <b>subí el precio a {fmtCRC(r.precio_sugerido)}</b>.</>;
@@ -398,6 +412,14 @@ function TarjetaDia({ r, piso, copiado, onCopiar, onRevisar, onOcultar }) {
             {r.proveedor ? ` · ${r.proveedor}` : ''}{r.categoria ? ` · ${r.categoria}` : ''}
             {r.cantidad != null ? ` · compró ${fmtNum(r.cantidad, 0)}` : ''}
           </div>
+          {(fmtFecha(r.fecha_compra) || fmtFecha(r.ultima_compra)) && (
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3, fontWeight: 600 }}>
+              🗓️ Última compra: {fmtFecha(r.fecha_compra) || fmtFecha(r.ultima_compra)}
+              {fmtFecha(r.ultima_compra) && fmtFecha(r.ultima_compra) !== fmtFecha(r.fecha_compra)
+                ? <span style={{ color: '#9ca3af', fontWeight: 400 }}> · en catálogo: {fmtFecha(r.ultima_compra)}</span>
+                : null}
+            </div>
+          )}
         </div>
 
         {/* Stats */}
