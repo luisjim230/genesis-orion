@@ -86,16 +86,13 @@ export default function RevisionComprasTab() {
       });
   }, []);
 
-  // 2) Recalcular (server-side) + cargar "Compras del día".
-  //    Respaldo §7.3: aunque la ingesta no haya corrido, al abrir queda fresco.
+  // 2) Cargar "Compras del día". Mostramos PRIMERO lo que ya está calculado
+  //    (rápido y a prueba de fallos) y luego, si corresponde, recalculamos en
+  //    segundo plano y refrescamos. Así un fallo o demora del recálculo nunca
+  //    deja la lista vacía.
   const cargarDia = useCallback(async (recalcular = true) => {
     setLoading(true); setError(null);
     try {
-      if (recalcular) {
-        const { data: rc, error: e0 } = await supabase.rpc('recalcular_revision_compras');
-        if (e0) throw e0;
-        setRecalcInfo(rc || null);
-      }
       const { data, error } = await supabase.rpc('pricing_revision_compras_dia');
       if (error) throw error;
       setDiaRows(Array.isArray(data) ? data : []);
@@ -103,6 +100,15 @@ export default function RevisionComprasTab() {
       setError(e.message || String(e));
     } finally {
       setLoading(false);
+    }
+    // Recalcular en segundo plano (respaldo §7.3) y refrescar sin bloquear la vista
+    if (recalcular) {
+      try {
+        const { data: rc } = await supabase.rpc('recalcular_revision_compras');
+        setRecalcInfo(rc || null);
+        const { data } = await supabase.rpc('pricing_revision_compras_dia');
+        if (Array.isArray(data)) setDiaRows(data);
+      } catch { /* el recálculo también corre solo tras cada sync; no bloquea */ }
     }
   }, []);
 
