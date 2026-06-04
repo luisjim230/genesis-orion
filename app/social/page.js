@@ -1112,9 +1112,219 @@ function TabDashboard() {
 // Legacy tab wrapper
 function TabEstadisticas() { return <TabDashboard/> }
 
+// ─── TAB: TAREAS URGENTES ─────────────────────────────────────────────────────
+const PRIOR = {
+  alta:  { label:'Alta',  color:'#fc8181', icon:'🔴' },
+  media: { label:'Media', color:'#f6ad55', icon:'🟡' },
+  baja:  { label:'Baja',  color:'#68d391', icon:'🟢' },
+}
+const TAREA_ESTADOS = {
+  pendiente:  { label:'Pendiente',  color:'#f6ad55', icon:'⏳', next:'en_proceso' },
+  en_proceso: { label:'En proceso', color:'#63b3ed', icon:'🔧', next:'hecha' },
+  hecha:      { label:'Hecha',      color:'#68d391', icon:'✅', next:null },
+}
+const PRIOR_ORDER = { alta:0, media:1, baja:2 }
+
+function TabTareasUrgentes() {
+  const [tareas, setTareas]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm]       = useState(null)
+  const [saving, setSaving]   = useState(false)
+  const [msg, setMsg]         = useState(null)
+  const [verHechas, setVerHechas] = useState(false)
+
+  function showMsg(t, ok=true){ setMsg({t,ok}); setTimeout(()=>setMsg(null),3000) }
+
+  async function cargar(){
+    setLoading(true)
+    const { data } = await supabase.from('social_tareas_urgentes').select('*').order('creado_en',{ascending:false})
+    setTareas(data||[])
+    setLoading(false)
+  }
+  useEffect(()=>{ cargar() },[])
+
+  const EMPTY = { titulo:'', prioridad:'alta', estado:'pendiente', responsable:'', fecha_limite:'', indicaciones:'' }
+  function abrir(t){ setForm(t ? {...t, fecha_limite:t.fecha_limite||''} : {...EMPTY}); setFormOpen(true) }
+
+  async function guardar(){
+    if(!form.titulo.trim()) return showMsg('El título es requerido.', false)
+    setSaving(true)
+    const payload = { ...form, actualizado_en:new Date().toISOString() }
+    if(!payload.fecha_limite) payload.fecha_limite = null
+    if(form.id){
+      await supabase.from('social_tareas_urgentes').update(payload).eq('id', form.id)
+    } else {
+      delete payload.id
+      await supabase.from('social_tareas_urgentes').insert({ ...payload, creado_en:new Date().toISOString() })
+    }
+    setSaving(false); setFormOpen(false); showMsg('Tarea guardada.'); cargar()
+  }
+
+  async function cambiarEstado(t, nuevo){
+    const extra = nuevo==='hecha' ? { completado_en:new Date().toISOString() } : { completado_en:null }
+    await supabase.from('social_tareas_urgentes')
+      .update({ estado:nuevo, actualizado_en:new Date().toISOString(), ...extra }).eq('id', t.id)
+    cargar()
+  }
+  async function eliminar(t){
+    if(!confirm('¿Eliminar esta tarea?')) return
+    await supabase.from('social_tareas_urgentes').delete().eq('id', t.id); cargar()
+  }
+
+  const activas = tareas.filter(t=>t.estado!=='hecha').sort((a,b)=>
+    (PRIOR_ORDER[a.prioridad]??9)-(PRIOR_ORDER[b.prioridad]??9)
+    || ((a.fecha_limite||'9999') < (b.fecha_limite||'9999') ? -1 : 1)
+  )
+  const hechas = tareas.filter(t=>t.estado==='hecha')
+  const pend = tareas.filter(t=>t.estado==='pendiente').length
+  const proc = tareas.filter(t=>t.estado==='en_proceso').length
+
+  // ── Vista formulario ──
+  if (formOpen) return (
+    <div>
+      <button style={{...S.btnSm(), marginBottom:16}} onClick={()=>setFormOpen(false)}>← Volver</button>
+      <h2 style={{color:TEXT, fontSize:'1.05em', fontWeight:700, marginBottom:18}}>
+        {form.id ? '✏️ Editar tarea' : '➕ Nueva tarea urgente'}
+      </h2>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12}}>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>TÍTULO / QUÉ HAY QUE HACER *</label>
+          <input style={S.input} value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})} placeholder="Ej: Grabar promo del fin de semana"/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>PRIORIDAD</label>
+          <Sel value={form.prioridad} onChange={v=>setForm({...form,prioridad:v})}
+            options={Object.entries(PRIOR).map(([k,p])=>[k,`${p.icon} ${p.label}`])}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>ESTADO</label>
+          <Sel value={form.estado} onChange={v=>setForm({...form,estado:v})}
+            options={Object.entries(TAREA_ESTADOS).map(([k,e])=>[k,`${e.icon} ${e.label}`])}/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>RESPONSABLE</label>
+          <input style={S.input} value={form.responsable} onChange={e=>setForm({...form,responsable:e.target.value})} placeholder="¿Quién lo hace?"/>
+        </div>
+        <div>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>FECHA LÍMITE</label>
+          <input type="date" style={S.input} value={form.fecha_limite} onChange={e=>setForm({...form,fecha_limite:e.target.value})}/>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={{fontSize:'0.72em', color:MUTED, display:'block', marginBottom:4}}>INDICACIONES / DETALLE</label>
+          <textarea style={{...S.textarea, minHeight:120}} value={form.indicaciones} onChange={e=>setForm({...form,indicaciones:e.target.value})}
+            placeholder="Escribí acá todo lo que haga falta: instrucciones, contexto, links, ideas, lo que sea..."/>
+        </div>
+      </div>
+      <Msg msg={msg}/>
+      <div style={{display:'flex', gap:10}}>
+        <button style={S.btn()} onClick={guardar} disabled={saving}>{saving?'Guardando...':'💾 Guardar tarea'}</button>
+        <button style={S.btnSm()} onClick={()=>setFormOpen(false)}>Cancelar</button>
+      </div>
+    </div>
+  )
+
+  // ── Vista lista ──
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:20}}>
+        {[
+          ['⏳ Pendientes', pend, '#f6ad55'],
+          ['🔧 En proceso', proc, '#63b3ed'],
+          ['✅ Hechas', hechas.length, '#68d391'],
+        ].map(([l,v,c])=>(
+          <div key={l} style={{background:SURF, border:`1px solid ${c}33`, borderTop:`3px solid ${c}`, borderRadius:10, padding:'14px 16px'}}>
+            <div style={{fontSize:'0.7em', color:MUTED, textTransform:'uppercase', letterSpacing:'0.06em'}}>{l}</div>
+            <div style={{fontSize:'1.8em', fontWeight:700, color:c, marginTop:4}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:16}}>
+        <div style={{fontSize:'0.82em', color:MUTED}}>{activas.length} tarea(s) activa(s)</div>
+        <button style={S.btn()} onClick={()=>abrir(null)}>+ Agregar tarea</button>
+      </div>
+
+      {loading ? <div style={{textAlign:'center', padding:40, color:MUTED}}>Cargando...</div>
+      : activas.length===0
+        ? <div style={{...S.card, textAlign:'center', padding:40, color:MUTED}}>No hay tareas pendientes. 🎉</div>
+        : (
+          <div style={{display:'grid', gap:10}}>
+            {activas.map(t=>{
+              const p = PRIOR[t.prioridad] || PRIOR.media
+              const e = TAREA_ESTADOS[t.estado] || TAREA_ESTADOS.pendiente
+              const d = t.fecha_limite ? new Date(t.fecha_limite+'T12:00:00') : null
+              const diff = d ? (d - new Date()) / 86400000 : null
+              const fColor = diff===null ? MUTED : diff<0 ? '#fc8181' : diff<=2 ? '#f6ad55' : '#68d391'
+              return (
+                <div key={t.id} style={{...S.card, marginBottom:0, borderLeft:`4px solid ${p.color}`}}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10}}>
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontWeight:700, color:TEXT, fontSize:'0.95em', marginBottom:6}}>{t.titulo}</div>
+                      <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:t.indicaciones?10:0}}>
+                        <span style={S.badge(p.color)}>{p.icon} {p.label}</span>
+                        <span style={S.badge(e.color)}>{e.icon} {e.label}</span>
+                        {t.responsable && <span style={{fontSize:'0.78em', color:MUTED}}>👤 {t.responsable}</span>}
+                        {t.fecha_limite && <span style={{fontSize:'0.78em', color:fColor, fontWeight:600}}>📅 {t.fecha_limite}{diff!==null && diff<0 ? ' (vencida)' : ''}</span>}
+                      </div>
+                      {t.indicaciones && (
+                        <div style={{background:SURF2, borderRadius:8, padding:'10px 14px', fontSize:'0.84em', color:TEXT, lineHeight:1.5, whiteSpace:'pre-wrap'}}>{t.indicaciones}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{display:'flex', gap:6, marginTop:12, flexWrap:'wrap'}}>
+                    {e.next && (
+                      <button style={{...S.btn(TAREA_ESTADOS[e.next].color), fontSize:'0.76em', padding:'5px 12px'}} onClick={()=>cambiarEstado(t, e.next)}>
+                        → {TAREA_ESTADOS[e.next].label}
+                      </button>
+                    )}
+                    {t.estado!=='pendiente' && (
+                      <button style={{...S.btnSm(), fontSize:'0.76em'}} onClick={()=>cambiarEstado(t, 'pendiente')}>↩ Pendiente</button>
+                    )}
+                    <button style={S.btnSm()} onClick={()=>abrir(t)}>✏️ Editar</button>
+                    <button style={{...S.btnSm(), color:'#fc8181', borderColor:'#fc818144'}} onClick={()=>eliminar(t)}>🗑️</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      }
+
+      {/* Hechas (colapsable) */}
+      {hechas.length > 0 && (
+        <div style={{marginTop:20}}>
+          <button style={{...S.btnSm(), marginBottom:10}} onClick={()=>setVerHechas(v=>!v)}>
+            {verHechas ? '▼' : '▶'} ✅ Hechas ({hechas.length})
+          </button>
+          {verHechas && (
+            <div style={{display:'grid', gap:8}}>
+              {hechas.map(t=>(
+                <div key={t.id} style={{...S.card, marginBottom:0, opacity:0.65, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10}}>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontWeight:600, color:TEXT, fontSize:'0.88em', textDecoration:'line-through'}}>{t.titulo}</div>
+                    {t.completado_en && <div style={{fontSize:'0.72em', color:MUTED, marginTop:3}}>✅ {new Date(t.completado_en).toLocaleDateString('es-CR')}</div>}
+                  </div>
+                  <div style={{display:'flex', gap:6}}>
+                    <button style={{...S.btnSm(), fontSize:'0.76em'}} onClick={()=>cambiarEstado(t, 'pendiente')}>↩ Reabrir</button>
+                    <button style={{...S.btnSm(), color:'#fc8181', borderColor:'#fc818144'}} onClick={()=>eliminar(t)}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <Msg msg={msg}/>
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
   { id:'dashboard',           icon:'📊', label:'Dashboard',             estadoFiltro:null },
+  { id:'tareas',              icon:'🔥', label:'Tareas urgentes',       estadoFiltro:null },
   { id:'listo',               icon:'✅', label:'Listo para publicar',   estadoFiltro:'listo' },
   { id:'por_grabar',          icon:'🎬', label:'Por grabar',            estadoFiltro:'por_grabar' },
   { id:'grabado_no_editado',  icon:'🎞️', label:'Grabado pero no editado', estadoFiltro:'grabado_no_editado' },
@@ -1195,7 +1405,9 @@ export default function SocialPage() {
 
       {!vista && tab === 'dashboard' && <TabDashboard/>}
 
-      {!vista && tab !== 'calendario' && tab !== 'dashboard' && (
+      {!vista && tab === 'tareas' && <TabTareasUrgentes/>}
+
+      {!vista && tab !== 'calendario' && tab !== 'dashboard' && tab !== 'tareas' && (
         <TabLista
           items={items}
           loading={loading}
