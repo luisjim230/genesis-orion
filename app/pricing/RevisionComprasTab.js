@@ -63,6 +63,7 @@ export default function RevisionComprasTab() {
   const [umbral, setUmbral] = useState(10);
   const [umbralSup, setUmbralSup] = useState(15);
   const [piso, setPiso] = useState(20);
+  const [fechaDesde, setFechaDesde] = useState('2026-06-01');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const [diaRows, setDiaRows] = useState([]);
@@ -81,6 +82,7 @@ export default function RevisionComprasTab() {
           setUmbral(Number(data.umbral_pp ?? 10));
           setUmbralSup(Number(data.umbral_superior_pp ?? 15));
           setPiso(Number(data.piso_pp ?? 20));
+          if (data.fecha_desde) setFechaDesde(String(data.fecha_desde).slice(0, 10));
         }
         setSettingsLoaded(true);
       });
@@ -138,6 +140,7 @@ export default function RevisionComprasTab() {
     try {
       await supabase.from('pricing_revision_settings').upsert({
         id: 1, umbral_pp: umbral, umbral_superior_pp: umbralSup, piso_pp: piso,
+        fecha_desde: fechaDesde || '2026-06-01',
         actualizado_en: new Date().toISOString(),
       }, { onConflict: 'id' });
       if (vista === 'dia') await cargarDia(true);
@@ -253,6 +256,13 @@ export default function RevisionComprasTab() {
         <Control label="Avisame si la utilidad cae más de (pp)" value={umbral} onChange={setUmbral} />
         <Control label="Avisame si se infla más de (pp)" value={umbralSup} onChange={setUmbralSup} />
         <Control label="Piso mínimo de la empresa (% markup)" value={piso} onChange={setPiso} />
+        {vista === 'dia' && (
+          <label style={{ fontSize: 11, color: '#5E2733', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            Mostrar compras desde
+            <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }} />
+          </label>
+        )}
         <button onClick={aplicarUmbrales} disabled={loading} style={{
           padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none',
           background: loading ? '#9ca3af' : '#c8a84b', color: 'white', cursor: loading ? 'wait' : 'pointer',
@@ -288,11 +298,10 @@ export default function RevisionComprasTab() {
             </div>
           )}
 
-          {recalcInfo?.ultima_carga && (
-            <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
-              Última carga de compras procesada: {String(recalcInfo.ultima_carga).slice(0, 10)} · {fmtNum(diaRows.length)} ítems en revisión activa
-            </div>
-          )}
+          <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>
+            Mostrando compras desde el {fmtFecha(fechaDesde) || fechaDesde} · {fmtNum(diaRows.length)} ítems en revisión activa
+            {recalcInfo?.ultima_carga ? ` · último sync: ${String(recalcInfo.ultima_carga).slice(0, 10)}` : ''}
+          </div>
 
           {loading && diaRows.length === 0 ? (
             <div style={{ padding: 50, textAlign: 'center', color: '#6b7280' }}>Recalculando utilidad de hoy…</div>
