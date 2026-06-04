@@ -20,6 +20,7 @@ import { fmtCRC, fmtPct, fmtNum } from '../../lib/pricing';
 // ────────────────────────────────────────────────────────────
 
 const ACENTO = '#ED6E2E'; // naranja de marca, solo en botón de acción
+const ALERT_KEYS = ['perdida', 'bajo_piso', 'cayo', 'inflada'];
 
 // Formatea una fecha ('2026-05-20' o '2026-05-26 00:00:00') a DD/MM/YYYY
 function fmtFecha(v) {
@@ -73,6 +74,7 @@ export default function RevisionComprasTab() {
   const [search, setSearch] = useState('');
   const [copiado, setCopiado] = useState(null);
   const [recalcInfo, setRecalcInfo] = useState(null);
+  const [soloAlertas, setSoloAlertas] = useState(true);
 
   // 1) Cargar settings
   useEffect(() => {
@@ -192,11 +194,18 @@ export default function RevisionComprasTab() {
     return diaRows
       .map(r => ({ ...r, _cat: clasificar(r, piso, umbral) }))
       .filter(r => {
+        // "Solo con alerta": esconder las que están bien (OK / sano)
+        if (soloAlertas && !(r._cat.faded || ALERT_KEYS.includes(r._cat.key))) return false;
         if (!q) return true;
         return (r.codigo_interno + ' ' + (r.item || '') + ' ' + (r.proveedor || '')).toLowerCase().includes(q);
       })
       .sort((a, b) => a._cat.sev - b._cat.sev || Number(a.markup_actual_pct) - Number(b.markup_actual_pct));
-  }, [diaRows, piso, umbral, search]);
+  }, [diaRows, piso, umbral, search, soloAlertas]);
+
+  const sanasOcultas = useMemo(
+    () => diaRows.filter(r => !(r.estado === 'marcado') && !ALERT_KEYS.includes(clasificar(r, piso, umbral).key)).length,
+    [diaRows, piso, umbral]
+  );
 
   const kpis = useMemo(() => {
     let perdida = 0, bajoPiso = 0, cayo = 0, inflada = 0;
@@ -285,11 +294,28 @@ export default function RevisionComprasTab() {
         <>
           {/* KPIs del día */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
-            <KpiCard label="En revisión activa" value={fmtNum(kpis.enRevision)} color="#5E2733" />
+            <KpiCard label="Compras en el período" value={fmtNum(kpis.enRevision)} color="#5E2733" />
             <KpiCard label="🔴 Pérdida" value={fmtNum(kpis.perdida)} color="#dc2626" />
             <KpiCard label={`🔴 Bajo el piso ${piso}%`} value={fmtNum(kpis.bajoPiso)} color="#dc2626" />
             <KpiCard label="🟠 Cayó utilidad" value={fmtNum(kpis.cayo)} color="#f97316" />
             <KpiCard label="🟢 Utilidad inflada" value={fmtNum(kpis.inflada)} color="#16a34a" />
+          </div>
+
+          {/* Toggle: solo alertas / ver todas */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            {[{ v: true, l: '⚠️ Solo con algo que revisar' }, { v: false, l: '📋 Ver todas las compras' }].map(opt => (
+              <button key={String(opt.v)} onClick={() => setSoloAlertas(opt.v)} style={{
+                padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: '1px solid ' + (soloAlertas === opt.v ? '#5E2733' : 'rgba(94,39,51,0.2)'),
+                background: soloAlertas === opt.v ? '#5E2733' : 'white',
+                color: soloAlertas === opt.v ? 'white' : '#5E2733',
+              }}>{opt.l}</button>
+            ))}
+            {soloAlertas && sanasOcultas > 0 && (
+              <span style={{ fontSize: 12, color: '#6b7280' }}>
+                + {fmtNum(sanasOcultas)} compra(s) con utilidad sana escondida(s) — tocá «Ver todas» para verlas.
+              </span>
+            )}
           </div>
 
           {urgentes > 0 && (
