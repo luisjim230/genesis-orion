@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
+import { ALL_NAV_FLAT } from '../nav-modules'
 
 const BG     = '#0f1115'
 const SURF   = '#1c1f26'
@@ -17,36 +18,58 @@ const ROL_COLOR = {
 }
 const ROLES = ['admin','bodega','ventas','vendedor','finanzas','logistica','laura']
 
-const MODULOS = [
-  { key:'dashboard',    label:'Dashboard',       emoji:'🏠' },
-  { key:'inventario',   label:'Inventario',      emoji:'🪐' },
-  { key:'trazabilidad', label:'Trazabilidad',    emoji:'🔬' },
-  { key:'kronos',       label:'Kronos',          emoji:'⚡' },
-  { key:'contenedores', label:'Contenedores',    emoji:'🚢' },
-  { key:'mercado',      label:'Mercado',         emoji:'💱' },
-  { key:'metricas-web', label:'Métricas Web',    emoji:'📊' },
-  { key:'ponderacion',  label:'Ponderación',     emoji:'⚖️' },
-  { key:'comercial',    label:'Comercial / Ventas', emoji:'💼' },
-  { key:'seguimiento-proformas', label:'Seguimiento de Proformas', emoji:'📋' },
-  { key:'aduana',       label:'Aduana · TLC China', emoji:'🛃' },
-  { key:'reportes',     label:'Reportes',        emoji:'📊' },
-  { key:'finanzas',     label:'Finanzas',        emoji:'💰' },
-  { key:'cif',          label:'CIF',             emoji:'📦' },
-  { key:'rotacion',     label:'Rotación',        emoji:'🔄' },
-  { key:'tareas',       label:'Tareas',          emoji:'✅' },
-  { key:'social',       label:'Redes Sociales',  emoji:'📱' },
-  { key:'cajas-aurora', label:'Cajas',    emoji:'🌅' },
-  { key:'entregas',     label:'Entregas', emoji:'🚛' },
-  { key:'pagos',        label:'Coordinación de pagos', emoji:'💸' },
-  { key:'tareas-equipo',label:'Tareas Equipo',  emoji:'📋' },
-  { key:'materiales',   label:'Cálculo de materiales', emoji:'🧱' },
-  { key:'fichas-tecnicas', label:'Fichas Técnicas', emoji:'📋' },
-  { key:'garantias',   label:'Devoluciones y Garantías', emoji:'🔄' },
-  { key:'encomiendas', label:'Encomiendas', emoji:'📦' },
-  { key:'rrhh',        label:'Permisos y Vacaciones', emoji:'👔' },
-  { key:'vendedores',   label:'Vendedores',      emoji:'🏷️' },
-  { key:'admin',        label:'Admin',           emoji:'🔐' },
+// ────────────────────────────────────────────────────────────────────────────
+// La lista de módulos de la pantalla de permisos se DERIVA de nav-modules.js
+// (fuente única de verdad, la misma que usan el sidebar y el menú mobile). Así
+// CUALQUIER módulo nuevo que se agregue al nav aparece solo acá, sin tener que
+// tocar este archivo. NO volver a hardcodear la lista.
+//   - LABEL_OVERRIDE: nombres/emojis "amigables" para los que el equipo ya
+//     conoce con otro nombre (el nav usa otro título en algunos casos).
+//   - MODULOS_EXTRA: módulos que tienen permiso propio pero no figuran en el nav.
+// ────────────────────────────────────────────────────────────────────────────
+const LABEL_OVERRIDE = {
+  dashboard:{label:'Dashboard',emoji:'🏠'},
+  inventario:{label:'Inventario',emoji:'🪐'},
+  trazabilidad:{label:'Trazabilidad',emoji:'🔬'},
+  kronos:{label:'Kronos',emoji:'⚡'},
+  contenedores:{label:'Contenedores',emoji:'🚢'},
+  mercado:{label:'Mercado',emoji:'💱'},
+  'metricas-web':{label:'Métricas Web',emoji:'📊'},
+  ponderacion:{label:'Ponderación',emoji:'⚖️'},
+  comercial:{label:'Comercial / Ventas',emoji:'💼'},
+  'seguimiento-proformas':{label:'Seguimiento de Proformas',emoji:'📋'},
+  aduana:{label:'Aduana · TLC China',emoji:'🛃'},
+  reportes:{label:'Reportes',emoji:'📊'},
+  finanzas:{label:'Finanzas',emoji:'💰'},
+  cif:{label:'CIF',emoji:'📦'},
+  tareas:{label:'Tareas',emoji:'✅'},
+  social:{label:'Redes Sociales',emoji:'📱'},
+  'cajas-aurora':{label:'Cajas',emoji:'🌅'},
+  entregas:{label:'Entregas',emoji:'🚛'},
+  pagos:{label:'Coordinación de pagos',emoji:'💸'},
+  'tareas-equipo':{label:'Tareas Equipo',emoji:'📋'},
+  materiales:{label:'Cálculo de materiales',emoji:'🧱'},
+  'fichas-tecnicas':{label:'Fichas Técnicas',emoji:'📋'},
+  garantias:{label:'Devoluciones y Garantías',emoji:'🔄'},
+  encomiendas:{label:'Encomiendas',emoji:'📦'},
+  rrhh:{label:'Permisos y Vacaciones',emoji:'👔'},
+  admin:{label:'Admin',emoji:'🔐'},
+}
+const MODULOS_EXTRA = [
+  { key:'rotacion',   label:'Rotación',   emoji:'🔄' },
+  { key:'vendedores', label:'Vendedores', emoji:'🏷️' },
 ]
+const MODULOS = (() => {
+  const fromNav = ALL_NAV_FLAT
+    .filter(it => !it.bovedaOnly) // la bóveda tiene su propio control de acceso
+    .map(it => ({
+      key: it.key,
+      label: LABEL_OVERRIDE[it.key]?.label ?? it.name,
+      emoji: LABEL_OVERRIDE[it.key]?.emoji ?? it.icon,
+    }))
+  const seen = new Set(fromNav.map(m => m.key))
+  return [...fromNav, ...MODULOS_EXTRA.filter(m => !seen.has(m.key))]
+})()
 
 const PERMISOS_ROL = {
   laura:     ['dashboard','cajas-aurora'],

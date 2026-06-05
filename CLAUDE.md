@@ -68,6 +68,18 @@
 - Vars de entorno requeridas en Vercel: `GA4_PROPERTY_ID`, `GA4_SERVICE_ACCOUNT_JSON` (base64),
   `GA4_MEASUREMENT_ID`, `GA4_MEASUREMENT_API_SECRET`.
 
+### Módulos y permisos (regla permanente)
+
+- **Fuente única de módulos:** `app/nav-modules.js` (`ALL_NAV` / `ALL_NAV_FLAT`). El sidebar
+  desktop, el menú mobile **y la pantalla de permisos** (`app/admin/page.js`) derivan de ahí.
+- **Al crear un módulo nuevo:** basta agregarlo a `nav-modules.js`. Aparece solo en el sidebar,
+  en mobile y en la grilla de permisos de Admin para poder asignárselo a un usuario. **NUNCA**
+  volver a hardcodear la lista de módulos en `admin/page.js` (antes estaba duplicada y se
+  desincronizaba: por eso Pricing y otros no aparecían para asignar). El permiso se gatea por la
+  `key` = slug de la ruta (ej. `/pricing` → `pricing`).
+- `app/admin/page.js` solo mantiene `LABEL_OVERRIDE` (nombres amigables) y `MODULOS_EXTRA`
+  (módulos con permiso propio que no están en el nav, ej. `rotacion`, `vendedores`).
+
 ### Rama de trabajo actual
 
 `main` (los PRs de feature se mergean directo).
