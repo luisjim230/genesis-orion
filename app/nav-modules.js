@@ -30,6 +30,7 @@ export const ALL_NAV = [
   { group: 'Operaciones', items: [
     { href: '/cajas-aurora',      key: 'cajas-aurora',          icon: '🌅', name: 'Cajas' },
     { href: '/entregas',          key: 'entregas',              icon: '🚛', name: 'Entregas' },
+    { href: '/calculo-transporte',key: 'calculo-transporte',    icon: '🚚', name: 'Cálculo de Transporte' },
   ]},
   { group: 'Finanzas', items: [
     { href: '/finanzas',          key: 'finanzas',              icon: '💰', name: 'Finanzas' },
