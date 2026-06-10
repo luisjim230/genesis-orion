@@ -1520,6 +1520,92 @@ export default function SeguimientoProformas() {
     setTab('abiertas');
   }, []);
 
+  // Descarga a Excel del listado ya filtrado (exactamente lo que se ve en la
+  // tabla). Se arma en el navegador con exceljs, sin re-consultar el panel.
+  const [bajandoExcel, setBajandoExcel] = useState(false);
+  const descargarExcel = useCallback(async (rows, hoja, incluirSeg) => {
+    if (!rows || rows.length === 0) return;
+    setBajandoExcel(true);
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet(hoja);
+      const cols = [
+        { header: 'Estado', key: 'estado', width: 16 },
+        { header: 'Proforma', key: 'proforma', width: 12 },
+        { header: 'Fecha', key: 'fecha', width: 12 },
+        { header: 'Cliente', key: 'cliente', width: 34 },
+        { header: 'Vendedor', key: 'vendedor', width: 18 },
+        { header: 'Tier', key: 'tier', width: 10 },
+        { header: 'Monto', key: 'monto', width: 16 },
+      ];
+      if (esAdmin) {
+        cols.push({ header: 'Margen %', key: 'margen', width: 10 });
+        cols.push({ header: 'Utilidad', key: 'utilidad', width: 16 });
+      }
+      cols.push({ header: 'Días', key: 'dias', width: 8 });
+      if (incluirSeg) {
+        cols.push({ header: 'Seguimientos', key: 'seg', width: 14 });
+        cols.push({ header: 'Último resultado', key: 'resultado', width: 18 });
+      }
+      ws.columns = cols;
+      ws.getRow(1).font = { bold: true };
+      ws.getRow(1).alignment = { vertical: 'middle' };
+      for (const p of rows) {
+        const fila = {
+          estado: SEMAFORO[p.semaforo]?.label || p.semaforo || '',
+          proforma: p.proforma,
+          fecha: fmtFecha(p.fecha),
+          cliente: p.cliente || '',
+          vendedor: p.vendedor || '',
+          tier: p.tier_nombre || '',
+          monto: N(p.monto_total),
+        };
+        if (esAdmin) {
+          fila.margen = (p.margen_pct === null || p.margen_pct === undefined) ? '' : N(p.margen_pct);
+          fila.utilidad = N(p.utilidad_mercaderia);
+        }
+        fila.dias = p.dias_desde_proforma ?? '';
+        if (incluirSeg) {
+          fila.seg = `${p.seguimientos_realizados || 0}/${p.seguimientos_req || 0}`;
+          fila.resultado = RESULTADO_LABEL[p.ultimo_seg_estado]?.txt || '';
+        }
+        ws.addRow(fila);
+      }
+      ws.getColumn('monto').numFmt = '#,##0';
+      if (esAdmin) {
+        ws.getColumn('utilidad').numFmt = '#,##0';
+        ws.getColumn('margen').numFmt = '0.0';
+      }
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(/:/g, '-');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `seguimiento_proformas_${hoja}_${ts}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('[Hermes] Error al generar Excel:', e);
+      alert('No se pudo generar el Excel: ' + (e?.message || e));
+    } finally {
+      setBajandoExcel(false);
+    }
+  }, [esAdmin]);
+
+  // Estilo del botón de descarga (verde, look de acción).
+  const btnExcel = {
+    background: bajandoExcel ? '#9ca3af' : C.green,
+    color: '#fff', border: 'none', borderRadius: 12,
+    padding: '9px 18px', fontWeight: 700,
+    cursor: bajandoExcel ? 'wait' : 'pointer',
+    fontSize: '0.85rem', fontFamily: 'Rubik, sans-serif',
+    boxShadow: '0 2px 10px rgba(46,125,79,0.25)',
+    whiteSpace: 'nowrap',
+  };
+
+
   // Auth gate
   if (authLoading) return <div style={S.page}><Spinner /></div>;
   if (!perfil || !puedeVer('seguimiento-proformas')) return (
@@ -1655,9 +1741,18 @@ export default function SeguimientoProformas() {
                 ? <>Mostrando <strong style={{ color: hayFiltrosActivos ? C.gold : C.text }}>{filasAbiertasFiltradas.length.toLocaleString('es-CR')}</strong> de {(filasAbiertas || []).length.toLocaleString('es-CR')} proformas</>
                 : 'Cargando…'}
             </div>
-            {hayFiltrosActivos && (
-              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
-            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {hayFiltrosActivos && (
+                <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
+              )}
+              <button
+                onClick={() => descargarExcel(filasAbiertasFiltradas, 'Abiertas', true)}
+                disabled={bajandoExcel || !filasAbiertasFiltradas || filasAbiertasFiltradas.length === 0}
+                style={btnExcel}
+                title="Descargar el listado filtrado en Excel">
+                {bajandoExcel ? 'Generando…' : '⬇ Descargar Excel'}
+              </button>
+            </div>
           </div>
 
           {/* Aviso de panorama: al filtrar por vendedor, explica dónde está el resto
@@ -1744,9 +1839,18 @@ export default function SeguimientoProformas() {
                 ? <>Mostrando <strong style={{ color: hayFiltrosActivos ? C.gold : C.text }}>{filasGanadasFiltradas.length.toLocaleString('es-CR')}</strong> de {(filasGanadas || []).length.toLocaleString('es-CR')} ganadas</>
                 : 'Cargando…'}
             </div>
-            {hayFiltrosActivos && (
-              <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
-            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {hayFiltrosActivos && (
+                <button onClick={limpiarFiltros} style={S.btnGhost}>✕ Limpiar filtros</button>
+              )}
+              <button
+                onClick={() => descargarExcel(filasGanadasFiltradas, 'Ganadas', false)}
+                disabled={bajandoExcel || !filasGanadasFiltradas || filasGanadasFiltradas.length === 0}
+                style={btnExcel}
+                title="Descargar el listado filtrado en Excel">
+                {bajandoExcel ? 'Generando…' : '⬇ Descargar Excel'}
+              </button>
+            </div>
           </div>
           <TablaProformas
             datos={filasGanadasFiltradas}
