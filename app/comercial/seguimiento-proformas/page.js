@@ -248,7 +248,7 @@ function Empty({ msg, sub }) {
 }
 
 // ── Drawer (detalle de proforma) ───────────────────────────────────────────
-function Drawer({ proforma, onClose, perfil, onChange }) {
+function Drawer({ proforma, onClose, perfil, onChange, esAdmin }) {
   const [lineas, setLineas] = useState(null);
   const [seguimientos, setSeguimientos] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -256,6 +256,12 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
   const [guardando, setGuardando] = useState(false);
   const [errMsg, setErrMsg] = useState(null);
   const [okMsg, setOkMsg] = useState(null);
+
+  // Agenda / próximo contacto manual
+  const [agenda, setAgenda] = useState({ fecha: '', nota: '', observacion: '' });
+  const [agendaSaved, setAgendaSaved] = useState({ fecha: '', nota: '', observacion: '', por: '', obsPor: '' });
+  const [showAgendaForm, setShowAgendaForm] = useState(false);
+  const [guardandoAgenda, setGuardandoAgenda] = useState(false);
 
   const cargar = useCallback(async () => {
     if (!proforma) return;
@@ -269,7 +275,70 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Sincronizar la agenda local cuando cambia la proforma mostrada.
+  useEffect(() => {
+    const f = proforma?.agenda_fecha ? String(proforma.agenda_fecha).slice(0, 10) : '';
+    const saved = {
+      fecha: f,
+      nota: proforma?.agenda_nota || '',
+      observacion: proforma?.agenda_observacion || '',
+      por: proforma?.agenda_por || '',
+      obsPor: proforma?.agenda_observacion_por || '',
+    };
+    setAgendaSaved(saved);
+    setAgenda({ fecha: saved.fecha, nota: saved.nota, observacion: saved.observacion });
+    setShowAgendaForm(false);
+  }, [proforma?.proforma]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!proforma) return null;
+
+  const guardarAgenda = async () => {
+    setErrMsg(null);
+    if (!agenda.fecha) { setErrMsg('Elegí la fecha del próximo contacto.'); return; }
+    setGuardandoAgenda(true);
+    const quien = perfil?.nombre || perfil?.email || 'sistema';
+    const payload = {
+      proforma: proforma.proforma,
+      fecha_agenda: agenda.fecha,
+      nota: agenda.nota?.trim() || null,
+      agendado_por: agendaSaved.por || quien,
+      actualizado_ts: new Date().toISOString(),
+    };
+    if (esAdmin) {
+      payload.observacion = agenda.observacion?.trim() || null;
+      payload.observacion_por = agenda.observacion?.trim() ? quien : null;
+    }
+    const { error } = await supabase.from('hermes_agenda').upsert(payload, { onConflict: 'proforma' });
+    if (error) { setErrMsg(error.message || 'Error al agendar.'); setGuardandoAgenda(false); return; }
+    try { await supabase.rpc('refresh_hermes_panel'); } catch {}
+    setAgendaSaved(s => ({
+      ...s,
+      fecha: agenda.fecha,
+      nota: agenda.nota?.trim() || '',
+      por: s.por || quien,
+      ...(esAdmin ? { observacion: agenda.observacion?.trim() || '', obsPor: agenda.observacion?.trim() ? quien : '' } : {}),
+    }));
+    setShowAgendaForm(false);
+    setGuardandoAgenda(false);
+    setOkMsg('Agenda guardada');
+    if (onChange) onChange();
+    setTimeout(() => setOkMsg(null), 3000);
+  };
+
+  const quitarAgenda = async () => {
+    if (!confirm('¿Quitar la agenda de esta proforma?')) return;
+    setGuardandoAgenda(true);
+    const { error } = await supabase.from('hermes_agenda').delete().eq('proforma', proforma.proforma);
+    if (error) { setErrMsg(error.message || 'Error al quitar.'); setGuardandoAgenda(false); return; }
+    try { await supabase.rpc('refresh_hermes_panel'); } catch {}
+    setAgendaSaved({ fecha: '', nota: '', observacion: '', por: '', obsPor: '' });
+    setAgenda({ fecha: '', nota: '', observacion: '' });
+    setShowAgendaForm(false);
+    setGuardandoAgenda(false);
+    setOkMsg('Agenda quitada');
+    if (onChange) onChange();
+    setTimeout(() => setOkMsg(null), 3000);
+  };
 
   const handleGuardar = async () => {
     setErrMsg(null);
@@ -364,6 +433,72 @@ function Drawer({ proforma, onClose, perfil, onChange }) {
               padding: '10px 14px', marginBottom: 14, fontSize: '0.85rem', fontWeight: 600,
             }}>✓ {okMsg}</div>
           )}
+
+          {/* Sección: Agenda / próximo contacto */}
+          <div style={{
+            background: agendaSaved.fecha ? '#fffbeb' : '#f8fafc',
+            border: `1px solid ${agendaSaved.fecha ? '#f0d98a' : '#e2e8f0'}`,
+            borderRadius: 12, padding: 14, marginBottom: 16,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: C.text, margin: 0 }}>📅 Próximo contacto agendado</h3>
+              {!showAgendaForm && (
+                <button onClick={() => setShowAgendaForm(true)}
+                  style={{ ...S.btnGhost, padding: '5px 12px', fontSize: '0.78rem' }}>
+                  {agendaSaved.fecha ? 'Cambiar' : '+ Agendar'}
+                </button>
+              )}
+            </div>
+
+            {!showAgendaForm && agendaSaved.fecha && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: '0.9rem', color: C.text }}>Para el <strong>{fmtFecha(agendaSaved.fecha)}</strong></div>
+                {agendaSaved.nota && <div style={{ fontSize: '0.84rem', color: C.text, marginTop: 4 }}>🗒 {agendaSaved.nota}</div>}
+                {agendaSaved.observacion && (
+                  <div style={{ fontSize: '0.84rem', color: '#92400e', marginTop: 4 }}>
+                    👤 Indicación: <strong>{agendaSaved.observacion}</strong>
+                  </div>
+                )}
+                <button onClick={quitarAgenda} disabled={guardandoAgenda}
+                  style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: '0.78rem', padding: 0, marginTop: 8 }}>
+                  Quitar agenda
+                </button>
+              </div>
+            )}
+            {!showAgendaForm && !agendaSaved.fecha && (
+              <div style={{ fontSize: '0.82rem', color: C.muted, marginTop: 6 }}>
+                Sin agenda. Programá cuándo volver a contactar a este cliente.
+              </div>
+            )}
+
+            {showAgendaForm && (
+              <div style={{ marginTop: 12 }}>
+                <label style={S.label}>¿Cuándo volver a contactar?</label>
+                <input type="date" value={agenda.fecha}
+                  onChange={e => setAgenda({ ...agenda, fecha: e.target.value })}
+                  style={{ ...S.input, marginBottom: 10 }} />
+                <label style={S.label}>Nota</label>
+                <textarea value={agenda.nota} onChange={e => setAgenda({ ...agenda, nota: e.target.value })}
+                  rows={2} style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', marginBottom: 10 }}
+                  placeholder="Ej: llamar el viernes a la tarde" />
+                {esAdmin && (
+                  <>
+                    <label style={S.label}>Indicación para el vendedor (opcional)</label>
+                    <textarea value={agenda.observacion} onChange={e => setAgenda({ ...agenda, observacion: e.target.value })}
+                      rows={2} style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', marginBottom: 10 }}
+                      placeholder="Lo que el vendedor debe hacer" />
+                  </>
+                )}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setShowAgendaForm(false); setAgenda({ fecha: agendaSaved.fecha, nota: agendaSaved.nota, observacion: agendaSaved.observacion }); setErrMsg(null); }}
+                    disabled={guardandoAgenda} style={S.btnGhost}>Cancelar</button>
+                  <button onClick={guardarAgenda} disabled={guardandoAgenda} style={S.btnPrimary}>
+                    {guardandoAgenda ? 'Guardando...' : 'Guardar agenda'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Sección: Seguimientos */}
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: C.text, margin: '4px 0 12px' }}>
@@ -987,7 +1122,13 @@ function TablaProformas({ datos, onRow, mostrarSeguimientos = true, esAdmin = fa
               onMouseEnter={e => { if (onRow) e.currentTarget.style.background = 'rgba(200,168,75,0.06)'; }}
               onMouseLeave={e => { if (onRow) e.currentTarget.style.background = 'transparent'; }}
             >
-              <td style={S.td}><SemaforoBadge semaforo={p.semaforo} /></td>
+              <td style={S.td}>
+                <SemaforoBadge semaforo={p.semaforo} />
+                {p.agenda_vigente && (
+                  <span title={`Agendado para ${fmtFecha(p.agenda_fecha)}${p.agenda_nota ? ' · ' + p.agenda_nota : ''}`}
+                    style={{ marginLeft: 4 }}>📅</span>
+                )}
+              </td>
               <td style={{ ...S.td, fontFamily: 'monospace', fontWeight: 700 }}>{p.proforma}</td>
               <td style={{ ...S.td, whiteSpace: 'nowrap', color: C.muted }}>{fmtFecha(p.fecha)}</td>
               <td style={{ ...S.td, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.cliente || ''}>
@@ -1254,6 +1395,116 @@ function ResumenVendedores({ resumen, esAdmin, onPick }) {
           </tr>
         </tfoot>
       </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Agenda de hoy: tarjetas por vendedor (encabezado / "alarma") ─────────────
+// Junta los contactos agendados para hoy o vencidos (agenda vigente) y los
+// agrupa por vendedor. Los supervisores pueden dejar una indicación que el
+// vendedor ve en su tarjeta.
+function AgendaHoy({ filas, esAdmin, perfil, onChange, onRow }) {
+  const [editId, setEditId] = useState(null);   // proforma cuya indicación se edita
+  const [obsDraft, setObsDraft] = useState('');
+  const [savingObs, setSavingObs] = useState(false);
+
+  const hoyStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local (CR)
+
+  const items = useMemo(() => {
+    if (!filas) return [];
+    return filas
+      .filter(f => f.agenda_vigente && f.agenda_fecha && String(f.agenda_fecha).slice(0, 10) <= hoyStr)
+      .sort((a, b) => String(a.agenda_fecha).slice(0, 10).localeCompare(String(b.agenda_fecha).slice(0, 10)));
+  }, [filas, hoyStr]);
+
+  const grupos = useMemo(() => {
+    const m = {};
+    for (const f of items) { const v = f.vendedor || 'Sin asignar'; (m[v] = m[v] || []).push(f); }
+    return Object.entries(m).sort((a, b) => b[1].length - a[1].length);
+  }, [items]);
+
+  if (!filas || items.length === 0) return null;
+
+  async function guardarObs(proforma) {
+    setSavingObs(true);
+    const quien = perfil?.nombre || perfil?.email || 'sistema';
+    const txt = obsDraft.trim();
+    const { error } = await supabase.from('hermes_agenda')
+      .update({ observacion: txt || null, observacion_por: txt ? quien : null })
+      .eq('proforma', proforma);
+    if (!error) { try { await supabase.rpc('refresh_hermes_panel'); } catch {} }
+    setSavingObs(false);
+    setEditId(null);
+    if (!error && onChange) onChange();
+  }
+
+  return (
+    <div style={{ ...S.card, marginBottom: 18, borderTop: `3px solid ${C.orange}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: '1.4rem' }}>📅</span>
+        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: C.text }}>Agenda de hoy</h3>
+        <span style={{ fontSize: '0.78rem', color: C.muted, marginLeft: 'auto' }}>
+          {items.length} contacto{items.length === 1 ? '' : 's'} para hoy o vencido{items.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+        {grupos.map(([vendedor, lista]) => (
+          <div key={vendedor} style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: C.text, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{vendedor}</span>
+              <span style={{ color: C.orange }}>{lista.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {lista.map(f => {
+                const fstr = String(f.agenda_fecha).slice(0, 10);
+                const esHoy = fstr === hoyStr;
+                return (
+                  <div key={f.proforma} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 10, padding: '8px 10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center' }}>
+                      <span onClick={() => onRow && onRow(f)} style={{ fontWeight: 700, fontSize: '0.84rem', color: C.text, cursor: 'pointer' }}>
+                        Llamar a {f.cliente || '—'}
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+                        background: esHoy ? '#fef3c7' : '#fee2e2', color: esHoy ? '#92400e' : '#b91c1c', whiteSpace: 'nowrap',
+                      }}>
+                        {esHoy ? '🟡 Hoy' : '🔴 ' + fmtFecha(f.agenda_fecha)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: C.muted, fontFamily: 'monospace' }}>#{f.proforma}</div>
+                    {f.agenda_nota && <div style={{ fontSize: '0.8rem', color: C.text, marginTop: 3 }}>🗒 {f.agenda_nota}</div>}
+                    {editId === f.proforma ? (
+                      <div style={{ marginTop: 6 }}>
+                        <textarea value={obsDraft} onChange={e => setObsDraft(e.target.value)} rows={2}
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: '0.8rem', fontFamily: 'inherit', resize: 'vertical' }}
+                          placeholder="Indicación para el vendedor" />
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+                          <button onClick={() => setEditId(null)} disabled={savingObs} style={{ ...S.btnGhost, padding: '4px 10px', fontSize: '0.74rem' }}>Cancelar</button>
+                          <button onClick={() => guardarObs(f.proforma)} disabled={savingObs} style={{ ...S.btnPrimary, padding: '4px 10px', fontSize: '0.74rem' }}>{savingObs ? '...' : 'Guardar'}</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {f.agenda_observacion && (
+                          <div style={{ fontSize: '0.8rem', color: '#92400e', marginTop: 4, background: '#fffbeb', borderRadius: 8, padding: '5px 8px' }}>
+                            👤 {f.agenda_observacion}
+                          </div>
+                        )}
+                        {esAdmin && (
+                          <button onClick={() => { setEditId(f.proforma); setObsDraft(f.agenda_observacion || ''); }}
+                            style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: '0.74rem', padding: 0, marginTop: 5 }}>
+                            {f.agenda_observacion ? '✏️ Editar indicación' : '+ Agregar indicación'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1645,6 +1896,14 @@ export default function SeguimientoProformas() {
       {/* Tab: Abiertas */}
       {tab === 'abiertas' && (
         <div>
+          <AgendaHoy
+            filas={filas}
+            esAdmin={esAdmin}
+            perfil={perfil}
+            onChange={refrescar}
+            onRow={p => setDrawerProf(p)}
+          />
+
           <PodioVendedores
             filasGanadas={filasGanadasFiltradas}
             fechaDesde={filtros.fechaDesde}
@@ -1930,6 +2189,7 @@ export default function SeguimientoProformas() {
         <Drawer
           proforma={drawerProf}
           perfil={perfil}
+          esAdmin={esAdmin}
           onClose={() => setDrawerProf(null)}
           onChange={() => { refrescar(); }}
         />
