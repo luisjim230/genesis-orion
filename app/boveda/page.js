@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../lib/useAuth';
 import { puedeVerBoveda } from '../../lib/boveda';
+import InventarioTI from './InventarioTI';
 
 const C = {
   orange: '#ED6E2E', burgundy: '#5E2733', teal: '#225F74',
@@ -62,6 +63,7 @@ export default function BovedaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [vista, setVista] = useState('accesos');  // accesos | inventario
   const [q, setQ] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -252,9 +254,21 @@ export default function BovedaPage() {
             Claves, usuarios y correos de todas las plataformas, centralizados y cifrados. Acceso restringido al círculo de confianza.
           </p>
         </div>
-        <button onClick={abrirNuevo} style={btn(C.orange)}>＋ Agregar acceso</button>
+        {vista === 'accesos' && (
+          <button onClick={abrirNuevo} style={btn(C.orange)}>＋ Agregar acceso</button>
+        )}
       </div>
 
+      {/* Pestañas: Accesos / Inventario TI */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: 14 }}>
+        <button onClick={() => setVista('accesos')} style={tabBtn(vista === 'accesos')}>🔐 Accesos</button>
+        <button onClick={() => setVista('inventario')} style={tabBtn(vista === 'inventario')}>🖥️ Inventario TI</button>
+      </div>
+
+      {vista === 'inventario' ? (
+        <InventarioTI actor={actor} notify={notify} />
+      ) : (
+      <>
       {/* Banner de acceso */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `1px solid ${C.borderSoft}`, borderLeft: `4px solid ${C.teal}`, borderRadius: 10, padding: '11px 16px', marginBottom: 18, fontSize: '0.8rem', color: C.sec, boxShadow: C.shadow, flexWrap: 'wrap' }}>
         <span>🛡️ Estás dentro como <b style={{ color: C.burgundy }}>{actor.nombre || '—'}</b>.</span>
@@ -406,6 +420,8 @@ export default function BovedaPage() {
       <div style={{ textAlign: 'center', color: C.muted, fontSize: '0.72rem', marginTop: 30, lineHeight: 1.6 }}>
         🔒 Las claves se guardan cifradas. Cada vez que alguien revela o copia una clave queda registrado.
       </div>
+      </>
+      )}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: C.burgundy, color: '#fff', padding: '11px 20px', borderRadius: 10, fontSize: '0.82rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', zIndex: 200 }}>
@@ -454,6 +470,9 @@ function btn(bg) {
 }
 function btnGhost() {
   return { background: 'none', border: `1px solid ${C.border}`, color: C.sec, borderRadius: 9, padding: '10px 18px', fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
+}
+function tabBtn(active) {
+  return { background: active ? C.burgundy : '#fff', color: active ? '#fff' : C.sec, border: `1px solid ${active ? C.burgundy : C.border}`, borderRadius: 9, padding: '9px 18px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
 }
 function btnOutline() {
   return { background: 'none', border: `1px solid ${C.teal}`, color: C.teal, borderRadius: 8, padding: '6px 13px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
