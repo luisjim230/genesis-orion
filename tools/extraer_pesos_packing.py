@@ -25,6 +25,8 @@ import sys
 import json
 import math
 from pathlib import Path
+import logging
+import warnings
 from collections import Counter
 
 # ── Dependencias externas ──────────────────────────────────────────────────
@@ -36,6 +38,11 @@ except Exception as e:  # pragma: no cover
     print("Falta una dependencia:", e)
     print("Instalá: pip install pandas openpyxl xlrd pdfplumber requests")
     sys.exit(1)
+
+# Silenciar warnings ruidosos de pdfminer/pdfplumber (FontBBox, etc.)
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
+logging.getLogger("pdfplumber").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore")
 
 DEFAULT_URL = "https://xeeieqjqmtoiutfnltqu.supabase.co"
 PDF_MAX_PAGES = 80          # tope de páginas por PDF (los catálogos son enormes)
@@ -224,9 +231,65 @@ def build_lines(rows, header_idx, mapping):
     return out
 
 
+# Estrategia de tabla "por texto": para PDFs cuyas tablas NO tienen bordes
+# (la mayoría de packing lists chinas y facturas) pdfplumber arma la grilla
+# alineando las palabras por su posición.
+TEXT_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "text",
+                 "snap_tolerance": 4, "intersection_tolerance": 8}
+
+
+def _dedup(lines):
+    seen, out = set(), []
+    for ln in lines:
+        k = (ln.get("modelo"), ln.get("descripcion_pl"), ln.get("cantidad"),
+             ln.get("peso_neto_total"), ln.get("peso_bruto_total"))
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(ln)
+    return out
+
+
+def _rows_to_lines(table):
+    rows = [[("" if c is None else str(c)) for c in r] for r in table]
+    hdr = find_header(rows)
+    return build_lines(rows, hdr[0], hdr[1]) if hdr else []
+
+
+def _pdf_page_lines(page):
+    # 1) tablas con bordes
+    out = []
+    try:
+        for t in (page.extract_tables() or []):
+            out += _rows_to_lines(t)
+    except Exception:
+        pass
+    if out:
+        return out
+    # 2) tablas sin bordes (alineación por texto)
+    try:
+        for t in (page.extract_tables(table_settings=TEXT_SETTINGS) or []):
+            out += _rows_to_lines(t)
+    except Exception:
+        pass
+    return out
+
+
+def _result(lines, markers, escaneado=False, error=None):
+    if error is not None:
+        return {"status": "error", "lines": [], "motivo": error}
+    if escaneado:
+        return {"status": "escaneado", "lines": [], "motivo": "PDF sin texto (escaneado)"}
+    if not markers:
+        return {"status": "sin_pesos", "lines": [], "motivo": None}
+    lines = _dedup(lines)
+    if lines:
+        return {"status": "packing", "lines": lines, "motivo": None}
+    return {"status": "marcador_sin_tabla", "lines": [], "motivo": "tiene 'peso' pero sin tabla parseable"}
+
+
 # ── Procesamiento de un archivo (abre 1 vez; detecta por contenido) ──────────
-# Devuelve dict: {status, lines, motivo}
-#   status: 'packing' | 'sin_pesos' | 'escaneado' | 'error'
+# status: 'packing' | 'marcador_sin_tabla' | 'sin_pesos' | 'escaneado' | 'error'
 def process_file(path: Path, extract=True):
     ext = path.suffix.lower()
     try:
@@ -241,42 +304,32 @@ def process_file(path: Path, extract=True):
                     hdr = find_header(rows)
                     if hdr:
                         lines += build_lines(rows, hdr[0], hdr[1])
-            if not has_weight_markers(sniff):
-                return {"status": "sin_pesos", "lines": [], "motivo": None}
-            return {"status": "packing", "lines": lines, "motivo": None}
+            return _result(lines, has_weight_markers(sniff))
 
         if ext == ".csv":
             df = pd.read_csv(path, header=None, dtype=str, sep=None, engine="python", encoding_errors="ignore")
             rows = df.fillna("").astype(str).values.tolist()
             sniff = " ".join(" ".join(r) for r in rows[:80])
-            if not has_weight_markers(sniff):
-                return {"status": "sin_pesos", "lines": [], "motivo": None}
-            hdr = find_header(rows)
-            return {"status": "packing", "lines": (build_lines(rows, hdr[0], hdr[1]) if hdr else []), "motivo": None}
+            lines = _rows_to_lines(rows) if extract else []
+            return _result(lines, has_weight_markers(sniff))
 
         if ext == ".pdf":
-            text, tables = "", []
+            text, lines = "", []
             with pdfplumber.open(path) as pdf:
                 pages = pdf.pages[:PDF_MAX_PAGES]
                 for page in pages:
-                    t = page.extract_text() or ""
-                    text += t + " "
+                    text += (page.extract_text() or "") + " "
                 if not text.strip():
-                    return {"status": "escaneado", "lines": [], "motivo": "PDF sin texto (escaneado)"}
-                if not has_weight_markers(text):
-                    return {"status": "sin_pesos", "lines": [], "motivo": None}
-                if extract:
+                    return _result([], False, escaneado=True)
+                markers = has_weight_markers(text)
+                if markers and extract:
                     for page in pages:
-                        for table in (page.extract_tables() or []):
-                            rows = [[("" if c is None else str(c)) for c in r] for r in table]
-                            hdr = find_header(rows)
-                            if hdr:
-                                tables += build_lines(rows, hdr[0], hdr[1])
-            return {"status": "packing", "lines": tables, "motivo": None}
+                        lines += _pdf_page_lines(page)
+            return _result(lines, markers)
 
     except Exception as e:
-        return {"status": "error", "lines": [], "motivo": str(e)[:200]}
-    return {"status": "sin_pesos", "lines": [], "motivo": None}
+        return _result([], False, error=str(e)[:200])
+    return _result([], False)
 
 
 # ── Catálogo / match ─────────────────────────────────────────────────────────
@@ -408,16 +461,18 @@ def main():
         elif res["status"] == "error":
             errores.append((p, res["motivo"]))
         if idx % 25 == 0 or idx == total:
-            log(f"   {idx}/{total} escaneados · {len(candidatos)} con pesos detectados")
+            log(f"   {idx}/{total} escaneados · {len(candidatos)} packing lists con líneas")
 
     # ── Inventario de packing lists detectados ──
+    total_lineas = sum(len(l) for _, l in candidatos)
     log("\n" + "=" * 70)
     log("INVENTARIO — archivos que SÍ contienen tablas de peso")
     log("=" * 70)
-    log(f"Con pesos (packing list)  : {por_status.get('packing', 0)}")
-    log(f"Sin columnas de peso      : {por_status.get('sin_pesos', 0)}")
-    log(f"PDF escaneados (sin texto): {por_status.get('escaneado', 0)}")
-    log(f"Errores de lectura        : {por_status.get('error', 0)}")
+    log(f"Packing lists con líneas      : {por_status.get('packing', 0)}  ({total_lineas} líneas)")
+    log(f"Con 'peso' pero sin tabla     : {por_status.get('marcador_sin_tabla', 0)}  (facturas/DUAs o PL no parseable)")
+    log(f"Sin columnas de peso          : {por_status.get('sin_pesos', 0)}")
+    log(f"PDF escaneados (sin texto)    : {por_status.get('escaneado', 0)}")
+    log(f"Errores de lectura            : {por_status.get('error', 0)}")
 
     por_prov = Counter(infer_provider(p, root) for p, _ in candidatos)
     log("\nPacking lists detectados por proveedor:")
