@@ -526,14 +526,23 @@ def staging_fetch(url, key):
 
 
 def staging_update_matches(url, key, rows):
-    """Actualiza codigo_interno/metodo_match/confianza por id (upsert merge)."""
+    """Actualiza codigo_interno/metodo_match/confianza por id, agrupando filas
+    con el mismo resultado para hacer pocos PATCH (id=in.(...))."""
     h = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json",
-         "Prefer": "return=minimal,resolution=merge-duplicates"}
-    for i in range(0, len(rows), 500):
-        r = requests.post(f"{url}/rest/v1/pesos_packing_staging?on_conflict=id", headers=h,
-                          data=json.dumps(rows[i:i + 500]), timeout=120)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Update falló ({r.status_code}): {r.text[:300]}")
+         "Prefer": "return=minimal"}
+    grupos = {}
+    for r in rows:
+        clave = (r.get("codigo_interno"), r.get("metodo_match"), r.get("confianza"))
+        grupos.setdefault(clave, []).append(r["id"])
+    for (codigo, metodo, conf), ids in grupos.items():
+        body = {"codigo_interno": codigo, "metodo_match": metodo, "confianza": conf}
+        for i in range(0, len(ids), 100):
+            lote = ids[i:i + 100]
+            params = {"id": f"in.({','.join(str(x) for x in lote)})"}
+            resp = requests.patch(f"{url}/rest/v1/pesos_packing_staging",
+                                  headers=h, params=params, data=json.dumps(body), timeout=120)
+            if resp.status_code >= 300:
+                raise RuntimeError(f"Update falló ({resp.status_code}): {resp.text[:300]}")
 
 
 def correr_match(cat, filas):
