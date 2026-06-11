@@ -381,28 +381,71 @@ def process_file(path: Path, extract=True):
 
 
 # ── Catálogo / match ─────────────────────────────────────────────────────────
+def _model_tokens(modelo):
+    """Descompone el modelo del proveedor en tokens útiles para el match.
+    Ej: 'ZT-NB-U818-60' -> code='U818', core='U81860', size='60', full='ZTNBU81860'.
+    El catálogo suele guardar el núcleo SIN el prefijo del proveedor (NB-U818-60)."""
+    s = str(modelo).upper()
+    parts = [p for p in re.split(r"[^A-Z0-9]+", s) if p]
+    if not parts:
+        return None
+    pi = next((i for i, p in enumerate(parts) if re.search(r"\d", p)), None)
+    if pi is None:
+        return None  # sin segmento con dígitos: no es un código usable
+    code = parts[pi]
+    core = "".join(parts[pi:])           # código + tamaño/variante: U81860
+    size = parts[-1] if (parts[-1].isdigit() and parts[-1] != code) else None
+    return {"full": "".join(parts), "core": core, "code": code, "size": size}
+
+
 class Catalogo:
     def __init__(self, productos, pendientes):
-        self.productos = productos
+        self.productos = productos                       # [(codigo, item, norm_name)]
         self.pendientes = pendientes
+        self.by_code = {c: nn for (c, it, nn) in productos}
+
+    def _best(self, codes, descripcion):
+        toks = set(re.findall(r"[A-Z0-9]{3,}", str(descripcion).upper())) if descripcion else set()
+        mejor, score = codes[0], -1
+        for c in codes:
+            nn = self.by_code.get(c, "")
+            s = sum(1 for t in toks if t in nn)
+            if s > score:
+                mejor, score = c, s
+        return mejor
 
     def match(self, modelo, descripcion, proveedor):
         if modelo:
-            m = norm(modelo)
-            if len(m) >= 4:
-                cands = [(c, it) for (c, it, nn) in self.productos if m in nn]
-                if len(cands) == 1:
-                    return cands[0][0], "modelo", "alta"
-                if len(cands) > 1:
-                    toks = set(re.findall(r"[A-Z0-9]{2,}", str(descripcion).upper())) if descripcion else set()
-                    toks.discard(m)
-                    mejor, score = None, 0
-                    for c, it in cands:
-                        nn = norm(it)
-                        s = sum(1 for t in toks if t in nn)
-                        if s > score:
-                            mejor, score = c, s
-                    return (mejor if mejor else cands[0][0]), "modelo", "media"
+            t = _model_tokens(modelo)
+            if t and len(t["code"]) >= 4:
+                prods = self.productos
+                # 1) Código completo del proveedor dentro del nombre (raro pero firme)
+                if len(t["full"]) >= 6:
+                    cands = [c for c, it, nn in prods if t["full"] in nn]
+                    if len(cands) == 1:
+                        return cands[0], "modelo", "alta"
+                # 2) Núcleo (código + tamaño), sin prefijo del proveedor
+                if len(t["core"]) >= 5:
+                    cands = [c for c, it, nn in prods if t["core"] in nn]
+                    if len(cands) == 1:
+                        return cands[0], "modelo", "alta"
+                    if len(cands) > 1:
+                        return self._best(cands, descripcion), "modelo", "media"
+                # 3) Solo el código, con guarda de tamaño para no cruzar variantes
+                cands = [(c, nn) for c, it, nn in prods if t["code"] in nn]
+                if cands:
+                    if t["size"]:
+                        sized = [c for c, nn in cands if t["size"] in nn]
+                        if len(sized) == 1:
+                            return sized[0], "modelo", "media"
+                        if len(sized) > 1:
+                            return self._best(sized, descripcion), "modelo", "media"
+                        # hay código pero el tamaño no coincide: no forzamos match
+                    else:
+                        if len(cands) == 1:
+                            return cands[0][0], "modelo", "media"
+                        if len(cands) > 1:
+                            return self._best([c for c, _ in cands], descripcion), "modelo", "media"
         if descripcion:
             d = str(descripcion).lower()
             nouns = [TRAD[w] for w in TRAD if w in d]
@@ -466,22 +509,93 @@ def staging_insert(url, key, rows):
             raise RuntimeError(f"Insert falló ({r.status_code}): {r.text[:300]}")
 
 
+def staging_fetch(url, key):
+    h = {"apikey": key, "Authorization": f"Bearer {key}"}
+    rows, off, step = [], 0, 1000
+    while True:
+        r = requests.get(f"{url}/rest/v1/pesos_packing_staging",
+                         headers={**h, "Range-Unit": "items", "Range": f"{off}-{off+step-1}"},
+                         params={"select": "id,modelo,descripcion_pl,proveedor"}, timeout=60)
+        r.raise_for_status()
+        batch = r.json()
+        rows += batch
+        if len(batch) < step:
+            break
+        off += step
+    return rows
+
+
+def staging_update_matches(url, key, rows):
+    """Actualiza codigo_interno/metodo_match/confianza por id (upsert merge)."""
+    h = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json",
+         "Prefer": "return=minimal,resolution=merge-duplicates"}
+    for i in range(0, len(rows), 500):
+        r = requests.post(f"{url}/rest/v1/pesos_packing_staging?on_conflict=id", headers=h,
+                          data=json.dumps(rows[i:i + 500]), timeout=120)
+        if r.status_code >= 300:
+            raise RuntimeError(f"Update falló ({r.status_code}): {r.text[:300]}")
+
+
+def correr_match(cat, filas):
+    """Aplica el match a filas (dicts con modelo/descripcion_pl/proveedor)."""
+    conf, cubiertos = Counter(), set()
+    for ln in filas:
+        codigo, metodo, c = cat.match(ln.get("modelo"), ln.get("descripcion_pl"), ln.get("proveedor"))
+        ln["codigo_interno"], ln["metodo_match"], ln["confianza"] = codigo, metodo, c
+        conf[c or "sin_match"] += 1
+        if codigo and c in ("alta", "media") and codigo in cat.pendientes:
+            cubiertos.add(codigo)
+    return conf, cubiertos
+
+
+def reporte_match(conf, cubiertos, cat, titulo="REPORTE"):
+    log("\n" + "=" * 70)
+    log(titulo)
+    log("=" * 70)
+    log(f"  · confianza alta : {conf.get('alta', 0)}")
+    log(f"  · confianza media: {conf.get('media', 0)}")
+    log(f"  · confianza baja : {conf.get('baja', 0)}")
+    log(f"  · sin match      : {conf.get('sin_match', 0)}")
+    log(f"Pendientes/Estimado cubiertos (alta/media): {len(cubiertos)} de {len(cat.pendientes)}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
     raw = sys.argv[1:]
     solo_inv = "--solo-inventario" in raw
+    rematch = "--rematch" in raw
     args = [a for a in raw if not a.startswith("--")]
+
+    env = load_env()
+    url = (env.get("NEXT_PUBLIC_SUPABASE_URL") or DEFAULT_URL).rstrip("/")
+    key = env.get("SUPABASE_SERVICE_ROLE_KEY")
+
+    # ── Modo RE-MATCH: re-matchea lo que ya está en staging (sin re-escanear) ──
+    if rematch:
+        if not key:
+            log("No encontré SUPABASE_SERVICE_ROLE_KEY. Probá con SOL_ENV_FILE=… adelante del comando.")
+            sys.exit(1)
+        log("Bajando staging y catálogo…")
+        filas = staging_fetch(url, key)
+        cat = fetch_catalogo(url, key)
+        log(f"Staging: {len(filas)} líneas · Catálogo: {len(cat.productos)} · Pendientes/Estimado: {len(cat.pendientes)}")
+        conf, cubiertos = correr_match(cat, filas)
+        updates = [{"id": f["id"], "codigo_interno": f["codigo_interno"],
+                    "metodo_match": f["metodo_match"], "confianza": f["confianza"]} for f in filas]
+        log("Actualizando matches en staging…")
+        staging_update_matches(url, key, updates)
+        reporte_match(conf, cubiertos, cat, "REPORTE FINAL (re-match)")
+        log("\nListo. Nada se tocó en item_pesos.")
+        return
+
     if not args:
-        log('Uso: python extraer_pesos_packing.py "/ruta/a/Importaciones" [--solo-inventario]')
+        log('Uso: python extraer_pesos_packing.py "/ruta/a/Importaciones" [--solo-inventario|--rematch]')
         sys.exit(1)
     root = Path(args[0]).expanduser()
     if not root.exists():
         log(f"No existe la carpeta: {root}")
         sys.exit(1)
 
-    env = load_env()
-    url = (env.get("NEXT_PUBLIC_SUPABASE_URL") or DEFAULT_URL).rstrip("/")
-    key = env.get("SUPABASE_SERVICE_ROLE_KEY")
     if not key and not solo_inv:
         log("No encontré SUPABASE_SERVICE_ROLE_KEY en ningún .env de tu Mac.")
         log("Solución: corré el comando anteponiendo la ruta del .env que la tenga, por ejemplo:")
