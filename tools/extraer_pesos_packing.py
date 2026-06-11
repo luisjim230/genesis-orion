@@ -20,6 +20,7 @@ fletes, etc. quedan afuera solos porque no tienen columnas de peso.
 Credenciales: lee el .env del repo (SUPABASE_SERVICE_ROLE_KEY).
 """
 
+import os
 import re
 import sys
 import json
@@ -91,20 +92,67 @@ def log(*a):
 
 
 # ── .env ────────────────────────────────────────────────────────────────────
+def _parse_env_file(envf):
+    out = {}
+    try:
+        for line in envf.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return out
+
+
+def _scan_home_for_env(home):
+    """Busca archivos .env por la carpeta del usuario (acotado, sin Library)."""
+    skip = {"Library", "node_modules", "Applications", ".Trash", ".git", ".cache", "go"}
+    for root, dirs, files in os.walk(home):
+        rel = Path(root).relative_to(home).parts
+        if len(rel) >= 4:
+            dirs[:] = []
+        dirs[:] = [d for d in dirs if d not in skip and not d.startswith(".")]
+        if ".env" in files:
+            yield Path(root) / ".env"
+
+
 def load_env():
+    KEY = "SUPABASE_SERVICE_ROLE_KEY"
+    data = {}
+    # 1) Variables de entorno (por si se exportan antes de correr)
+    for k in ("NEXT_PUBLIC_SUPABASE_URL", KEY):
+        if os.environ.get(k):
+            data[k] = os.environ[k]
+
+    # 2) Archivos .env candidatos (explícitos primero)
     here = Path(__file__).resolve()
-    for base in [here.parent, *here.parents]:
-        envf = base / ".env"
-        if envf.exists():
-            data = {}
-            for line in envf.read_text(encoding="utf-8", errors="ignore").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                data[k.strip()] = v.strip().strip('"').strip("'")
+    home = Path.home()
+    candidatos = []
+    if os.environ.get("SOL_ENV_FILE"):
+        candidatos.append(Path(os.environ["SOL_ENV_FILE"]).expanduser())
+    candidatos += [base / ".env" for base in [here.parent, *here.parents]]
+    candidatos += [home / "Documents/neo-sync/.env", home / "neo-sync/.env", home / ".env"]
+
+    def merge(envf):
+        for k, v in _parse_env_file(envf).items():
+            data.setdefault(k, v)
+
+    for envf in candidatos:
+        if envf and envf.exists():
+            merge(envf)
+            if data.get(KEY):
+                log(f"(usando credenciales de {envf})")
+                return data
+
+    # 3) Último recurso: rastrear .env por la carpeta del usuario
+    for envf in _scan_home_for_env(home):
+        merge(envf)
+        if data.get(KEY):
+            log(f"(usando credenciales de {envf})")
             return data
-    return {}
+    return data
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────--
@@ -435,7 +483,9 @@ def main():
     url = (env.get("NEXT_PUBLIC_SUPABASE_URL") or DEFAULT_URL).rstrip("/")
     key = env.get("SUPABASE_SERVICE_ROLE_KEY")
     if not key and not solo_inv:
-        log("No encontré SUPABASE_SERVICE_ROLE_KEY en el .env del repo. No puedo subir.")
+        log("No encontré SUPABASE_SERVICE_ROLE_KEY en ningún .env de tu Mac.")
+        log("Solución: corré el comando anteponiendo la ruta del .env que la tenga, por ejemplo:")
+        log('   SOL_ENV_FILE="$HOME/Documents/neo-sync/.env" /tmp/pesos-venv/bin/python tools/extraer_pesos_packing.py "…"')
         sys.exit(1)
 
     # ── Recolectar archivos legibles ──
