@@ -41,11 +41,10 @@ export async function POST(req) {
   return NextResponse.json({ ok: true, id: data });
 }
 
-// Editar licencia. SOLO admin (Luis).
+// Editar licencia. Cualquier miembro de la bóveda (datos operativos del inventario).
 export async function PATCH(req) {
   const actor = await getBovedaActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-  if (!actor.admin) return NextResponse.json({ error: 'Solo Luis puede editar' }, { status: 403 });
 
   const b = await req.json().catch(() => ({}));
   if (!b.id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
