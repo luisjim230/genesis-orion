@@ -35,6 +35,11 @@ export async function POST(req) {
     p_estado: b.estado || null,
     p_fecha_compra: b.fecha_compra || null,
     p_notas: b.notas || null,
+    p_ip: b.ip || null,
+    p_mantenimiento: b.mantenimiento || null,
+    p_acceso_remoto: b.acceso_remoto || null,
+    p_clave_acceso: b.clave_acceso || null,
+    p_clave_remoto: b.clave_remoto || null,
     p_actor_id: actor.id,
     p_actor_nombre: actor.nombre,
   });
@@ -42,14 +47,17 @@ export async function POST(req) {
   return NextResponse.json({ ok: true, id: data });
 }
 
-// Editar equipo. SOLO admin (Luis).
+// Editar equipo. Cualquier miembro de la bóveda (datos operativos del inventario).
 export async function PATCH(req) {
   const actor = await getBovedaActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-  if (!actor.admin) return NextResponse.json({ error: 'Solo Luis puede editar' }, { status: 403 });
 
   const b = await req.json().catch(() => ({}));
   if (!b.id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
+
+  // claves: solo se cambian si vinieron con texto. Vacío → se conservan.
+  const p_clave_acceso = b.clave_acceso && String(b.clave_acceso).length ? String(b.clave_acceso) : null;
+  const p_clave_remoto = b.clave_remoto && String(b.clave_remoto).length ? String(b.clave_remoto) : null;
 
   const { error } = await getBovedaDb().rpc('boveda_equipos_editar', {
     p_id: b.id,
@@ -63,6 +71,11 @@ export async function PATCH(req) {
     p_estado: b.estado || null,
     p_fecha_compra: b.fecha_compra || null,
     p_notas: b.notas || null,
+    p_ip: b.ip || null,
+    p_mantenimiento: b.mantenimiento || null,
+    p_acceso_remoto: b.acceso_remoto || null,
+    p_clave_acceso,
+    p_clave_remoto,
     p_actor_id: actor.id,
     p_actor_nombre: actor.nombre,
   });

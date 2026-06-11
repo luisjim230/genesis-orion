@@ -17,7 +17,7 @@ const TIPOS_EQUIPO = ['Laptop', 'Desktop', 'Monitor', 'Impresora', 'Teléfono', 
 const ESTADOS_EQUIPO = ['Activo', 'Disponible', 'En reparación', 'De baja'];
 const TIPOS_LIC = ['Suscripción', 'Perpetua', 'Otra'];
 
-const EMPTY_EQUIPO = { nombre: '', tipo: '', marca: '', modelo: '', serie: '', asignado_a: '', ubicacion: '', estado: '', fecha_compra: '', notas: '' };
+const EMPTY_EQUIPO = { nombre: '', tipo: '', marca: '', modelo: '', serie: '', ip: '', asignado_a: '', ubicacion: '', estado: '', mantenimiento: '', fecha_compra: '', acceso_remoto: '', clave_acceso: '', clave_remoto: '', notas: '' };
 const EMPTY_LIC = { software: '', tipo: '', usuario: '', correo: '', clave: '', asignado_a: '', fecha_pago: '', costo: '', notas: '' };
 
 function fmtFecha(s) {
@@ -79,6 +79,8 @@ function Equipos({ isAdmin, notify }) {
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(EMPTY_EQUIPO);
   const [saving, setSaving] = useState(false);
+  const [revealed, setRevealed] = useState({});   // `${id}:${campo}` -> { clave, visible }
+  const [busy, setBusy] = useState({});
 
   const cargar = useCallback(async () => {
     setLoading(true); setError(null);
@@ -96,9 +98,10 @@ function Equipos({ isAdmin, notify }) {
     setEditId(a.id);
     setForm({
       nombre: a.nombre || '', tipo: a.tipo || '', marca: a.marca || '', modelo: a.modelo || '',
-      serie: a.serie || '', asignado_a: a.asignado_a || '', ubicacion: a.ubicacion || '',
-      estado: a.estado || '', fecha_compra: a.fecha_compra ? String(a.fecha_compra).slice(0, 10) : '',
-      notas: a.notas || '',
+      serie: a.serie || '', ip: a.ip || '', asignado_a: a.asignado_a || '', ubicacion: a.ubicacion || '',
+      estado: a.estado || '', mantenimiento: a.mantenimiento ? String(a.mantenimiento).slice(0, 10) : '',
+      fecha_compra: a.fecha_compra ? String(a.fecha_compra).slice(0, 10) : '',
+      acceso_remoto: a.acceso_remoto || '', clave_acceso: '', clave_remoto: '', notas: a.notas || '',
     });
     setShowForm(true);
   }
@@ -117,6 +120,9 @@ function Equipos({ isAdmin, notify }) {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Error al guardar');
       notify(editando ? 'Equipo actualizado ✓' : 'Equipo guardado ✓');
+      if (editando) setRevealed((p) => {
+        const n = { ...p }; delete n[`${editId}:acceso`]; delete n[`${editId}:remoto`]; return n;
+      });
       cerrar(); await cargar();
     } catch (e) { notify('Error: ' + e.message); } finally { setSaving(false); }
   }
@@ -129,6 +135,50 @@ function Equipos({ isAdmin, notify }) {
       if (!r.ok) throw new Error(j.error || 'Error al borrar');
       notify('Equipo borrado'); await cargar();
     } catch (e) { notify('Error: ' + e.message); }
+  }
+
+  async function pedirClave(id, campo, accion) {
+    const r = await fetch('/api/boveda/equipos/reveal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, campo, accion }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Error');
+    return j.clave;
+  }
+  async function revelar(a, campo) {
+    const k = `${a.id}:${campo}`;
+    const cur = revealed[k];
+    if (cur && cur.clave != null) { setRevealed((p) => ({ ...p, [k]: { ...cur, visible: !cur.visible } })); return; }
+    setBusy((p) => ({ ...p, [k]: true }));
+    try {
+      const clave = await pedirClave(a.id, campo, 'revelar');
+      setRevealed((p) => ({ ...p, [k]: { clave, visible: true } }));
+    } catch (e) { notify('Error: ' + e.message); } finally { setBusy((p) => ({ ...p, [k]: false })); }
+  }
+  async function copiarClave(a, campo) {
+    const k = `${a.id}:${campo}`;
+    setBusy((p) => ({ ...p, [k]: true }));
+    try {
+      const clave = await pedirClave(a.id, campo, 'copiar');
+      if (clave == null) { notify('Sin clave guardada'); return; }
+      await copiarTexto(clave);
+      setRevealed((p) => ({ ...p, [k]: { clave, visible: (p[k]?.visible) || false } }));
+      notify('Clave copiada ✓');
+    } catch (e) { notify('Error: ' + e.message); } finally { setBusy((p) => ({ ...p, [k]: false })); }
+  }
+  function ClaveCell({ a, campo, tiene }) {
+    const k = `${a.id}:${campo}`;
+    const rev = revealed[k];
+    const visible = rev && rev.visible;
+    if (!tiene) return <span style={{ color: C.muted }}>—</span>;
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontFamily: 'ui-monospace, monospace', letterSpacing: visible ? 0 : '0.12em' }}>{visible ? rev.clave : '••••••'}</span>
+        <button title={visible ? 'Ocultar' : 'Revelar'} onClick={() => revelar(a, campo)} disabled={busy[k]} style={miniBtn()}>{busy[k] ? '…' : (visible ? '🙈' : '👁️')}</button>
+        <button title="Copiar" onClick={() => copiarClave(a, campo)} disabled={busy[k]} style={miniBtn('teal')}>⧉</button>
+      </span>
+    );
   }
 
   const norm = (s) => String(s || '').toLowerCase();
@@ -151,10 +201,15 @@ function Equipos({ isAdmin, notify }) {
           <Campo label="Marca" value={form.marca} onChange={(v) => setForm({ ...form, marca: v })} placeholder="Ej: HP / Dell / Apple" />
           <Campo label="Modelo" value={form.modelo} onChange={(v) => setForm({ ...form, modelo: v })} placeholder="Ej: ProBook 450" />
           <Campo label="Número de serie" value={form.serie} onChange={(v) => setForm({ ...form, serie: v })} placeholder="S/N" />
+          <Campo label="Dirección IP" value={form.ip} onChange={(v) => setForm({ ...form, ip: v })} placeholder="Ej: 192.168.1.45" />
           <Campo label="Asignado a" value={form.asignado_a} onChange={(v) => setForm({ ...form, asignado_a: v })} placeholder="Persona responsable" />
           <Campo label="Ubicación" value={form.ubicacion} onChange={(v) => setForm({ ...form, ubicacion: v })} placeholder="Sucursal / departamento" />
           <CampoSelect label="Estado" value={form.estado} onChange={(v) => setForm({ ...form, estado: v })} options={ESTADOS_EQUIPO} />
           <Campo type="date" label="Fecha de compra" value={form.fecha_compra} onChange={(v) => setForm({ ...form, fecha_compra: v })} />
+          <Campo type="date" label="Programar mantenimiento" value={form.mantenimiento} onChange={(v) => setForm({ ...form, mantenimiento: v })} />
+          <Campo full label="Clave de acceso (equipo)" value={form.clave_acceso} onChange={(v) => setForm({ ...form, clave_acceso: v })} placeholder={editId ? 'dejá vacío para no cambiarla' : 'contraseña de inicio de sesión / PIN'} />
+          <Campo label="Dirección de acceso remoto" value={form.acceso_remoto} onChange={(v) => setForm({ ...form, acceso_remoto: v })} placeholder="ID AnyDesk / TeamViewer / IP" />
+          <Campo label="Clave de acceso remoto" value={form.clave_remoto} onChange={(v) => setForm({ ...form, clave_remoto: v })} placeholder={editId ? 'dejá vacío para no cambiarla' : 'contraseña del acceso remoto'} />
           <Campo full textarea label="Notas" value={form.notas} onChange={(v) => setForm({ ...form, notas: v })} placeholder="Accesorios, garantía, observaciones…" />
         </FormCard>
       )}
@@ -167,30 +222,37 @@ function Equipos({ isAdmin, notify }) {
         <Tabla>
           <thead>
             <tr>
-              <Th>Equipo</Th><Th>Tipo</Th><Th>Marca / Modelo</Th><Th>Serie</Th>
-              <Th>Asignado a</Th><Th>Ubicación</Th><Th>Estado</Th><Th>Compra</Th>
-              {isAdmin && <Th right>Acciones</Th>}
+              <Th>Equipo</Th><Th>Tipo</Th><Th>Marca / Modelo</Th><Th>Serie</Th><Th>IP</Th>
+              <Th>Asignado a</Th><Th>Ubicación</Th><Th>Estado</Th><Th>Mantenim.</Th><Th>Compra</Th>
+              <Th>Acceso remoto</Th><Th>Clave acceso</Th><Th>Clave remoto</Th>
+              <Th right>Acciones</Th>
             </tr>
           </thead>
           <tbody>
-            {lista.map((a) => (
+            {lista.map((a) => {
+              const m = a.mantenimiento ? vencimiento(a.mantenimiento) : null;
+              return (
               <tr key={a.id} style={trStyle}>
                 <Td bold>{a.nombre}</Td>
                 <Td>{a.tipo || '—'}</Td>
                 <Td>{[a.marca, a.modelo].filter(Boolean).join(' ') || '—'}</Td>
                 <Td mono>{a.serie || '—'}</Td>
+                <Td mono>{a.ip || '—'}</Td>
                 <Td>{a.asignado_a || '—'}</Td>
                 <Td>{a.ubicacion || '—'}</Td>
                 <Td>{a.estado ? <span style={estadoColor(a.estado)}>{a.estado}</span> : '—'}</Td>
+                <Td>{a.mantenimiento ? <span style={{ color: m ? m.color : C.text, fontWeight: 600 }}>{fmtFecha(a.mantenimiento)}{m && m.nota && <span style={{ fontWeight: 500, fontSize: '0.72rem' }}> · {m.nota}</span>}</span> : '—'}</Td>
                 <Td>{a.fecha_compra ? fmtFecha(a.fecha_compra) : '—'}</Td>
-                {isAdmin && (
-                  <Td right>
-                    <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
-                    <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>
-                  </Td>
-                )}
+                <Td mono>{a.acceso_remoto || '—'}</Td>
+                <Td><ClaveCell a={a} campo="acceso" tiene={a.tiene_clave_acceso} /></Td>
+                <Td><ClaveCell a={a} campo="remoto" tiene={a.tiene_clave_remoto} /></Td>
+                <Td right>
+                  <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
+                  {isAdmin && <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>}
+                </Td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </Tabla>
       )}
@@ -331,7 +393,7 @@ function Licencias({ isAdmin, notify }) {
             <tr>
               <Th>Software</Th><Th>Tipo</Th><Th>Usuario / Correo</Th><Th>Clave</Th>
               <Th>Asignado a</Th><Th>Próximo pago</Th><Th>Costo</Th>
-              {isAdmin && <Th right>Acciones</Th>}
+              <Th right>Acciones</Th>
             </tr>
           </thead>
           <tbody>
@@ -367,12 +429,10 @@ function Licencias({ isAdmin, notify }) {
                     ) : '—'}
                   </Td>
                   <Td>{a.costo || '—'}</Td>
-                  {isAdmin && (
-                    <Td right>
-                      <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
-                      <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>
-                    </Td>
-                  )}
+                  <Td right>
+                    <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
+                    {isAdmin && <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>}
+                  </Td>
                 </tr>
               );
             })}
