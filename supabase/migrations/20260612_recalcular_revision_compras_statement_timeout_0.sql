@@ -1,0 +1,12 @@
+-- Fix: la subida de "ítems comprados" disparaba `canceling statement due to
+-- statement timeout` (57014) en recalcular_revision_compras.
+--
+-- Causa raíz: recalcular_revision_compras es la única de las 5 funciones de
+-- refresh que NO trae `SET statement_timeout = 0`. Sus hermanas
+-- (refresh_profecias_panel, refresh_mv_consumo_mensual,
+-- refresh_mv_items_por_vend_mes, bi_recalcular_resumen) sí lo tienen. Por eso
+-- heredaba el statement_timeout del rol (8s) y, cuando el recálculo coincidía
+-- con la carga de NEO, Postgres la cancelaba.
+--
+-- Arreglo: igualarla a las demás. No cambia ninguna lógica del cuerpo.
+ALTER FUNCTION public.recalcular_revision_compras() SET statement_timeout TO '0';
