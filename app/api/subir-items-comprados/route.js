@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 import { ejecutarMatch } from '../../lib/procesar-match.js';
+
+// Sin esto la función usa el límite por defecto de Vercel (~15s) y se mata
+// antes de terminar los refrescos de vistas (uno tarda ~150s), haciendo que la
+// subida "falle" en el browser aunque los datos ya hayan entrado.
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 let _sb;
 function getDb() {
@@ -151,34 +157,33 @@ export async function POST(request) {
       match = { error: e.message };
     }
 
-    // Refrescar todas las vistas derivadas: sin esto los módulos siguen
-    // mostrando datos viejos hasta el cron diario.
-    let refreshOk = false;
-    let refreshDetalle = null;
-    try {
-      const db = getDb();
-      const tareas = [
-        db.rpc('refresh_profecias_panel'),
-        db.rpc('refresh_mv_consumo_mensual'),
-        db.rpc('refresh_mv_items_por_vend_mes'),
-        db.rpc('bi_recalcular_resumen'),
+    // Refrescar las vistas derivadas DESPUÉS de responder. Son muy pesadas
+    // (refresh_mv_items_por_vend_mes sola tarda ~150s); si bloquean la respuesta
+    // el browser queda esperando minutos y la subida parece fallar. Con after()
+    // la respuesta sale apenas termina el match (lo crítico para Trazabilidad) y
+    // los refrescos corren en segundo plano dentro de la misma invocación.
+    after(async () => {
+      const rpcs = [
+        'refresh_profecias_panel',
+        'refresh_mv_consumo_mensual',
+        'refresh_mv_items_por_vend_mes',
+        'bi_recalcular_resumen',
         // Revisión de Compras: recalcula utilidad de hoy y auto-resuelve alertas (§7.1)
-        db.rpc('recalcular_revision_compras'),
+        'recalcular_revision_compras',
       ];
-      const res = await Promise.allSettled(tareas);
-      const fallidas = res.filter(r => r.status === 'rejected' || r.value?.error);
-      refreshOk = fallidas.length === 0;
-      refreshDetalle = res.map((r, i) => ({
-        rpc: ['refresh_profecias_panel','refresh_mv_consumo_mensual','refresh_mv_items_por_vend_mes','bi_recalcular_resumen','recalcular_revision_compras'][i],
-        ok: r.status === 'fulfilled' && !r.value?.error,
-        error: r.status === 'rejected' ? r.reason?.message : r.value?.error?.message || null,
-      }));
-      if (!refreshOk) console.warn('[subir-items-comprados] algunos refresh fallaron:', refreshDetalle);
-    } catch (e) {
-      console.warn('[subir-items-comprados] refresh excepción:', e.message);
-    }
+      try {
+        const db = getDb();
+        const res = await Promise.allSettled(rpcs.map(r => db.rpc(r)));
+        res.forEach((r, i) => {
+          const err = r.status === 'rejected' ? r.reason?.message : r.value?.error?.message;
+          if (err) console.warn(`[subir-items-comprados] refresh ${rpcs[i]} falló:`, err);
+        });
+      } catch (e) {
+        console.warn('[subir-items-comprados] refresh excepción:', e.message);
+      }
+    });
 
-    return NextResponse.json({ ok: true, total, periodo, esNuevoPeriodo, fecha_carga: fechaCarga, match, vistas_refrescadas: refreshOk, refresh_detalle: refreshDetalle });
+    return NextResponse.json({ ok: true, total, periodo, esNuevoPeriodo, fecha_carga: fechaCarga, match, vistas_refrescadas: 'en_proceso' });
   } catch (e) {
     console.error('[API subir-items-comprados] Error:', e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
