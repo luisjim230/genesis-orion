@@ -27,15 +27,26 @@ export default function OrigenRiesgo() {
   const [filtroSem, setFiltroSem] = useState('todos'); // todos | criticos | alerta+
   const [filtroOrigen, setFiltroOrigen] = useState('todos'); // todos | nacional | importado | combo
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtroProv, setFiltroProv] = useState('Todos');
   const [sort, setSort] = useState({ key: null, dir: null }); // null = orden natural (urgencia)
+
+  // Debounce de la búsqueda para no recargar en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Sin búsqueda: panorama enfocado a productos con utilidad relevante (≥ ₡200k).
+  // Con búsqueda: se baja el piso a 0 para encontrar CUALQUIER producto del catálogo.
+  const buscando = debouncedSearch.trim() !== '';
 
   useEffect(() => {
     let cancel = false;
     (async () => {
       setLoading(true); setError(null);
       try {
-        const { data, error } = await supabase.rpc('sol_riesgo_quiebre', { util_min: 200000, meses, origen_filtro: filtroOrigen });
+        const { data, error } = await supabase.rpc('sol_riesgo_quiebre', { util_min: buscando ? 0 : 200000, meses, origen_filtro: filtroOrigen });
         if (error) throw error;
         if (!cancel) setData(Array.isArray(data) ? data : []);
       } catch (e) {
@@ -45,7 +56,7 @@ export default function OrigenRiesgo() {
       }
     })();
     return () => { cancel = true; };
-  }, [meses, filtroOrigen]);
+  }, [meses, filtroOrigen, buscando]);
 
   const COLS = useMemo(() => ([
     { key: 'producto',        label: 'Producto',          align: 'left',   type: 'str' },
