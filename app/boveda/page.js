@@ -275,7 +275,7 @@ export default function BovedaPage() {
         <span style={{ color: C.muted }}>
           {actor.admin
             ? 'Podés ver, agregar, editar y borrar.'
-            : 'Podés ver y agregar accesos. Editar y borrar queda reservado para Luis.'}
+            : 'Podés ver, agregar y editar accesos. Borrar queda reservado para Luis.'}
         </span>
         {actor.admin && (
           <button onClick={cargarLog} style={{ ...btnOutline(), marginLeft: 'auto' }}>
@@ -367,11 +367,9 @@ export default function BovedaPage() {
                     {a.categoria && <div style={{ fontSize: '0.68rem', color: C.muted, marginTop: 2 }}>{a.categoria}</div>}
                   </div>
                   <div style={{ flex: 1 }} />
+                  <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
                   {actor.admin && (
-                    <>
-                      <button title="Editar" onClick={() => abrirEditar(a)} style={iconBtn()}>✏️</button>
-                      <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>
-                    </>
+                    <button title="Borrar" onClick={() => borrar(a)} style={iconBtn('del')}>🗑️</button>
                   )}
                 </div>
 
