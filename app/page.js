@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
+import BriefingDiario from './components/BriefingDiario'
 
 const GOLD = '#c8a84b'
 
@@ -498,6 +499,10 @@ export default function DashboardPage() {
           href="/inventario"
         />
       </div>
+
+      <SectionTitle>BRIEFING DIARIO</SectionTitle>
+
+      <BriefingDiario />
 
       <SectionTitle>ALERTAS Y OPERACIONES</SectionTitle>
 
