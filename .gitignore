@@ -48,5 +48,6 @@ __pycache__/
 *.pyc
 scripts/*.log
 scripts/*.lock
+scripts/downloads/
 .venv/
 venv/
