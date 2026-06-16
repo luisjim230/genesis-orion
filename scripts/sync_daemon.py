@@ -211,18 +211,19 @@ def _cada(paso_horas, minuto, desde=7, hasta=18):
     """(hora, minuto) cada `paso_horas` horas entre `desde` y `hasta` inclusive."""
     return [(h, minuto) for h in range(desde, hasta + 1, paso_horas)]
 
-# Cadencia por reporte (minutos escalonados para repartir la carga):
+# Cadencia por reporte. Calibrada para bajar el Disk IO sin perder frescura:
+# todos los insumos del Reporte Matutino corren ANTES de las 9:30.
 SCHEDULE = {
-    "items_facturados":        _cada(1, 0),          # ventas: cada 1 h
-    "items_comprados":         _cada(1, 12),         # compras: cada 1 h
-    "lista_items":             _cada(2, 24),         # precios/stock: cada 2 h
-    "minimos_maximos":         _cada(2, 36),         # cada 2 h
-    "proformas_cabecera":      _cada(2, 48),         # cada 2 h
-    "proformas_items":         _cada(2, 54),         # cada 2 h
-    "informe_ventas_vendedor": _cada(3, 18),         # cada 3 h
-    "movimientos_contables":   [(8, 15), (16, 15)],  # 2x/día
-    "antiguedad_clientes":     [(8, 25), (16, 25)],  # 2x/día
-    "antiguedad_proveedores":  [(8, 40), (16, 40)],  # 2x/día
+    "items_facturados":        [(6,0),(10,0),(14,0),(17,30)],  # ventas (17:30 = cierre)
+    "items_comprados":         [(10,0),(16,0)],
+    "lista_items":             [(8,0),(12,0),(16,0)],
+    "minimos_maximos":         [(8,5),(12,5),(16,5)],
+    "proformas_cabecera":      [(6,0)],
+    "proformas_items":         [(6,5)],
+    "informe_ventas_vendedor": _cada(3, 18),                   # se deja (cada 3 h)
+    "movimientos_contables":   [(8,15),(16,15)],               # se deja (2x/día)
+    "antiguedad_clientes":     [(8,25),(16,25)],               # se deja (2x/día)
+    "antiguedad_proveedores":  [(8,40),(16,40)],               # se deja (2x/día)
 }
 SCHEDULE_WEEKDAYS = {0, 1, 2, 3, 4, 5}   # 0=Lun ... 5=Sáb (sin domingo)
 
@@ -286,6 +287,19 @@ def ejecutar_script(script_key):
         log.error(f"  Error {script_key}: {e}")
 
 
+def refrescar_mv(fn):
+    """Refresca una vista materializada vía RPC. No crítico."""
+    try:
+        req = urllib.request.Request(
+            f"{SUPA_URL}/rest/v1/rpc/{fn}", data=b'{}', method="POST",
+            headers={"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}",
+                     "Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=300)
+        log.info(f"  ↻ {fn} ok")
+    except Exception as e:
+        log.warning(f"  ⚠️ refresh {fn} falló (no crítico): {e}")
+
+
 def _llamar_endpoint(path, timeout, nombre):
     """POST a un endpoint de SOL (refresh-all / procesar-match). No crítico."""
     try:
@@ -320,8 +334,13 @@ def check_schedule():
     if "items_comprados" in corridos:
         _llamar_endpoint("/api/procesar-match", 120, "procesar-match")
 
-    # Refrescar vistas derivadas una sola vez tras el lote.
-    _llamar_endpoint("/api/refresh-all", 300, "refresh-all")
+    # Refresco SELECTIVO de vistas materializadas (ahorro de Disk IO):
+    # el script de items_facturados YA refresca mv_items_por_vend_mes + mv_consumo_mensual;
+    # acá completamos solo lo que falta y solo cuando su fuente corrió.
+    if "items_facturados" in corridos:
+        refrescar_mv("bi_recalcular_resumen")            # bi_resumen_producto (ventas)
+    if "items_facturados" in corridos or "minimos_maximos" in corridos:
+        refrescar_mv("refresh_profecias_panel")          # depende de ventas y/o stock
     log.info("⏰ Lote programado completado")
 
 
