@@ -202,6 +202,23 @@ try {
   alertas.push(`🔴 Error consultando <code>cola_neo_uploads</code>: ${e.message}`);
 }
 
+// 6. Latido del sync-daemon: escribe un heartbeat en daemon_heartbeat cada ~60s.
+// Si está viejo (>90 min), el daemon murió y KeepAlive no pudo levantarlo
+// (ej. la M1 apagada o sin red). Es la red de seguridad final.
+try {
+  const rows = await supaGet('daemon_heartbeat?select=last_beat&limit=1');
+  const beat = rows.length ? rows[0].last_beat : null;
+  const min = beat ? (Date.now() - new Date(beat).getTime()) / 60000 : Infinity;
+  if (min > 90) {
+    alertas.push(
+      `🔴 El <b>sync-daemon</b> de la M1 no late hace <b>${isFinite(min) ? min.toFixed(0) + ' min' : 'nunca'}</b> (último latido: ${beat || 'nunca'}).\n` +
+      `💡 El servidor M1 puede estar apagado/sin red, o el daemon caído. Revisá la M1 y: <code>launchctl kickstart -k gui/$(id -u)/com.sol.sync-daemon</code>`,
+    );
+  }
+} catch (e) {
+  alertas.push(`🔴 Error consultando <code>daemon_heartbeat</code>: ${e.message}`);
+}
+
 // Resultado
 if (alertas.length === 0) {
   console.log('✅ Todos los checks OK');

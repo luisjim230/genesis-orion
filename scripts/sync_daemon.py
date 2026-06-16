@@ -38,6 +38,7 @@ PYTHON  = sys.executable  # venv de la M1 (migración)
 SCRIPTS = BASE
 
 LOG_FILE = BASE / "sync-daemon.log"
+HEARTBEAT_FILE = Path.home() / "sol-logs" / "daemon_heartbeat.txt"
 # Evitar handlers duplicados si el módulo se re-importa
 _root_log = logging.getLogger()
 if not _root_log.handlers:
@@ -95,6 +96,29 @@ def supa_patch(path, data):
     except Exception as e:
         log.error(f"PATCH {path}: {e}")
         return None
+
+
+def latido():
+    """Escribe un latido (timestamp UTC) a Supabase y a un archivo local en cada
+    ciclo. Permite que el health-check (en la nube) detecte si el daemon murió en
+    silencio (ej. Mac apagada). No crítico: si falla, el daemon sigue."""
+    ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        HEARTBEAT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        HEARTBEAT_FILE.write_text(ahora)
+    except Exception:
+        pass
+    try:
+        url = f"{SUPA_URL}/rest/v1/daemon_heartbeat?on_conflict=id"
+        body = json.dumps([{"id": 1, "last_beat": ahora}]).encode()
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPA_KEY)
+        req.add_header("Authorization", f"Bearer {SUPA_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        log.warning(f"latido a Supabase falló (no crítico): {e}")
 
 
 def procesar_solicitud(req):
@@ -282,7 +306,13 @@ def check_schedule():
     log.info(f"⏰ Programados ahora ({len(due)}): {', '.join(due)}")
     corridos = []
     for key in due:
-        ejecutar_script(key)
+        # Aislamiento por reporte: si UNO falla de forma inesperada, se loguea y
+        # se sigue con el resto. _last_run se marca igual (espera al próximo slot,
+        # no reintenta en bucle cada 60s).
+        try:
+            ejecutar_script(key)
+        except Exception as e:
+            log.error(f"  ⚠️ {key}: error inesperado, sigo con el resto: {e}")
         _last_run[key] = datetime.now()
         corridos.append(key)
 
@@ -309,6 +339,7 @@ def main():
 
     while True:
         try:
+            latido()
             check_schedule()
 
             # Buscar solicitudes pendientes
