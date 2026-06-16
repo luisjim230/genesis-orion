@@ -219,6 +219,38 @@ try {
   alertas.push(`🔴 Error consultando <code>daemon_heartbeat</code>: ${e.message}`);
 }
 
+// 7. Anti-duplicación: las tablas con clave única de negocio NO deben tener
+// duplicados reales (sin NULL). Si aparecen, dos procesos están subiendo doble
+// (lo que pasó con el cron oculto de la M2). La función cuenta por clave natural.
+try {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/sol_duplicados_criticos`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`rpc HTTP ${res.status}`);
+  const dup = await res.json();
+  const tablas = [
+    ['neo_items_facturados (ventas)', dup.facturados],
+    ['neo_movimientos_contables', dup.movimientos],
+    ['neo_lista_items', dup.lista],
+  ];
+  for (const [t, n] of tablas) {
+    if (n > 0) {
+      alertas.push(
+        `🔴 <b>DUPLICADOS</b> en <b>${t}</b>: ${n} grupo(s) repetido(s) por clave de negocio.\n` +
+        `💡 Algo está subiendo doble (¿dos procesos/máquinas a la vez?). Revisá el daemon y que no haya otro uploader/sync corriendo.`,
+      );
+    }
+  }
+} catch (e) {
+  alertas.push(`🔴 Error consultando duplicados (<code>sol_duplicados_criticos</code>): ${e.message}`);
+}
+
 // Resultado
 if (alertas.length === 0) {
   console.log('✅ Todos los checks OK');
