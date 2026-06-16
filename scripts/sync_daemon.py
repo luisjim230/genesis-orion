@@ -178,14 +178,58 @@ def procesar_solicitud(req):
             log.warning(f"  ⚠️ refresh-all falló (no crítico): {e}")
 
 
-# ─── SCHEDULER INTEGRADO ──────────────────────────────────────────────────────
-# Todos los días a las 8:00 y 16:00. Reemplaza a los LaunchAgents individuales.
+# ─── SCHEDULER INTEGRADO (cadencia por reporte) ───────────────────────────────
+# Horario comercial, lunes a sábado (sin domingo), hora local. El daemon ejecuta
+# los reportes EN FILA (uno por uno) para no pelear la sesión de NEO. Reemplaza a
+# los LaunchAgents individuales por-reporte.
 
-SCHEDULE_HOURS    = [8, 16]                  # horas en que corre (hora local)
-SCHEDULE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]    # 0=Lunes ... 6=Domingo (todos los días)
-SCHEDULE_SCRIPTS  = list(SCRIPT_MAP.keys())
+def _cada(paso_horas, minuto, desde=7, hasta=18):
+    """(hora, minuto) cada `paso_horas` horas entre `desde` y `hasta` inclusive."""
+    return [(h, minuto) for h in range(desde, hasta + 1, paso_horas)]
 
-_ran_slots: set = set()  # "YYYY-MM-DD_HH" ya ejecutados en este ciclo de daemon
+# Cadencia por reporte (minutos escalonados para repartir la carga):
+SCHEDULE = {
+    "items_facturados":        _cada(1, 0),          # ventas: cada 1 h
+    "items_comprados":         _cada(1, 12),         # compras: cada 1 h
+    "lista_items":             _cada(2, 24),         # precios/stock: cada 2 h
+    "minimos_maximos":         _cada(2, 36),         # cada 2 h
+    "proformas_cabecera":      _cada(2, 48),         # cada 2 h
+    "proformas_items":         _cada(2, 54),         # cada 2 h
+    "informe_ventas_vendedor": _cada(3, 18),         # cada 3 h
+    "movimientos_contables":   [(8, 15), (16, 15)],  # 2x/día
+    "antiguedad_clientes":     [(8, 25), (16, 25)],  # 2x/día
+    "antiguedad_proveedores":  [(8, 40), (16, 40)],  # 2x/día
+}
+SCHEDULE_WEEKDAYS = {0, 1, 2, 3, 4, 5}   # 0=Lun ... 5=Sáb (sin domingo)
+
+# Timeout por script (segundos). Antigüedad proveedores tarda más en NEO.
+SCRIPT_TIMEOUTS = {"antiguedad_proveedores": 900}
+TIMEOUT_DEFAULT = 600
+
+_last_run: dict = {}  # script_key -> datetime del último run lanzado por el scheduler
+
+
+def _slot_vencido(spec, now):
+    """Último horario de hoy (datetime) que ya pasó, o None si ninguno pasó aún."""
+    pasados = [s for s in (now.replace(hour=h, minute=m, second=0, microsecond=0)
+                           for (h, m) in spec) if s <= now]
+    return max(pasados) if pasados else None
+
+
+def reportes_pendientes():
+    """Reportes con un horario vencido que todavía no se corrió en ese slot."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return []
+    due = []
+    for key, spec in SCHEDULE.items():
+        slot = _slot_vencido(spec, now)
+        if slot is None:
+            continue
+        if _last_run.get(key) is None or _last_run[key] < slot:
+            due.append((slot, key))
+    due.sort()  # correr en orden de horario
+    return [key for _, key in due]
 
 
 def ejecutar_script(script_key):
@@ -206,7 +250,7 @@ def ejecutar_script(script_key):
             cwd=str(SCRIPTS),
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=SCRIPT_TIMEOUTS.get(script_key, TIMEOUT_DEFAULT),
         )
         ok = result.returncode == 0
         log.info(f"  {'✅' if ok else '❌'} {script_key} (rc={result.returncode})")
@@ -218,56 +262,49 @@ def ejecutar_script(script_key):
         log.error(f"  Error {script_key}: {e}")
 
 
-def check_schedule():
-    """Si es hora programada y no ha corrido aún, ejecuta todos los scripts."""
-    now = datetime.now()
-    if now.weekday() not in SCHEDULE_WEEKDAYS:
-        return
-    if now.hour not in SCHEDULE_HOURS:
-        return
-    if now.minute > 4:  # ventana de 5 min desde el inicio de la hora
-        return
-
-    slot = now.strftime("%Y-%m-%d_%H")
-    if slot in _ran_slots:
-        return
-
-    _ran_slots.add(slot)
-
-    # Borrar sync_requests pendientes: el scheduler va a correr todos los
-    # scripts igual, no tiene sentido procesarlos en paralelo (causa locks).
+def _llamar_endpoint(path, timeout, nombre):
+    """POST a un endpoint de SOL (refresh-all / procesar-match). No crítico."""
     try:
-        ahora_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        cancelados = supa_patch(
-            "sync_requests?status=eq.pending",
-            {"status": "cancelled_by_scheduler", "completed_at": ahora_iso},
-        )
-        log.info(f"⏰ Pendientes cancelados antes del scheduler: {cancelados}")
-    except Exception as e:
-        log.warning(f"⏰ No pude limpiar pendientes: {e}")
-
-    log.info(f"⏰ Sync programado {now.strftime('%A %H:%M')} — {len(SCHEDULE_SCRIPTS)} scripts")
-    for key in SCHEDULE_SCRIPTS:
-        ejecutar_script(key)
-    log.info("⏰ Sync programado completado")
-
-    # Refrescar todas las vistas derivadas tras el batch programado.
-    try:
-        url = f"{APP_URL}/api/refresh-all"
+        url = f"{APP_URL}{path}"
         req_http = urllib.request.Request(url, data=b'{}', method="POST")
         req_http.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req_http, timeout=300) as r:
-            body = r.read().decode()
-            log.info(f"⏰ refresh-all post-batch: {body[:200]}")
+        with urllib.request.urlopen(req_http, timeout=timeout) as r:
+            log.info(f"  🔁 {nombre}: {r.read().decode()[:160]}")
     except Exception as e:
-        log.warning(f"⏰ refresh-all post-batch falló (no crítico): {e}")
+        log.warning(f"  ⚠️ {nombre} falló (no crítico): {e}")
+
+
+def check_schedule():
+    """Corre EN FILA los reportes cuyo horario venció; refresca vistas al final."""
+    due = reportes_pendientes()
+    if not due:
+        return
+    log.info(f"⏰ Programados ahora ({len(due)}): {', '.join(due)}")
+    corridos = []
+    for key in due:
+        ejecutar_script(key)
+        _last_run[key] = datetime.now()
+        corridos.append(key)
+
+    # Tras bajar ítems comprados, recalcular matches de compras.
+    if "items_comprados" in corridos:
+        _llamar_endpoint("/api/procesar-match", 120, "procesar-match")
+
+    # Refrescar vistas derivadas una sola vez tras el lote.
+    _llamar_endpoint("/api/refresh-all", 300, "refresh-all")
+    log.info("⏰ Lote programado completado")
 
 
 def main():
+    # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
+    # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
+    arranque = datetime.now()
+    for key in SCHEDULE:
+        _last_run[key] = arranque
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
-    log.info(f"Revisando solicitudes cada 60 segundos")
-    log.info(f"Sync programado: todos los días {SCHEDULE_HOURS} h")
+    log.info("Revisando solicitudes cada 60 segundos")
+    log.info(f"Scheduler por-reporte activo (lun-sáb). Reportes: {len(SCHEDULE)}")
     log.info("=" * 50)
 
     while True:
