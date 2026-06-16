@@ -27,12 +27,18 @@ from neo_session import relogin_si_hace_falta
 load_dotenv(BASE / ".env")
 
 NEO_URL      = "https://neo.neotecnologias.com/NEOBusiness/"
-NEO_USUARIO  = os.getenv("NEO_USUARIO", "luisjim230")
-NEO_CLAVE    = os.getenv("NEO_CLAVE",   "Miami123")
+NEO_USUARIO  = os.getenv("NEO_USUARIO")
+NEO_CLAVE    = os.getenv("NEO_CLAVE")
 EMPRESA_ID   = "984"
 
-SUPA_URL = os.getenv("SUPABASE_URL", "https://xeeieqjqmtoiutfnltqu.supabase.co")
-SUPA_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlZWllcWpxbXRvaXV0Zm5sdHF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MjA2NTMsImV4cCI6MjA4ODI5NjY1M30.SqYdotAkZOyMARsZb1XutfgYiH9Ig2qoHOD8j6oPy00")
+SUPA_URL = os.getenv("SUPABASE_URL")
+SUPA_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+
+# --- Validación de credenciales del .env (migración a servidor M1) ---
+# Sin defaults hardcodeados: si falta algo, cortar con mensaje claro.
+_faltan_env = [n for n, v in (("NEO_USUARIO", NEO_USUARIO), ("NEO_CLAVE", NEO_CLAVE), ("SUPABASE_URL", SUPA_URL), ("SUPABASE_SERVICE_ROLE_KEY/ANON_KEY", SUPA_KEY)) if not v]
+if _faltan_env:
+    raise SystemExit("ERROR: faltan variables en scripts/.env: " + ", ".join(_faltan_env) + ". Completá scripts/.env y reintentá.")
 
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID",   "")
