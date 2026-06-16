@@ -325,12 +325,41 @@ def check_schedule():
     log.info("⏰ Lote programado completado")
 
 
+REPORTE_MATUTINO = (9, 30)   # Reporte Matutino por Telegram: 9:30 lun-sáb
+_reporte_enviado: set = set()  # fechas (iso) en que ya se envió
+
+
+def check_reporte_matutino():
+    """A las 9:30 (lun-sáb) envía el Reporte Matutino por Telegram. Solo LEE
+    Supabase (no toca NEO), así que corre sin chocar con los downloaders."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    slot = now.replace(hour=REPORTE_MATUTINO[0], minute=REPORTE_MATUTINO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _reporte_enviado:
+        return
+    _reporte_enviado.add(hoy)
+    log.info("📰 Enviando Reporte Matutino...")
+    try:
+        r = subprocess.run([PYTHON, str(SCRIPTS / "reporte_matutino.py"), "--send"],
+                           cwd=str(SCRIPTS), capture_output=True, text=True, timeout=300)
+        log.info(f"📰 Reporte Matutino rc={r.returncode}")
+        if r.returncode != 0:
+            log.error(f"  stderr: {r.stderr[-300:]}")
+    except Exception as e:
+        log.error(f"📰 Reporte Matutino error: {e}")
+
+
 def main():
     # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
     # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
     arranque = datetime.now()
     for key in SCHEDULE:
         _last_run[key] = arranque
+    # Si el daemon arranca después de las 9:30, no reenviar el matutino de hoy.
+    if (arranque.hour, arranque.minute) >= REPORTE_MATUTINO:
+        _reporte_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -341,6 +370,7 @@ def main():
         try:
             latido()
             check_schedule()
+            check_reporte_matutino()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(
