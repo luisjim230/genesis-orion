@@ -416,6 +416,23 @@ def check_guardian_presupuesto():
     _disparar_reporte("Guardián de Presupuesto", "guardian_presupuesto.py", "🛡️")
 
 
+REPORTE_AUDITOR = (9, 35)   # viernes: auditoría de pauta (consultoría, 30 días)
+_auditor_enviado: set = set()
+
+
+def check_auditor_pauta():
+    """Viernes 9:35: Auditoría-Consultoría de Pauta (Meta)."""
+    now = datetime.now()
+    if now.weekday() != 4:                       # 4 = viernes
+        return
+    slot = now.replace(hour=REPORTE_AUDITOR[0], minute=REPORTE_AUDITOR[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _auditor_enviado:
+        return
+    _auditor_enviado.add(hoy)
+    _disparar_reporte("Auditoría de Pauta", "auditor_pauta.py", "🔍")
+
+
 def main():
     # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
     # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
@@ -430,6 +447,8 @@ def main():
         _pauta_enviado.add(arranque.date().isoformat())
     if (arranque.hour, arranque.minute) >= GUARDIAN_PPTO:
         _guardian_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 4 and (arranque.hour, arranque.minute) >= REPORTE_AUDITOR:
+        _auditor_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -443,6 +462,7 @@ def main():
             check_reporte_matutino()
             check_reporte_pauta()
             check_guardian_presupuesto()
+            check_auditor_pauta()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(
