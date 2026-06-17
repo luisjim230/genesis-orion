@@ -89,6 +89,22 @@ export async function POST(req) {
       throw eUpd;
     }
 
+    // Enlazar el historial de decisiones de este proveedor con la orden recién
+    // creada (best-effort: si falla NO rompe la orden). Cubre los SKUs pedidos y
+    // los que se revisaron y quedaron en 0, registrados al aprobar el lote.
+    try {
+      const desde = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const { error: eLink } = await sb()
+        .from('profecias_historial_decisiones')
+        .update({ orden_compra_id: orden.id })
+        .eq('proveedor', provDef)
+        .is('orden_compra_id', null)
+        .gte('fecha_decision', desde);
+      if (eLink) console.error('[generar-orden] link historial falló:', eLink.message);
+    } catch (eLink) {
+      console.error('[generar-orden] link historial excepción:', eLink?.message || eLink);
+    }
+
     sb().rpc('refresh_profecias_panel').then(() => {}, () => {});
 
     const inversion_total = aprobs.reduce((s, a) => s + (Number(a.inversion_estimada) || 0), 0);

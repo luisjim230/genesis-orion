@@ -139,10 +139,23 @@ export default function NecesidadCompraTab({ filas, onSeleccionar, onAprobado })
   async function confirmarAprobacion({ notas }) {
     setAprobando(true);
     try {
+      // Proveedores que el usuario realmente procesó en este lote.
+      const provsProcesados = new Set(itemsParaModal.map((i) => i.proveedor));
+      const codigosAprobados = new Set(itemsParaModal.map((i) => i.codigo_interno));
+      // SKUs revisados de esos proveedores que quedaron SIN pedir (cantidad = 0):
+      // "lo revisó y decidió no pedir". El cero es dato válido para aprender.
+      const itemsCero = candidatas
+        .filter((f) =>
+          provsProcesados.has(f.ultimo_proveedor) &&
+          !codigosAprobados.has(f.codigo_interno) &&
+          !aprobado(f)
+        )
+        .map((f) => ({ codigo_interno: f.codigo_interno }));
+
       const r = await fetch('/api/profecias/aprobar-lote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsParaModal, notas }),
+        body: JSON.stringify({ items: itemsParaModal, items_cero: itemsCero, notas }),
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || 'Error');
