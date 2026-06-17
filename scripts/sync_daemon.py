@@ -370,6 +370,52 @@ def check_reporte_matutino():
         log.error(f"📰 Reporte Matutino error: {e}")
 
 
+# ─── Marketing: Reporte de Pauta (lunes) + Guardián de Presupuesto (diario) ────
+REPORTE_PAUTA = (9, 35)    # lunes: cierre de la pauta de la semana pasada
+GUARDIAN_PPTO = (8, 0)     # diario (lun-sáb): alerta solo si hubo gasto anómalo
+_pauta_enviado: set = set()
+_guardian_enviado: set = set()
+
+
+def _disparar_reporte(nombre, script, flag):
+    """Corre un agente de reporte/alerta (--send). Solo LEE Supabase, no toca NEO."""
+    log.info(f"{flag} Enviando {nombre}...")
+    try:
+        r = subprocess.run([PYTHON, str(SCRIPTS / script), "--send"],
+                           cwd=str(SCRIPTS), capture_output=True, text=True, timeout=180)
+        log.info(f"{flag} {nombre} rc={r.returncode}")
+        if r.returncode != 0:
+            log.error(f"  stderr: {r.stderr[-300:]}")
+    except Exception as e:
+        log.error(f"{flag} {nombre} error: {e}")
+
+
+def check_reporte_pauta():
+    """Lunes 9:35: Reporte de Performance de pauta (Meta)."""
+    now = datetime.now()
+    if now.weekday() != 0:                       # 0 = lunes
+        return
+    slot = now.replace(hour=REPORTE_PAUTA[0], minute=REPORTE_PAUTA[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _pauta_enviado:
+        return
+    _pauta_enviado.add(hoy)
+    _disparar_reporte("Reporte de Pauta", "reportero_performance.py", "📣")
+
+
+def check_guardian_presupuesto():
+    """Diario (lun-sáb) 8:00: Guardián de Presupuesto (avisa solo si hay anomalía)."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    slot = now.replace(hour=GUARDIAN_PPTO[0], minute=GUARDIAN_PPTO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _guardian_enviado:
+        return
+    _guardian_enviado.add(hoy)
+    _disparar_reporte("Guardián de Presupuesto", "guardian_presupuesto.py", "🛡️")
+
+
 def main():
     # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
     # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
@@ -379,6 +425,11 @@ def main():
     # Si el daemon arranca después de las 9:30, no reenviar el matutino de hoy.
     if (arranque.hour, arranque.minute) >= REPORTE_MATUTINO:
         _reporte_enviado.add(arranque.date().isoformat())
+    # Igual para los agentes de marketing: no reenviar si el daemon reinicia pasado el slot.
+    if arranque.weekday() == 0 and (arranque.hour, arranque.minute) >= REPORTE_PAUTA:
+        _pauta_enviado.add(arranque.date().isoformat())
+    if (arranque.hour, arranque.minute) >= GUARDIAN_PPTO:
+        _guardian_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -390,6 +441,8 @@ def main():
             latido()
             check_schedule()
             check_reporte_matutino()
+            check_reporte_pauta()
+            check_guardian_presupuesto()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(

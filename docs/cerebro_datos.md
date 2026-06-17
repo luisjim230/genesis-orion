@@ -11,6 +11,7 @@ Este documento le enseña al agente AgenteDJ cómo leer y calcular correctamente
 5. Para decisiones de plata grande (pedidos sugeridos, proyecciones para comprar), aclarás que es una sugerencia a cruzar con el dashboard SOL, no una orden.
 6. Moneda por defecto: colones (₡). Ojo con columnas que pueden venir en USD.
 7. Zona horaria: la base guarda en UTC. "Hoy/ayer" se calcula en hora de Costa Rica: usá (now() at time zone 'America/Costa_Rica')::date.
+8. SELLO DE FRESCURA (OBLIGATORIO en respuestas de ventas): toda respuesta que reporte ventas/facturación (montos, unidades vendidas, mejor vendedor, ítems vendidos, comparativos, proyecciones de venta) DEBE cerrar con la fecha de corte real de los datos. Para obtenerla corré la consulta "Sello de frescura" (sección 5) y pegá TAL CUAL lo que devuelve como última línea, precedido de un salto de línea doble. NUNCA inventes la hora: si la consulta falla, escribí "📅 No pude confirmar el corte de los datos" en vez de una hora falsa. (No aplica a preguntas que no son de ventas: inventario, compras, cuentas por pagar/cobrar, etc.)
 
 ## 1. El negocio en una página
 
@@ -42,6 +43,8 @@ Este documento le enseña al agente AgenteDJ cómo leer y calcular correctamente
 6. Velocidad / rotación: calculala sobre la ventana activa de ventas del producto (de su primera a su última fecha_real con ventas), no sobre días calendario. Para cobertura simple, neo_minimos_maximos.promedio_mensual ya trae el promedio de salida mensual — úsalo.
 7. Moneda: neo_lista_items tiene moneda_costo y neo_items_comprados tiene moneda. Si hay filas en USD, no las sumes a ciegas con las de CRC. Si dudás, agrupá por moneda o avisá.
 8. neo_informe_ventas_vendedor es MENSUAL (un resumen por vendedor y mes). Sirve para "¿cómo va tal vendedor este mes?". NO sirve para "mejor vendedor de ayer" — para un día específico andá al detalle (neo_items_facturados agrupando por vendedor).
+9. Búsqueda de un producto por nombre suelto: NUNCA le pidas a Luis el nombre exacto. Buscá por aproximación con ILIKE sobre item (o nombre/descripcion según la tabla) y SUMÁ por codigo_interno. Un mismo producto puede estar escrito de varias formas: ej. el FREGADERO DUBAI GRIS PLOMO (codigo_interno 351100300992484) aparece como "...1M X 46CM" y como "...1M X46CM + CALENTADOR...". Si contás por el texto del item lo partís en dos; agrupando por codigo_interno queda bien. Si tu ILIKE trae varios codigo_interno y dudás de cuáles cuentan, mostrá los candidatos (codigo_interno, item, unidades) y pedí confirmación — pero el número final siempre sale agrupando por codigo_interno, no por el texto.
+10. Baja rotación / "productos muertos" / lentos: NUNCA clasifiques un producto como lento o muerto sin mirar cuánto lleva en inventario. La antigüedad sale de neo_lista_items.fecha_registro (texto ISO 'YYYY-MM-DD HH:MM:SS', parsealo con ::date; días en inventario = current_date - fecha_registro::date). REGLA DURA: un producto con menos de ~120 días en inventario NO se clasifica como lento/muerto — todavía no tuvo tiempo de demostrar rotación (algo que llegó hace 2 semanas con 0 ventas está NUEVO, no muerto). Y la velocidad de venta se calcula sobre la ventana disponible (desde fecha_registro o la primera venta), no sobre días calendario fijos. Excluí del análisis de rotación lo que no llegue a ~120 días, o márcalo aparte como "muy nuevo para evaluar".
 
 ## 4. Diccionario de las tablas clave
 
@@ -75,6 +78,14 @@ titulo, prioridad, notas, estado ('activa' / 'completada'). Las pendientes: esta
 
 ## 5. Recetas (consultas modelo)
 
+Sello de frescura (corte real de los datos de ventas — usar al cerrar respuestas de ventas, regla 0.8):
+select '📅 Datos al corte de las ' ||
+  to_char((max(fecha_carga) at time zone 'America/Costa_Rica'), 'HH12:MI') ||
+  case when to_char((max(fecha_carga) at time zone 'America/Costa_Rica'),'AM')='AM'
+       then ' a.m.' else ' p.m.' end as sello
+from neo_items_facturados;
+-- Devuelve la línea ya armada (ej. "📅 Datos al corte de las 10:03 a.m."). Pegala tal cual.
+
 Ventas netas de un día (ej. ayer):
 select sum(precio_unitario*(cantidad_facturada-coalesce(cantidad_devuelta,0))*(1-coalesce(descuento,0)/nullif(subtotal,0)))
 from neo_items_facturados
@@ -93,6 +104,14 @@ select item, codigo_interno,
 from neo_items_facturados
 where fecha_real between :desde and :hasta
 group by item, codigo_interno order by ventas desc limit 10;
+
+Cuántas unidades de un producto se vendieron (búsqueda por aproximación; ej. "fregaderos Dubai" en junio 2026):
+select sum(cantidad_facturada-coalesce(cantidad_devuelta,0)) unidades
+from neo_items_facturados
+where item ilike '%dubai%'
+  and fecha_real >= '2026-06-01' and fecha_real < '2026-07-01';
+-- Para ver el desglose por variante: agregá  codigo_interno, item  al select y  group by codigo_interno, item.
+-- Regla: matcheá por ILIKE sobre item; sumá por codigo_interno; nunca pidas el nombre exacto.
 
 Valor de inventario:
 with ult as (select *, row_number() over (partition by codigo_interno order by fecha_carga desc) rn from neo_lista_items)
@@ -133,6 +152,8 @@ order by sugerido_8m desc;
 - Sumar costos/existencias mezclando CRC y USD sin avisar.
 - Usar pct_utilidad como markup.
 - Dar un número "redondo y seguro" cuando en realidad no consultaste la base.
+- Pedirle a Luis el nombre exacto de un producto, o contar por el texto del item en vez de buscar por ILIKE y sumar por codigo_interno.
+- Llamar "lento" o "muerto" a un producto sin mirar fecha_registro: algo con <~120 días en inventario es nuevo, no muerto (regla 3.10).
 
 ## 7. Cuándo parás y avisás
 
@@ -140,3 +161,8 @@ order by sugerido_8m desc;
 - El cálculo es para una decisión de compra grande → das el número pero marcás que es sugerencia a validar contra SOL.
 - El resultado se ve raro (muy alto/bajo vs lo esperado) → lo decís y ofrecés mostrar el desglose.
 - Te piden escribir/cambiar algo → no podés (solo lectura); que se haga en SOL.
+
+## 8. Notas operativas (acordadas con Luis, 2026-06-16)
+- "Ventana" = ventanas UPVC + combos ventana+persiana. NO incluye puertas (corredizas u otras).
+- "Producto más vendido": excluí líneas de servicio (codigo_interno='TRANSPORTE' / item ilike '%transporte%').
+- Motor de consultas (SOLO lectura, rol agente_ro), SIEMPRE por archivo: escribí la SQL en `/Users/agentedepositojimenez/.openclaw/workspace/consulta.sql` (con `write`) y corré `/Users/agentedepositojimenez/genesis-orion/scripts/sol_sql.sh --file /Users/agentedepositojimenez/.openclaw/workspace/consulta.sql`. NUNCA pases la SQL como argumento directo (paréntesis/comillas → cae en aprobación y se cuelga).
