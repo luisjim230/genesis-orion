@@ -49,6 +49,6 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           from: AgenteDJ <${{ secrets.MAIL_USERNAME }}>
-          to: ${{ secrets.MAIL_TO }}
+          to: ${{ secrets.MAIL_TO || secrets.MAIL_USERNAME }}
           subject: "🚨 SOL Health Check — alerta (respaldo por email)"
           html_body: ${{ steps.alerta.outputs.body }}
