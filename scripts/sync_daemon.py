@@ -486,6 +486,23 @@ def check_mateo():
     _disparar_reporte("Mateo (financiero)", "mateo_financiero.py", "💰")
 
 
+VIGILANTE_PROF = (9, 35)   # martes: Vigilante de Proformas (seguimiento de cotizaciones)
+_vigprof_enviado: set = set()
+
+
+def check_vigilante_proformas():
+    """Martes 9:35: Vigilante de Proformas."""
+    now = datetime.now()
+    if now.weekday() != 1:                       # 1 = martes
+        return
+    slot = now.replace(hour=VIGILANTE_PROF[0], minute=VIGILANTE_PROF[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _vigprof_enviado:
+        return
+    _vigprof_enviado.add(hoy)
+    _disparar_reporte("Vigilante de Proformas", "vigilante_proformas.py", "📄")
+
+
 LATIDO = (20, 0)   # lun-sáb 20:00: Latido verifica que los agentes del día corrieron
 _latido_enviado: set = set()
 
@@ -523,6 +540,8 @@ def main():
         _ezequiel_enviado.add(arranque.date().isoformat())
     if arranque.weekday() == 3 and (arranque.hour, arranque.minute) >= MATEO:
         _mateo_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 1 and (arranque.hour, arranque.minute) >= VIGILANTE_PROF:
+        _vigprof_enviado.add(arranque.date().isoformat())
     if (arranque.hour, arranque.minute) >= LATIDO:
         _latido_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
@@ -541,6 +560,7 @@ def main():
             check_auditor_pauta()
             check_ezequiel()
             check_mateo()
+            check_vigilante_proformas()
             check_latido()
 
             # Buscar solicitudes pendientes
