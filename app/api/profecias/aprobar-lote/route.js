@@ -21,10 +21,20 @@ export async function POST(req) {
 
     const codigos = [...new Set(limpios.map((i) => i.codigo_interno))];
 
+    // SKUs revisados que quedaron en 0 (decidió no pedir) de los mismos proveedores.
+    // Solo se usan para el historial de decisiones, NO entran a profecias_aprobaciones.
+    const codigosCero = [...new Set(
+      (Array.isArray(body.items_cero) ? body.items_cero : [])
+        .map((c) => String(c?.codigo_interno ?? c ?? '').trim())
+        .filter(Boolean)
+    )].filter((c) => !codigos.includes(c));
+
+    const codigosTodos = [...new Set([...codigos, ...codigosCero])];
+
     const { data: panelRows, error: ePanel } = await sb()
       .from('profecias_panel')
       .select('codigo_interno, ultimo_proveedor, madurez, velocidad_30d, velocidad_90d, velocidad_ajustada_30d, velocidad_ajustada_90d, existencias, cantidad_sugerida, ultimo_costo, clasificacion_manual, semaforo')
-      .in('codigo_interno', codigos);
+      .in('codigo_interno', codigosTodos);
     if (ePanel) throw ePanel;
     const panelMap = new Map((panelRows || []).map((p) => [p.codigo_interno, p]));
 
@@ -62,7 +72,9 @@ export async function POST(req) {
       .select();
     if (eIns) throw eIns;
 
-    // Historial paralelo (best-effort, no bloquea respuesta)
+    // Historial de decisiones (best-effort: si falla NO rompe la aprobación).
+    // Una fila por SKU pedido (cantidad firmada) + una por SKU revisado que
+    // quedó en 0 (decidió no pedir). orden_compra_id se rellena al generar la orden.
     const decisiones = aprobaciones.map((a) => ({
       codigo_interno: a.codigo_interno,
       fecha_decision: ahora.slice(0, 10),
@@ -77,7 +89,30 @@ export async function POST(req) {
       clasificacion_manual_al_momento: a.clasificacion_manual_al_momento,
       notas: a.notas,
     }));
-    await sb().from('profecias_historial_decisiones').insert(decisiones);
+    for (const c of codigosCero) {
+      const p = panelMap.get(c);
+      if (!p) continue;
+      decisiones.push({
+        codigo_interno: c,
+        fecha_decision: ahora.slice(0, 10),
+        proveedor: p.ultimo_proveedor,
+        madurez_al_momento: p.madurez,
+        velocidad_observada: p.velocidad_ajustada_90d ?? p.velocidad_90d ?? p.velocidad_ajustada_30d ?? p.velocidad_30d ?? null,
+        existencias_al_momento: p.existencias,
+        cantidad_sugerida: p.cantidad_sugerida,
+        cantidad_firmada: 0,
+        costo_unitario_estimado: parseFloat(p.ultimo_costo) || 0,
+        inversion_estimada: 0,
+        clasificacion_manual_al_momento: p.clasificacion_manual,
+        notas: body.notas || null,
+      });
+    }
+    try {
+      const { error: eHist } = await sb().from('profecias_historial_decisiones').insert(decisiones);
+      if (eHist) console.error('[aprobar-lote] historial decisiones falló:', eHist.message);
+    } catch (eHist) {
+      console.error('[aprobar-lote] historial decisiones excepción:', eHist?.message || eHist);
+    }
 
     sb().rpc('refresh_profecias_panel').then(() => {}, () => {});
 
