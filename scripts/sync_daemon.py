@@ -360,14 +360,17 @@ def check_reporte_matutino():
         return
     _reporte_enviado.add(hoy)
     log.info("📰 Enviando Reporte Matutino...")
+    rc = -1
     try:
         r = subprocess.run([PYTHON, str(SCRIPTS / "reporte_matutino.py"), "--send"],
                            cwd=str(SCRIPTS), capture_output=True, text=True, timeout=300)
-        log.info(f"📰 Reporte Matutino rc={r.returncode}")
-        if r.returncode != 0:
+        rc = r.returncode
+        log.info(f"📰 Reporte Matutino rc={rc}")
+        if rc != 0:
             log.error(f"  stderr: {r.stderr[-300:]}")
     except Exception as e:
         log.error(f"📰 Reporte Matutino error: {e}")
+    registrar_corrida("Reporte Matutino", rc)
 
 
 # ─── Marketing: Reporte de Pauta (lunes) + Guardián de Presupuesto (diario) ────
@@ -377,17 +380,33 @@ _pauta_enviado: set = set()
 _guardian_enviado: set = set()
 
 
+RUNS_FILE = Path.home() / "sol-logs" / "agent_runs.jsonl"
+
+
+def registrar_corrida(nombre, rc):
+    """Anota que un agente corrió hoy (para que Latido lo verifique de noche)."""
+    try:
+        RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(RUNS_FILE, "a") as f:
+            f.write(json.dumps({"ts": datetime.now().isoformat(), "agente": nombre, "rc": rc}) + "\n")
+    except Exception as e:
+        log.warning(f"  no pude registrar corrida de {nombre}: {e}")
+
+
 def _disparar_reporte(nombre, script, flag):
     """Corre un agente de reporte/alerta (--send). Solo LEE Supabase, no toca NEO."""
     log.info(f"{flag} Enviando {nombre}...")
+    rc = -1
     try:
         r = subprocess.run([PYTHON, str(SCRIPTS / script), "--send"],
                            cwd=str(SCRIPTS), capture_output=True, text=True, timeout=180)
-        log.info(f"{flag} {nombre} rc={r.returncode}")
-        if r.returncode != 0:
+        rc = r.returncode
+        log.info(f"{flag} {nombre} rc={rc}")
+        if rc != 0:
             log.error(f"  stderr: {r.stderr[-300:]}")
     except Exception as e:
         log.error(f"{flag} {nombre} error: {e}")
+    registrar_corrida(nombre, rc)
 
 
 def check_reporte_pauta():
@@ -467,6 +486,23 @@ def check_mateo():
     _disparar_reporte("Mateo (financiero)", "mateo_financiero.py", "💰")
 
 
+LATIDO = (20, 0)   # lun-sáb 20:00: Latido verifica que los agentes del día corrieron
+_latido_enviado: set = set()
+
+
+def check_latido():
+    """20:00 (lun-sáb): Latido — parte nocturno de que los agentes corrieron."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    slot = now.replace(hour=LATIDO[0], minute=LATIDO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _latido_enviado:
+        return
+    _latido_enviado.add(hoy)
+    _disparar_reporte("Latido", "latido.py", "🌙")
+
+
 def main():
     # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
     # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
@@ -487,6 +523,8 @@ def main():
         _ezequiel_enviado.add(arranque.date().isoformat())
     if arranque.weekday() == 3 and (arranque.hour, arranque.minute) >= MATEO:
         _mateo_enviado.add(arranque.date().isoformat())
+    if (arranque.hour, arranque.minute) >= LATIDO:
+        _latido_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -503,6 +541,7 @@ def main():
             check_auditor_pauta()
             check_ezequiel()
             check_mateo()
+            check_latido()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(
