@@ -450,6 +450,23 @@ def check_ezequiel():
     _disparar_reporte("Ezequiel (quiebres)", "ezequiel_profeta.py", "🔮")
 
 
+MATEO = (9, 35)   # jueves: Mateo, pulso financiero (ventas/compras/margen + sirena markup)
+_mateo_enviado: set = set()
+
+
+def check_mateo():
+    """Jueves 9:35: Mateo — pulso financiero por Telegram."""
+    now = datetime.now()
+    if now.weekday() != 3:                       # 3 = jueves
+        return
+    slot = now.replace(hour=MATEO[0], minute=MATEO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _mateo_enviado:
+        return
+    _mateo_enviado.add(hoy)
+    _disparar_reporte("Mateo (financiero)", "mateo_financiero.py", "💰")
+
+
 def main():
     # Al arrancar, marcamos cada reporte como "ya corrido hasta ahora" para NO
     # disparar una avalancha por slots ya vencidos hoy (arrancan en el próximo).
@@ -468,6 +485,8 @@ def main():
         _auditor_enviado.add(arranque.date().isoformat())
     if arranque.weekday() == 2 and (arranque.hour, arranque.minute) >= EZEQUIEL:
         _ezequiel_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 3 and (arranque.hour, arranque.minute) >= MATEO:
+        _mateo_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -483,6 +502,7 @@ def main():
             check_guardian_presupuesto()
             check_auditor_pauta()
             check_ezequiel()
+            check_mateo()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(
