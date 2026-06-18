@@ -20,6 +20,8 @@
  *                     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, APP_URL
  */
 
+import { writeFileSync } from 'node:fs';
+
 const {
   SUPABASE_URL,
   SUPABASE_SERVICE_KEY,
@@ -263,5 +265,8 @@ const mensaje =
   `\n\n⏰ ${new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' })}`;
 
 console.error(mensaje);
+// Respaldo (regla #8): dejar el mensaje en un archivo para que el workflow lo
+// mande también por EMAIL — 2º canal, por si Telegram está caído.
+try { writeFileSync('health-alert.txt', mensaje); } catch { /* no crítico */ }
 await telegram(mensaje);
 process.exit(1);

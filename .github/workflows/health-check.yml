@@ -28,3 +28,27 @@ jobs:
           TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
           APP_URL:             https://genesis-orion.vercel.app
         run: node scripts/health_check.mjs
+
+      - name: Preparar cuerpo del email (solo si hubo alerta)
+        if: failure()
+        id: alerta
+        run: |
+          {
+            echo 'body<<HCEOF'
+            cat health-alert.txt 2>/dev/null || echo 'Health check falló sin detalle. Revisá los logs de esta Action.'
+            echo 'HCEOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Email de respaldo (2º canal — regla #8)
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: AgenteDJ <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_TO }}
+          subject: "🚨 SOL Health Check — alerta (respaldo por email)"
+          html_body: ${{ steps.alerta.outputs.body }}
