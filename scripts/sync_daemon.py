@@ -360,14 +360,164 @@ def check_reporte_matutino():
         return
     _reporte_enviado.add(hoy)
     log.info("📰 Enviando Reporte Matutino...")
+    rc = -1
     try:
         r = subprocess.run([PYTHON, str(SCRIPTS / "reporte_matutino.py"), "--send"],
                            cwd=str(SCRIPTS), capture_output=True, text=True, timeout=300)
-        log.info(f"📰 Reporte Matutino rc={r.returncode}")
-        if r.returncode != 0:
+        rc = r.returncode
+        log.info(f"📰 Reporte Matutino rc={rc}")
+        if rc != 0:
             log.error(f"  stderr: {r.stderr[-300:]}")
     except Exception as e:
         log.error(f"📰 Reporte Matutino error: {e}")
+    registrar_corrida("Reporte Matutino", rc)
+
+
+# ─── Marketing: Reporte de Pauta (lunes) + Guardián de Presupuesto (diario) ────
+REPORTE_PAUTA = (9, 35)    # lunes: cierre de la pauta de la semana pasada
+GUARDIAN_PPTO = (8, 0)     # diario (lun-sáb): alerta solo si hubo gasto anómalo
+_pauta_enviado: set = set()
+_guardian_enviado: set = set()
+
+
+RUNS_FILE = Path.home() / "sol-logs" / "agent_runs.jsonl"
+
+
+def registrar_corrida(nombre, rc):
+    """Anota que un agente corrió hoy (para que Latido lo verifique de noche)."""
+    try:
+        RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(RUNS_FILE, "a") as f:
+            f.write(json.dumps({"ts": datetime.now().isoformat(), "agente": nombre, "rc": rc}) + "\n")
+    except Exception as e:
+        log.warning(f"  no pude registrar corrida de {nombre}: {e}")
+
+
+def _disparar_reporte(nombre, script, flag):
+    """Corre un agente de reporte/alerta (--send). Solo LEE Supabase, no toca NEO."""
+    log.info(f"{flag} Enviando {nombre}...")
+    rc = -1
+    try:
+        r = subprocess.run([PYTHON, str(SCRIPTS / script), "--send"],
+                           cwd=str(SCRIPTS), capture_output=True, text=True, timeout=180)
+        rc = r.returncode
+        log.info(f"{flag} {nombre} rc={rc}")
+        if rc != 0:
+            log.error(f"  stderr: {r.stderr[-300:]}")
+    except Exception as e:
+        log.error(f"{flag} {nombre} error: {e}")
+    registrar_corrida(nombre, rc)
+
+
+def check_reporte_pauta():
+    """Lunes 9:35: Reporte de Performance de pauta (Meta)."""
+    now = datetime.now()
+    if now.weekday() != 0:                       # 0 = lunes
+        return
+    slot = now.replace(hour=REPORTE_PAUTA[0], minute=REPORTE_PAUTA[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _pauta_enviado:
+        return
+    _pauta_enviado.add(hoy)
+    _disparar_reporte("Reporte de Pauta", "reportero_performance.py", "📣")
+
+
+def check_guardian_presupuesto():
+    """Diario (lun-sáb) 8:00: Guardián de Presupuesto (avisa solo si hay anomalía)."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    slot = now.replace(hour=GUARDIAN_PPTO[0], minute=GUARDIAN_PPTO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _guardian_enviado:
+        return
+    _guardian_enviado.add(hoy)
+    _disparar_reporte("Guardián de Presupuesto", "guardian_presupuesto.py", "🛡️")
+
+
+REPORTE_AUDITOR = (9, 35)   # viernes: auditoría de pauta (consultoría, 30 días)
+_auditor_enviado: set = set()
+
+
+def check_auditor_pauta():
+    """Viernes 9:35: Auditoría-Consultoría de Pauta (Meta)."""
+    now = datetime.now()
+    if now.weekday() != 4:                       # 4 = viernes
+        return
+    slot = now.replace(hour=REPORTE_AUDITOR[0], minute=REPORTE_AUDITOR[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _auditor_enviado:
+        return
+    _auditor_enviado.add(hoy)
+    _disparar_reporte("Auditoría de Pauta", "auditor_pauta.py", "🔍")
+
+
+EZEQUIEL = (9, 35)   # miércoles: Ezequiel, profeta de quiebres (planificación de contenedor)
+_ezequiel_enviado: set = set()
+
+
+def check_ezequiel():
+    """Miércoles 9:35: Ezequiel — importados por quebrar (avisa solo si hay)."""
+    now = datetime.now()
+    if now.weekday() != 2:                       # 2 = miércoles
+        return
+    slot = now.replace(hour=EZEQUIEL[0], minute=EZEQUIEL[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _ezequiel_enviado:
+        return
+    _ezequiel_enviado.add(hoy)
+    _disparar_reporte("Ezequiel (quiebres)", "ezequiel_profeta.py", "🔮")
+
+
+MATEO = (9, 35)   # jueves: Mateo, pulso financiero (ventas/compras/margen + sirena markup)
+_mateo_enviado: set = set()
+
+
+def check_mateo():
+    """Jueves 9:35: Mateo — pulso financiero por Telegram."""
+    now = datetime.now()
+    if now.weekday() != 3:                       # 3 = jueves
+        return
+    slot = now.replace(hour=MATEO[0], minute=MATEO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _mateo_enviado:
+        return
+    _mateo_enviado.add(hoy)
+    _disparar_reporte("Mateo (financiero)", "mateo_financiero.py", "💰")
+
+
+VIGILANTE_PROF = (9, 35)   # martes: Vigilante de Proformas (seguimiento de cotizaciones)
+_vigprof_enviado: set = set()
+
+
+def check_vigilante_proformas():
+    """Martes 9:35: Vigilante de Proformas."""
+    now = datetime.now()
+    if now.weekday() != 1:                       # 1 = martes
+        return
+    slot = now.replace(hour=VIGILANTE_PROF[0], minute=VIGILANTE_PROF[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _vigprof_enviado:
+        return
+    _vigprof_enviado.add(hoy)
+    _disparar_reporte("Vigilante de Proformas", "vigilante_proformas.py", "📄")
+
+
+LATIDO = (20, 0)   # lun-sáb 20:00: Latido verifica que los agentes del día corrieron
+_latido_enviado: set = set()
+
+
+def check_latido():
+    """20:00 (lun-sáb): Latido — parte nocturno de que los agentes corrieron."""
+    now = datetime.now()
+    if now.weekday() not in SCHEDULE_WEEKDAYS:
+        return
+    slot = now.replace(hour=LATIDO[0], minute=LATIDO[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _latido_enviado:
+        return
+    _latido_enviado.add(hoy)
+    _disparar_reporte("Latido", "latido.py", "🌙")
 
 
 def main():
@@ -379,6 +529,21 @@ def main():
     # Si el daemon arranca después de las 9:30, no reenviar el matutino de hoy.
     if (arranque.hour, arranque.minute) >= REPORTE_MATUTINO:
         _reporte_enviado.add(arranque.date().isoformat())
+    # Igual para los agentes de marketing: no reenviar si el daemon reinicia pasado el slot.
+    if arranque.weekday() == 0 and (arranque.hour, arranque.minute) >= REPORTE_PAUTA:
+        _pauta_enviado.add(arranque.date().isoformat())
+    if (arranque.hour, arranque.minute) >= GUARDIAN_PPTO:
+        _guardian_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 4 and (arranque.hour, arranque.minute) >= REPORTE_AUDITOR:
+        _auditor_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 2 and (arranque.hour, arranque.minute) >= EZEQUIEL:
+        _ezequiel_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 3 and (arranque.hour, arranque.minute) >= MATEO:
+        _mateo_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 1 and (arranque.hour, arranque.minute) >= VIGILANTE_PROF:
+        _vigprof_enviado.add(arranque.date().isoformat())
+    if (arranque.hour, arranque.minute) >= LATIDO:
+        _latido_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
@@ -390,6 +555,13 @@ def main():
             latido()
             check_schedule()
             check_reporte_matutino()
+            check_reporte_pauta()
+            check_guardian_presupuesto()
+            check_auditor_pauta()
+            check_ezequiel()
+            check_mateo()
+            check_vigilante_proformas()
+            check_latido()
 
             # Buscar solicitudes pendientes
             pendientes = supa_get(

@@ -51,3 +51,4 @@ scripts/*.lock
 scripts/downloads/
 .venv/
 venv/
+.env.agente
