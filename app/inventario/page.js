@@ -249,7 +249,7 @@ export default function Inventario() {
       while (true) {
         const { data, error } = await supabase
           .from('neo_lista_items')
-          .select('codigo_interno, item, categoria, proveedor, existencias, costo_sin_imp, activo, fecha_carga')
+          .select('codigo_interno, item, categoria, proveedor, existencias, costo_sin_imp, activo, fecha_carga, ultima_compra, ultima_venta')
           .eq('activo', 'Sí')
           .range(offset, offset + BATCH - 1);
         if (error || !data?.length) break;
@@ -309,6 +309,8 @@ export default function Inventario() {
         ultimo_costo: mm?.ultimo_costo ?? li.costo_sin_imp ?? 0,
         activo: mm?.activo ?? li.activo,
         categoria: mm?.categoria || li.categoria || null,
+        ultima_compra: mm?.ultima_compra || li.ultima_compra || null,
+        ultima_venta: li.ultima_venta || null,
         fecha_carga: fechaCargaMinmax || li.fecha_carga,
       });
     }
@@ -966,7 +968,7 @@ export default function Inventario() {
                           ) : col.label}
                         </th>
                       ))}
-                      {[{ key: 'promedio_mensual', label: 'Prom. mensual' }, { key: 'existencias', label: 'Existencias' }, { key: '_transito', label: '🚢 Tránsito' }, { key: '_cantComprar', label: 'Cant. a comprar' }, { key: 'ultimo_costo', label: 'Último costo' }].map(col => (
+                      {[{ key: 'promedio_mensual', label: 'Prom. mensual' }, { key: 'existencias', label: 'Existencias' }, { key: '_transito', label: '🚢 Tránsito' }, { key: '_cantComprar', label: 'Cant. a comprar' }, { key: 'ultima_compra', label: 'Última compra' }, { key: 'ultima_venta', label: 'Última venta' }, { key: 'ultimo_costo', label: 'Último costo' }].map(col => (
                         <th key={col.key} style={{ padding: '10px 12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setSort(col.key, colSort.col === col.key && colSort.dir === 'asc' ? 'desc' : 'asc')}>
                           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.3 }}>{col.label} {colSort.col === col.key ? (colSort.dir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span>
                         </th>
@@ -998,11 +1000,13 @@ export default function Inventario() {
                                     ) : <span style={{ color:'#ccc' }}>{'–'}</span>}
                                   </td>
                           <td style={{ textAlign: 'right', fontWeight: item._cantComprar > 0 ? 700 : 400, color: item._cantComprar > 0 ? '#E53E3E' : item._alerta === '🟡 Prestar atención' ? '#D69E2E' : '#ccc' }}>{item._cantComprar > 0 ? item._cantComprar : item._alerta === '🟡 Prestar atención' ? 0 : '–'}</td>
+                          <td style={{ textAlign: 'center', fontSize: '0.8em', color: item.ultima_compra ? '#555' : '#ccc', whiteSpace: 'nowrap' }}>{fmtF(item.ultima_compra)}</td>
+                          <td style={{ textAlign: 'center', fontSize: '0.8em', color: item.ultima_venta ? '#555' : '#ccc', whiteSpace: 'nowrap' }}>{fmtF(item.ultima_venta)}</td>
                           <td style={{ textAlign: 'right' }}><input type='number' value={parseFloat(item.ultimo_costo)||0} onChange={e => { e.stopPropagation(); const v=parseFloat(e.target.value)||0; setCalc(prev=>prev.map(x=>x.codigo===item.codigo?{...x,ultimo_costo:v}:x)); }} onClick={e=>e.stopPropagation()} style={{width:90,textAlign:'right',border:'1px solid #EAE0E0',borderRadius:4,padding:'2px 4px',fontSize:'0.82em',background:'#FDF4F4'}} /></td>
                         </tr>
                       );
                     })}
-                    {calcFiltrado.length === 0 && <tr><td colSpan={11} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>😕 No hay productos con esos filtros</td></tr>}
+                    {calcFiltrado.length === 0 && <tr><td colSpan={13} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>😕 No hay productos con esos filtros</td></tr>}
                   </tbody>
                 </table>
 
