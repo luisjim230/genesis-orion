@@ -19,7 +19,7 @@ Uso:
   python compras_contenedor.py            -> renderiza e imprime (NO envía)
   python compras_contenedor.py --send     -> envía a Telegram SOLO si hay proveedores
 """
-import os, sys, json, urllib.request, urllib.error
+import os, sys, json, html, urllib.request, urllib.error
 from collections import defaultdict
 from pathlib import Path
 
@@ -42,6 +42,10 @@ MASA_CRITICA = 8      # HAVING >= 8 SKUs: piso de masa crítica para armar conte
 TOP_DETALLE  = 3      # proveedores más urgentes a los que se les lista el detalle
 DET_LIMIT    = 20     # productos a listar por proveedor en el detalle
 
+def esc(s):
+    """Escapa &, <, > para que nombres con esos chars no rompan parse_mode=HTML."""
+    return html.escape(str(s or ""), quote=False)
+
 def crc(n):
     try:    return "₡" + f"{round(float(n)):,}".replace(",", ".")
     except Exception: return "₡0"
@@ -63,16 +67,39 @@ def supa_get(path):
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read())
 
-def enviar(msg):
-    if not TG_TOKEN or not TG_CHAT:
-        raise SystemExit("Para --send faltan TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID en scripts/.env")
+TG_LIMIT = 4096   # límite duro de Telegram por mensaje
+
+def _trozos(msg):
+    """Parte el mensaje en bloques <= TG_LIMIT respetando líneas (no corta tags HTML)."""
+    trozos, actual = [], ""
+    for linea in msg.split("\n"):
+        cand = (actual + "\n" + linea) if actual else linea
+        if len(cand) > TG_LIMIT - 16:
+            if actual:
+                trozos.append(actual)
+            actual = linea
+        else:
+            actual = cand
+    if actual:
+        trozos.append(actual)
+    return trozos
+
+def _post(text):
     req = urllib.request.Request(
         f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-        data=json.dumps({"chat_id": TG_CHAT, "text": msg, "parse_mode": "HTML",
+        data=json.dumps({"chat_id": TG_CHAT, "text": text, "parse_mode": "HTML",
                          "disable_web_page_preview": True}).encode(),
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
+
+def enviar(msg):
+    if not TG_TOKEN or not TG_CHAT:
+        raise SystemExit("Para --send faltan TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID en scripts/.env")
+    res = None
+    for trozo in _trozos(msg):
+        res = _post(trozo)
+    return res or {}
 
 # ── Datos: motor Profecías, solo extranjero con cantidad sugerida > 0 ──────────
 # Mismos filtros del motor (oculto_compras=false, proveedor_pausado=false). Bajamos
@@ -128,7 +155,7 @@ def render():
 
     for g in grupos:
         urgente = " 🔴" if g["quiebre"] else ""
-        o.append(f"• <b>{g['proveedor'][:40]}</b>{urgente}")
+        o.append(f"• <b>{esc(g['proveedor'][:40])}</b>{urgente}")
         o.append(f"   lead {g['lead_time']}d · <b>{g['skus']}</b> productos por pedir · "
                  f"<b>{g['quiebre']}</b> ya quebrados · {crcM(g['costo'])}")
 
@@ -138,18 +165,18 @@ def render():
     # Detalle de los más urgentes
     o.append(f"\n🔎 <b>Detalle de los {min(TOP_DETALLE, len(grupos))} más urgentes</b>")
     for g in grupos[:TOP_DETALLE]:
-        o.append(f"\n<b>{g['proveedor'][:40]}</b> (lead {g['lead_time']}d):")
+        o.append(f"\n<b>{esc(g['proveedor'][:40])}</b> (lead {g['lead_time']}d):")
         for x in detalle(g["items"]):
             estado = " — <b>QUEBRADO</b>" if x.get("bandera_stockout") else ""
             sug = round(_f(x.get("cantidad_sugerida")))
             exi = round(_f(x.get("existencias")))
-            o.append(f"   • {(x.get('item') or '?')[:42]} · stock {exi} → pedir {sug}{estado}")
+            o.append(f"   • {esc((x.get('item') or '?')[:42])} · stock {exi} → pedir {sug}{estado}")
         if g["skus"] > DET_LIMIT:
             o.append(f"   …y {g['skus'] - DET_LIMIT} productos más de este proveedor.")
 
     # Cierre (Ciclo de Decisión): el más urgente = más quiebres + más lead time
     mas_urg = max(grupos, key=lambda g: (g["quiebre"], g["lead_time"]))
-    o.append(f"\n💡 <b>Lo que yo haría</b>: arrancá por <b>{mas_urg['proveedor'][:40]}</b> — "
+    o.append(f"\n💡 <b>Lo que yo haría</b>: arrancá por <b>{esc(mas_urg['proveedor'][:40])}</b> — "
              f"es el más urgente ({mas_urg['quiebre']} ya quebrados y lead time de "
              f"{mas_urg['lead_time']}d: si no entra ya, llega tarde).")
     o.append("\n❓ <b>¿Querés que te arme la orden de compra de ese proveedor?</b>")
