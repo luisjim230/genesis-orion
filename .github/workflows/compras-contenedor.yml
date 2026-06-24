@@ -1,0 +1,30 @@
+name: COMPRAS — Proveedores listos para contenedor
+
+on:
+  schedule:
+    # 9:35 AM Costa Rica (UTC-6) = 15:35 UTC · solo los lunes
+    - cron: '35 15 * * 1'
+  workflow_dispatch:
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Avisar proveedores listos para contenedor
+        env:
+          # Solo lectura: ANON key (NUNCA service_role para un agente de avisos).
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY:  ${{ secrets.SUPABASE_ANON_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/compras_contenedor.py --send
