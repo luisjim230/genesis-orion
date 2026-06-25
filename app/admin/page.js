@@ -47,6 +47,7 @@ const LABEL_OVERRIDE = {
   'cajas-aurora':{label:'Cajas',emoji:'🌅'},
   entregas:{label:'Entregas',emoji:'🚛'},
   pagos:{label:'Coordinación de pagos',emoji:'💸'},
+  'compras-proveedor':{label:'Compras a Proveedor',emoji:'🧾'},
   'tareas-equipo':{label:'Tareas Equipo',emoji:'📋'},
   materiales:{label:'Cálculo de materiales',emoji:'🧱'},
   'fichas-tecnicas':{label:'Fichas Técnicas',emoji:'📋'},
