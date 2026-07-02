@@ -93,6 +93,41 @@ async function supaFetch(queryPath) {
 }
 
 // ───────────────────────────────────────────────
+// Proyección de cierre de mes (utilidad y ventas) vía RPC sol_ventas_periodo
+// ───────────────────────────────────────────────
+async function supaRpc(fn, args) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${fn}`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(args || {}),
+  });
+  if (!r.ok) throw new Error(`RPC ${fn} ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+async function fetchProyeccion(target) {
+  try {
+    const y = target.getFullYear(), m = target.getMonth(), d = target.getDate();
+    const pad = (n) => String(n).padStart(2, "0");
+    const desde = `${y}-${pad(m + 1)}-01`;
+    const hasta = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const r = await supaRpc("sol_ventas_periodo", { desde, hasta });   // {ventas, utilidad, facturas}
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const factor = d ? daysInMonth / d : 0;
+    return {
+      proyVentas: Number(r.ventas || 0) * factor,
+      proyUtil:   Number(r.utilidad || 0) * factor,
+      dia: d,
+      pocoConfiable: d <= 5,   // primeros días del mes: proyección lineal poco confiable
+    };
+  } catch (e) {
+    console.error("aviso: no pude calcular la proyección:", e.message);
+    return null;
+  }
+}
+
+// ───────────────────────────────────────────────
 // Ventas (netas sin IVA, alineado con NEO "Ventas netas")
 //   · se excluyen items de servicio (transporte/flete/ruteo)
 //   · se prorratea por devoluciones: subt_neto = subtotal × (fact - dev) / fact
@@ -243,7 +278,7 @@ function footer(doc) {
 // ───────────────────────────────────────────────
 // PDF 1 — Ventas
 // ───────────────────────────────────────────────
-function buildVentasPDF(sales, fechaHuman) {
+function buildVentasPDF(sales, fechaHuman, proy) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   loadFont(doc);
   const W = doc.internal.pageSize.getWidth();
@@ -288,8 +323,26 @@ function buildVentasPDF(sales, fechaHuman) {
     return y + 16;
   }
 
+  // Proyección de cierre de mes (utilidad primero)
+  let vendStartY = cardY + cardH + 24;
+  if (proy) {
+    const py = cardY + cardH + 20;
+    doc.setTextColor(20,30,50); doc.setFont(FONT,"bold"); doc.setFontSize(10);
+    doc.text("Proyección de cierre de mes", M, py);
+    doc.setFont(FONT,"normal"); doc.setFontSize(10); doc.setTextColor(40,50,70);
+    const linea = `Utilidad ~${fmtCRC(proy.proyUtil)}      ·      Ventas ~${fmtCRC(proy.proyVentas)}`;
+    doc.text(linea, M, py + 16);
+    if (proy.pocoConfiable) {
+      doc.setFontSize(8); doc.setTextColor(150,120,60);
+      doc.text("(aún poco confiable — pocos días del mes)", M, py + 30);
+      vendStartY = py + 44;
+    } else {
+      vendStartY = py + 34;
+    }
+  }
+
   // Vendedores
-  let y = sectTitle(cardY + cardH + 24, "Vendedores");
+  let y = sectTitle(vendStartY, "Vendedores");
   autoTable(doc, {
     startY: y, margin: { left: M, right: M },
     head: [["#", "Vendedor", "Ventas", "Utilidad", "Margen", "Fact."]],
@@ -490,9 +543,10 @@ async function main() {
 
   console.log(`📅 Generando reporte para ${fechaHum} (${fechaDDMM})`);
 
-  const [sales, compras] = await Promise.all([
+  const [sales, compras, proy] = await Promise.all([
     fetchVentas(fechaDDMM),
     fetchCompras(target),
+    fetchProyeccion(target),
   ]);
 
   console.log(`📊 Ventas: ${fmtCRC(sales.ventas)} · ${sales.facturas} facturas · ${sales.vendedores.length} vendedores`);
@@ -502,12 +556,17 @@ async function main() {
   const ventasPath  = path.join(tmp, "sol-ventas.pdf");
   const comprasPath = path.join(tmp, "sol-compras-pendientes.pdf");
 
-  const vDoc = buildVentasPDF(sales, fechaHum);
+  const vDoc = buildVentasPDF(sales, fechaHum, proy);
   const cDoc = buildComprasPDF(compras, fechaHum);
   fs.writeFileSync(ventasPath,  Buffer.from(vDoc.output("arraybuffer")));
   fs.writeFileSync(comprasPath, Buffer.from(cDoc.output("arraybuffer")));
 
-  await sendDocument(ventasPath, `📊 SOL — Reporte de Ventas · ${fechaHum}`);
+  let capVentas = `📊 SOL — Reporte de Ventas · ${fechaHum}`;
+  if (proy) {
+    capVentas += `\n🔮 Proyección cierre de mes: utilidad ~${fmtCRC(proy.proyUtil)} · ventas ~${fmtCRC(proy.proyVentas)}`
+              + (proy.pocoConfiable ? " (aún poco confiable)" : "");
+  }
+  await sendDocument(ventasPath, capVentas);
   await sendDocument(comprasPath, `⚠️ Compras Pendientes · Al ${fechaHum}`);
 
   console.log("✅ Reportes enviados");
