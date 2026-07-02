@@ -96,15 +96,30 @@ def bloque_ventas(ayer):
     ult_prev = calendar.monthrange(ini_prev.year, ini_prev.month)[1]
     fin_prev = date(ini_prev.year, ini_prev.month, min(ayer.day, ult_prev))
     v_prev = vp(ini_prev, fin_prev)
-    # proyección lineal de cierre
-    dim  = calendar.monthrange(ayer.year, ayer.month)[1]
-    proy = float(v_mes["ventas"]) / ayer.day * dim if ayer.day else 0
+    # proyección lineal de cierre (ventas y utilidad)
+    dim    = calendar.monthrange(ayer.year, ayer.month)[1]
+    factor = dim / ayer.day if ayer.day else 0
+    proy      = float(v_mes["ventas"])   * factor
+    proy_util = float(v_mes["utilidad"]) * factor
 
-    o = ["📊 <b>Cómo venimos</b>"]
-    o.append(f"Ayer vendiste <b>{crc(v_ayer['ventas'])}</b> · {v_ayer['facturas']} facturas")
-    o.append(f"   {flecha(variacion(v_ayer['ventas'], v_sem['ventas']))} vs {DIAS[sem.weekday()]} pasado ({crc(v_sem['ventas'])})")
-    o.append(f"Mes: <b>{crc(v_mes['ventas'])}</b> · {flecha(variacion(v_mes['ventas'], v_prev['ventas']))} vs mes pasado a la fecha")
-    o.append(f"Proyección de cierre: <b>~{crc(proy)}</b>")
+    def margen(v):
+        try:
+            ve = float(v["ventas"]); return (float(v["utilidad"]) / ve * 100) if ve else None
+        except Exception:
+            return None
+
+    m_ayer = margen(v_ayer)
+    o = ["📊 <b>Cómo venimos</b> (utilidad = ganancia sin impuestos)"]
+    # Utilidad primero (lo que más importa), ventas de apoyo
+    o.append(f"Ayer: utilidad <b>{crc(v_ayer['utilidad'])}</b>"
+             + (f" (margen {m_ayer:.0f}%)" if m_ayer is not None else "")
+             + f" · ventas {crc(v_ayer['ventas'])} · {v_ayer['facturas']} facturas")
+    o.append(f"   utilidad {flecha(variacion(v_ayer['utilidad'], v_sem['utilidad']))}"
+             f" · ventas {flecha(variacion(v_ayer['ventas'], v_sem['ventas']))} vs {DIAS[sem.weekday()]} pasado")
+    o.append(f"Mes: utilidad <b>{crc(v_mes['utilidad'])}</b> {flecha(variacion(v_mes['utilidad'], v_prev['utilidad']))}"
+             f" · ventas {crc(v_mes['ventas'])} {flecha(variacion(v_mes['ventas'], v_prev['ventas']))} vs mes pasado a la fecha")
+    nota_proy = " <i>(aún poco confiable — pocos días del mes)</i>" if ayer.day <= 5 else ""
+    o.append(f"Proyección de cierre: utilidad <b>~{crc(proy_util)}</b> · ventas ~{crc(proy)}{nota_proy}")
     return "\n".join(o)
 
 # ── BLOQUE 2: Tus tareas del día ─────────────────────────────────────────────
@@ -204,16 +219,37 @@ def render():
     foot = f"🕘 Datos al cierre del {ayer.day}/{ayer.month}. Escribí <b>/detalle</b> para profundizar."
     return pulir_redaccion(cab + "\n\n" + "\n\n".join(bloques) + "\n\n" + foot)
 
-def enviar(msg):
-    if not TG_TOKEN or not TG_CHAT:
-        raise SystemExit("Para --send faltan TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID en scripts/.env")
+def _destinatarios_extra(clave):
+    # Destinatarios adicionales por reporte (ej. Ronny). Config editable en
+    # scripts/destinatarios_extra.json → {"matutino": ["8984839094"], ...}.
+    try:
+        import pathlib
+        cfg = json.loads((pathlib.Path(__file__).parent / "destinatarios_extra.json").read_text())
+        return [str(x) for x in cfg.get(clave, []) if str(x).strip()]
+    except Exception:
+        return []
+
+def _enviar_a(chat_id, msg):
     req = urllib.request.Request(
         f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-        data=json.dumps({"chat_id": TG_CHAT, "text": msg, "parse_mode": "HTML",
+        data=json.dumps({"chat_id": str(chat_id), "text": msg, "parse_mode": "HTML",
                          "disable_web_page_preview": True}).encode(),
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
+
+def enviar(msg):
+    if not TG_TOKEN or not TG_CHAT:
+        raise SystemExit("Para --send faltan TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID en scripts/.env")
+    res = _enviar_a(TG_CHAT, msg)                 # Luis (principal)
+    for chat in _destinatarios_extra("matutino"):  # extras (ej. Ronny), sin romper si uno falla
+        if chat == str(TG_CHAT):
+            continue
+        try:
+            _enviar_a(chat, msg)
+        except Exception as e:
+            print(f"aviso: no pude enviar a {chat}: {e}")
+    return res
 
 if __name__ == "__main__":
     mensaje = render()

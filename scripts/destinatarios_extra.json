@@ -1,0 +1,4 @@
+{
+  "_doc": "Destinatarios ADICIONALES por reporte (además de Luis). Clave = nombre del reporte, valor = lista de chat IDs de Telegram. Para sumar a alguien: agregá su ID a la lista del reporte que quieras. IDs conocidos: Luis 8781175035, Ronny 8984839094.",
+  "matutino": ["8984839094"]
+}

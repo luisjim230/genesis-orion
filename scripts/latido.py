@@ -34,11 +34,12 @@ RUNS_FILE = Path.home() / "sol-logs" / "agent_runs.jsonl"
 # daemon al registrar la corrida. Domingo no corre nada (y Latido tampoco).
 DIARIOS = ["Reporte Matutino", "Guardián de Presupuesto"]
 POR_DIA = {
-    0: ["Reporte de Pauta"],          # lunes
+    0: ["Reporte de Pauta", "Vigilante de Fletes"],   # lunes
     1: ["Vigilante de Proformas"],    # martes
     2: ["Ezequiel (quiebres)"],       # miércoles
     3: ["Mateo (financiero)"],        # jueves
     4: ["Auditoría de Pauta"],        # viernes
+    5: ["Gabriel (tendencias)"],      # sábado
 }
 
 def esperados(wd):

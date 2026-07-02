@@ -28,17 +28,22 @@ if [ "${1:-}" = "--file" ]; then
 else
   SQL="${1:-}"; [ -z "$SQL" ] && SQL="$(cat)"
 fi
-SQL="$(printf '%s' "$SQL" | sed -e 's/[[:space:]]*$//')"
+# Trim de espacios y SALTOS DE LÍNEA en ambas puntas. Sin esto, una SQL que arranca
+# con un \n hacía que el chequeo de "empieza con SELECT" fallara y rebotara (falso RECHAZADO).
+SQL="${SQL#"${SQL%%[![:space:]]*}"}"             # saca whitespace inicial (incl. saltos de línea)
+SQL="${SQL%"${SQL##*[![:space:]]}"}"             # saca whitespace final
 SQL="${SQL%;}"                                   # saca un ; final si lo hay
+SQL="${SQL%"${SQL##*[![:space:]]}"}"             # y el whitespace que quede antes del ;
 
 # 1) un solo statement (no permitir ';' interno)
 case "$SQL" in
   *";"*) echo "RECHAZADO: solo se permite UNA consulta por vez."; exit 3;;
 esac
-# 2) tiene que empezar con select o with (ignora mayúsc/espacios)
-low="$(printf '%s' "$SQL" | tr 'A-Z' 'a-z' | sed -e 's/^[[:space:]]*//')"
+# 2) tiene que empezar con select o with. Normalizo saltos/tabs a espacios SOLO para validar,
+#    así una consulta multilínea ("select\n  col...") también pasa.
+low="$(printf '%s' "$SQL" | tr 'A-Z' 'a-z' | tr '\n\r\t' '   ')"
 case "$low" in
-  select\ *|select$|with\ *) : ;;
+  select\ *|with\ *) : ;;
   *) echo "RECHAZADO: solo SELECT/WITH (esto es solo lectura)."; exit 3;;
 esac
 # 3) ninguna palabra de escritura/DDL como token

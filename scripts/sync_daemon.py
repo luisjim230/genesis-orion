@@ -214,7 +214,7 @@ def _cada(paso_horas, minuto, desde=7, hasta=18):
 # Cadencia por reporte. Calibrada para bajar el Disk IO sin perder frescura:
 # todos los insumos del Reporte Matutino corren ANTES de las 9:30.
 SCHEDULE = {
-    "items_facturados":        [(6,0),(10,0),(14,0),(17,30)],  # ventas (17:30 = cierre)
+    "items_facturados":        _cada(2, 0, 7, 18),             # ventas: cada 2h 7am-6pm
     "items_comprados":         [(10,0),(16,0)],
     "lista_items":             [(8,0),(12,0),(16,0)],
     "minimos_maximos":         [(8,5),(12,5),(16,5)],
@@ -503,6 +503,40 @@ def check_vigilante_proformas():
     _disparar_reporte("Vigilante de Proformas", "vigilante_proformas.py", "📄")
 
 
+VIGILANTE_FLETES = (9, 40)   # lunes: Vigilante de Fletes China→CR (investiga la web con IA)
+_fletes_enviado: set = set()
+
+
+def check_fletes():
+    """Lunes 9:40: Vigilante de Fletes — costo de flete China→Costa Rica (híbrido con IA)."""
+    now = datetime.now()
+    if now.weekday() != 0:                       # 0 = lunes
+        return
+    slot = now.replace(hour=VIGILANTE_FLETES[0], minute=VIGILANTE_FLETES[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _fletes_enviado:
+        return
+    _fletes_enviado.add(hoy)
+    _disparar_reporte("Vigilante de Fletes", "vigilante_fletes.py", "🚢")
+
+
+GABRIEL = (9, 35)   # sábado: Gabriel, radar de tendencias (investiga la web con IA)
+_gabriel_enviado: set = set()
+
+
+def check_gabriel():
+    """Sábado 9:35: Gabriel — radar de tendencias del mercado (híbrido con IA)."""
+    now = datetime.now()
+    if now.weekday() != 5:                       # 5 = sábado
+        return
+    slot = now.replace(hour=GABRIEL[0], minute=GABRIEL[1], second=0, microsecond=0)
+    hoy = now.date().isoformat()
+    if now < slot or hoy in _gabriel_enviado:
+        return
+    _gabriel_enviado.add(hoy)
+    _disparar_reporte("Gabriel (tendencias)", "gabriel_tendencias.py", "🧭")
+
+
 LATIDO = (20, 0)   # lun-sáb 20:00: Latido verifica que los agentes del día corrieron
 _latido_enviado: set = set()
 
@@ -542,6 +576,10 @@ def main():
         _mateo_enviado.add(arranque.date().isoformat())
     if arranque.weekday() == 1 and (arranque.hour, arranque.minute) >= VIGILANTE_PROF:
         _vigprof_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 0 and (arranque.hour, arranque.minute) >= VIGILANTE_FLETES:
+        _fletes_enviado.add(arranque.date().isoformat())
+    if arranque.weekday() == 5 and (arranque.hour, arranque.minute) >= GABRIEL:
+        _gabriel_enviado.add(arranque.date().isoformat())
     if (arranque.hour, arranque.minute) >= LATIDO:
         _latido_enviado.add(arranque.date().isoformat())
     log.info("=" * 50)
@@ -561,6 +599,8 @@ def main():
             check_ezequiel()
             check_mateo()
             check_vigilante_proformas()
+            check_fletes()
+            check_gabriel()
             check_latido()
 
             # Buscar solicitudes pendientes
