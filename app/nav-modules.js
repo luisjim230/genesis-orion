@@ -34,6 +34,7 @@ export const ALL_NAV = [
   ]},
   { group: 'Finanzas', items: [
     { href: '/finanzas',          key: 'finanzas',              icon: '💰', name: 'Finanzas' },
+    { href: '/proyeccion',        key: 'proyeccion',            icon: '🎯', name: 'Proyección & Equilibrio' },
     { href: '/finanzas/bancos',   key: 'bancos',                icon: '🏦', name: 'Bancos' },
     { href: '/pagos',             key: 'pagos',                 icon: '💸', name: 'Coordinación de pagos' },
     { href: '/compras-proveedor', key: 'compras-proveedor',     icon: '🧾', name: 'Compras a Proveedor' },

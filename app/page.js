@@ -56,6 +56,15 @@ function fmt_crc(val) {
   return `${sign}₡${abs.toFixed(0)}`
 }
 
+// Semáforo del margen de seguridad (verde ≥40 · amarillo 20-40 · rojo <20)
+function semSegColor(v) {
+  const n = parseFloat(v)
+  if (isNaN(n)) return '#718096'
+  if (n >= 40) return '#059669'
+  if (n >= 20) return '#d97706'
+  return '#f43f5e'
+}
+
 function currentMonth() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -362,6 +371,24 @@ export default function DashboardPage() {
           valorInventario = parseFloat(invData?.[0]?.valor_costo) || 0
         } catch(e) { /* no bloquear si falla */ }
 
+        // Rentabilidad — P&L desde el libro mayor (vistas per_kpis / per_estado_resultados)
+        let perKpi = null
+        let tendNeta = 0
+        try {
+          const [{ data: pk }, { data: pe }] = await Promise.all([
+            supabase.from('per_kpis').select('*').maybeSingle(),
+            supabase.from('per_estado_resultados').select('mes, utilidad_neta').order('mes', { ascending: false }),
+          ])
+          perKpi = pk
+          // Tendencia: promedio de los 3 meses completos vs. los 3 anteriores
+          const ultimo = pk?.ultimo_mes
+          const completos = (pe || []).filter(r => !ultimo || r.mes <= ultimo)
+          const avg = arr => arr.length ? arr.reduce((s, r) => s + (parseFloat(r.utilidad_neta) || 0), 0) / arr.length : 0
+          const un3 = avg(completos.slice(0, 3))
+          const unPrev3 = avg(completos.slice(3, 6))
+          tendNeta = unPrev3 ? un3 - unPrev3 : 0
+        } catch(e) { /* no bloquear si falla */ }
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -378,6 +405,8 @@ export default function DashboardPage() {
           ventasAnterior,
           utilidadAnterior,
           valorInventario,
+          perKpi,
+          tendNeta,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -497,6 +526,38 @@ export default function DashboardPage() {
           color="#8B5E3C"
           loading={loading}
           href="/inventario"
+        />
+      </div>
+
+      <SectionTitle>RENTABILIDAD</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
+        <KpiCard
+          icon={kpis.tendNeta > 0 ? '📈' : kpis.tendNeta < 0 ? '📉' : '💰'}
+          label="Utilidad neta / mes"
+          value={fmt_crc(kpis.perKpi?.util_neta_prom_3m)}
+          sub={`promedio 3 meses ${kpis.tendNeta > 0 ? '↑' : kpis.tendNeta < 0 ? '↓' : ''}`.trim()}
+          color={kpis.tendNeta < 0 ? '#f43f5e' : '#ED6E2E'}
+          loading={loading}
+          href="/proyeccion"
+        />
+        <KpiCard
+          icon="📊"
+          label="Margen bruto"
+          value={kpis.perKpi?.margen_prom_3m != null ? `${parseFloat(kpis.perKpi.margen_prom_3m).toFixed(1)}%` : '—'}
+          sub="promedio 3 meses"
+          color="#225F74"
+          loading={loading}
+          href="/proyeccion"
+        />
+        <KpiCard
+          icon="🛡️"
+          label="Margen de seguridad"
+          value={kpis.perKpi?.margen_seguridad_pct != null ? `${Math.round(parseFloat(kpis.perKpi.margen_seguridad_pct))}%` : '—'}
+          sub="colchón antes de perder"
+          color={semSegColor(kpis.perKpi?.margen_seguridad_pct)}
+          loading={loading}
+          href="/proyeccion"
         />
       </div>
 
