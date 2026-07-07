@@ -409,6 +409,26 @@ def _disparar_reporte(nombre, script, flag):
     registrar_corrida(nombre, rc)
 
 
+def _disparar_reporte_async(nombre, script, flag):
+    """Como _disparar_reporte pero DESPRENDIDO: para agentes con IA + búsqueda web
+    (fletes, Gabriel) que tardan 2-5 min y no caben en el timeout serial de 180s.
+    El script se manda solo a Telegram al terminar; no bloqueamos el daemon.
+    El Latido (lun-sáb 20:00) y la frescura del reporte guardado son la red de
+    seguridad si la corrida desprendida fallara."""
+    log.info(f"{flag} Lanzando {nombre} (desprendido, IA+web)...")
+    rc = -1
+    try:
+        subprocess.Popen([PYTHON, str(SCRIPTS / script), "--send"],
+                         cwd=str(SCRIPTS),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
+        rc = 0
+        log.info(f"{flag} {nombre} lanzado OK (se enviará al terminar).")
+    except Exception as e:
+        log.error(f"{flag} {nombre} error al lanzar: {e}")
+    registrar_corrida(nombre, rc)
+
+
 def check_reporte_pauta():
     """Lunes 9:35: Reporte de Performance de pauta (Meta)."""
     now = datetime.now()
@@ -517,7 +537,7 @@ def check_fletes():
     if now < slot or hoy in _fletes_enviado:
         return
     _fletes_enviado.add(hoy)
-    _disparar_reporte("Vigilante de Fletes", "vigilante_fletes.py", "🚢")
+    _disparar_reporte_async("Vigilante de Fletes", "vigilante_fletes.py", "🚢")
 
 
 GABRIEL = (9, 35)   # sábado: Gabriel, radar de tendencias (investiga la web con IA)
@@ -534,7 +554,7 @@ def check_gabriel():
     if now < slot or hoy in _gabriel_enviado:
         return
     _gabriel_enviado.add(hoy)
-    _disparar_reporte("Gabriel (tendencias)", "gabriel_tendencias.py", "🧭")
+    _disparar_reporte_async("Gabriel (tendencias)", "gabriel_tendencias.py", "🧭")
 
 
 LATIDO = (20, 0)   # lun-sáb 20:00: Latido verifica que los agentes del día corrieron
