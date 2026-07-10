@@ -389,6 +389,13 @@ export default function DashboardPage() {
           tendNeta = unPrev3 ? un3 - unPrev3 : 0
         } catch(e) { /* no bloquear si falla */ }
 
+        // Punto de equilibrio EN VIVO (Panel de Incomodidad)
+        let equilibrio = null
+        try {
+          const { data: eq } = await supabase.from('incomodidad_equilibrio').select('*').maybeSingle()
+          equilibrio = eq
+        } catch(e) { /* no bloquear si falla */ }
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -407,6 +414,7 @@ export default function DashboardPage() {
           valorInventario,
           perKpi,
           tendNeta,
+          equilibrio,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -526,6 +534,40 @@ export default function DashboardPage() {
           color="#8B5E3C"
           loading={loading}
           href="/inventario"
+        />
+      </div>
+
+      <SectionTitle>PUNTO DE EQUILIBRIO · EN VIVO</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
+        <KpiCard
+          icon="🎯"
+          label="Equilibrio del mes"
+          value={fmt_crc(kpis.equilibrio?.equilibrio_ventas)}
+          sub="venta mínima para no perder"
+          color="#225F74"
+          loading={loading}
+          href="/incomodidad"
+        />
+        <KpiCard
+          icon={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100 ? '🎉' : '📈'}
+          label="Avance del mes"
+          value={kpis.equilibrio?.pct_equilibrio != null ? `${Math.round(parseFloat(kpis.equilibrio.pct_equilibrio))}%` : '—'}
+          sub={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100
+            ? '¡equilibrio cruzado! 🎉'
+            : (kpis.equilibrio?.dia_cruce ? `cruce estimado día ${kpis.equilibrio.dia_cruce}` : 'sin ventas del mes')}
+          color={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100 ? '#059669' : (kpis.equilibrio?.dia_cruce && kpis.equilibrio.dia_cruce <= 28 ? '#225F74' : '#f43f5e')}
+          loading={loading}
+          href="/incomodidad"
+        />
+        <KpiCard
+          icon="💵"
+          label="Gasto fijo / mes"
+          value={fmt_crc(kpis.equilibrio?.gasto_fijo_final)}
+          sub="automático · promedio 12 meses"
+          color="#ED6E2E"
+          loading={loading}
+          href="/incomodidad"
         />
       </div>
 
