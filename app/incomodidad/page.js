@@ -394,7 +394,7 @@ export default function IncomodidadPage() {
               </tbody>
             </table>
           </div>
-          <div style={S.nota}>🔴 Muerto = edad &gt; 180d y &gt; 180d sin vender. 🟢 En maduración (≤60d) no cuenta como muerto. *≥1a = SKU veterano, existía antes de que empezáramos a cargar datos.</div>
+          <div style={S.nota}>🔴 Muerto = &gt; 180d sin vender <b>y</b> sin recompra en los últimos 60 días. 🟢 En maduración = producto nuevo (≤60d). Un producto que recomprás en los últimos 60 días no se marca como muerto (es una apuesta fresca). *≥1a = SKU veterano, existía antes de que empezáramos a cargar datos.</div>
         </Section>
 
         {/* ── KPI 2 · GMROI ── */}
