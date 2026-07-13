@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase as sb } from '../../lib/supabase';
+import { CALENDARIO_RENTA } from '../../config/calendario-renta';
 
 // ── Estilos ────────────────────────────────────────────────────────────────
 const S = {
@@ -415,7 +416,9 @@ function TabFlujo({ tcC }) {
   const [gastos,      setGastos]    = useState([]);
   const [ventasHist,  setVentasHist]= useState([]);
   const [envios,      setEnvios]    = useState([]);
+  const [iva,         setIva]       = useState([]);
   const [loading,     setLoad]      = useState(true);
+  const [mostrarReserva, setMostrarReserva] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -534,6 +537,11 @@ function TabFlujo({ tcC }) {
           .not('eta', 'is', null)
           .order('eta');
         setEnvios(eData || []);
+
+        // 7. IVA mensual (vista per_iva_mensual) — real por mes de devengo.
+        const { data: ivaData } = await sb.from('per_iva_mensual')
+          .select('mes,iva_neto_a_pagar').order('mes');
+        setIva(ivaData || []);
       } catch (e) { console.error('TabFlujo:', e); }
       setLoad(false);
     })();
@@ -808,6 +816,77 @@ function TabFlujo({ tcC }) {
     : days < 28 ? { icon: '🟡', label: `${days}d`,   color: '#B7791F' }
                 : { icon: '🟢', label: `${days}d`,   color: '#276749' };
 
+  // ── Impuestos: proyección mensual (IVA real/proyectado + calendario renta) ─
+  // El IVA devengado en un mes sale de caja el mes siguiente (~día 15). Meses
+  // pasados usan el dato real de per_iva_mensual; meses futuros se proyectan con
+  // el promedio de los últimos 3 meses. Un mes con crédito a favor (IVA neto
+  // negativo) paga ₡0 y arrastra el crédito al mes siguiente (acumulador).
+  const addMes = (ym, n) => {
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const mesLabel = (ym) => {
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('es-CR', { month: 'short', year: 'numeric' });
+  };
+
+  const ivaMap = {};
+  iva.forEach(r => { ivaMap[r.mes] = N(r.iva_neto_a_pagar); });
+  const ivaMeses = iva.map(r => r.mes).filter(Boolean).sort();
+  // Proyección: promedio de los últimos 3 meses cerrados (excluye el mes actual, parcial).
+  const ivaCerrados = iva.filter(r => r.mes < currentPeriod).slice(-3);
+  const ivaProyBase = ivaCerrados.length
+    ? Math.max(0, ivaCerrados.reduce((s, r) => s + N(r.iva_neto_a_pagar), 0) / ivaCerrados.length)
+    : 0;
+
+  const RESERVA_MENSUAL = 25_000_000;
+  const RESERVA_DESDE = '2026-07';
+  const RESERVA_HASTA = '2027-02';
+  const MES_SALDO_RENTA = '2027-03';
+
+  const rentaMeses = CALENDARIO_RENTA.map(e => e.fecha.slice(0, 7)).sort();
+  const horizonEnd = rentaMeses.length ? rentaMeses[rentaMeses.length - 1] : addMes(currentPeriod, 12);
+  const displayStart = addMes(currentPeriod, -3); // mostrar 3 meses de IVA real recientes
+  const firstDevengo = ivaMeses.length ? ivaMeses[0] : currentPeriod;
+
+  const filasImp = [];
+  let creditoIva = 0; // crédito de IVA a favor acumulado (positivo)
+  let mesX = addMes(firstDevengo, 1); // primer mes con salida de caja de IVA
+  let guard = 0;
+  while (mesX <= horizonEnd && guard++ < 240) {
+    const devengo = addMes(mesX, -1);
+    const tieneReal = (devengo in ivaMap) && devengo < currentPeriod;
+    const rawIva = tieneReal ? ivaMap[devengo] : ivaProyBase;
+    // Acumulador de crédito: neto = IVA del mes menos crédito arrastrado.
+    let ivaSalida;
+    const neto = rawIva - creditoIva;
+    if (neto <= 0) { creditoIva = -neto; ivaSalida = 0; }
+    else { ivaSalida = neto; creditoIva = 0; }
+
+    const rentaEventos = CALENDARIO_RENTA.filter(e => e.fecha.slice(0, 7) === mesX);
+    const rentaSalida = rentaEventos.reduce((s, e) => s + e.monto, 0);
+    const reserva = (mesX >= RESERVA_DESDE && mesX <= RESERVA_HASTA) ? RESERVA_MENSUAL : 0;
+
+    if (mesX >= displayStart) {
+      filasImp.push({
+        mes: mesX, ivaSalida, esRealIva: tieneReal, credito: creditoIva,
+        rentaSalida, rentaEventos, reserva,
+        esSaldoRenta: mesX === MES_SALDO_RENTA,
+        total: ivaSalida + rentaSalida,
+      });
+    }
+    mesX = addMes(mesX, 1);
+  }
+
+  const proxIva      = filasImp.find(f => f.mes >= currentPeriod)?.ivaSalida || 0;
+  const totalRentaP  = CALENDARIO_RENTA.filter(e => e.fecha.slice(0, 7) >= currentPeriod).reduce((s, e) => s + e.monto, 0);
+  const saldoMarzo   = CALENDARIO_RENTA.find(e => e.fecha.slice(0, 7) === MES_SALDO_RENTA)?.monto || 0;
+  const totIvaHoriz  = filasImp.reduce((s, f) => s + f.ivaSalida, 0);
+  const totRentaHoriz= filasImp.reduce((s, f) => s + f.rentaSalida, 0);
+  const totReservaH  = filasImp.reduce((s, f) => s + f.reserva, 0);
+  const totImpHoriz  = filasImp.reduce((s, f) => s + f.total, 0);
+
   const secH = { marginBottom: '6px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' };
 
   return (
@@ -1015,6 +1094,105 @@ function TabFlujo({ tcC }) {
             </table>
           </div>
         </div>
+      )}
+
+      <hr style={S.divider}/>
+
+      {/* ── Sección: Impuestos (IVA + Renta) ──────────────────── */}
+      <div style={secH}>🧾 Impuestos — Proyección Mensual (IVA + Renta)</div>
+
+      {iva.length === 0 ? (
+        <div style={{ ...S.info, marginBottom:'16px' }}>📭 Sin datos de IVA (vista <code>per_iva_mensual</code>).</div>
+      ) : (
+        <>
+          <div style={{ ...S.info, marginBottom:'12px' }}>
+            El IVA devengado cada mes sale de caja <strong>el mes siguiente (~día 15)</strong>. Meses pasados usan el
+            dato real de la contabilidad; meses futuros se proyectan con el promedio de los últimos 3 meses cerrados
+            (<strong>{fC(ivaProyBase)}/mes</strong>). Un mes con crédito a favor (IVA neto negativo) paga <strong>₡0</strong>
+            {' '}y arrastra el crédito al mes siguiente. Los pagos de <strong>renta</strong> salen del calendario configurable.
+          </div>
+
+          <div style={S.grid4}>
+            <KPI label="🧾 Próximo pago IVA"      value={fC(proxIva)}     color="#C53030" />
+            <KPI label="📊 IVA proyectado/mes"    value={fC(ivaProyBase)} color="#B7791F" />
+            <KPI label="🏛 Renta pendiente"       value={fC(totalRentaP)} color="var(--orange)" />
+            <KPI label="⚠️ Saldo renta mar-2027"  value={fC(saldoMarzo)}  color="#C53030" />
+          </div>
+
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', margin:'4px 0 12px', flexWrap:'wrap' }}>
+            <button style={{ ...S.btnG, borderColor:'#225F74', color:'#225F74', fontWeight:600 }} onClick={() => setMostrarReserva(v => !v)}>
+              {mostrarReserva ? '👁 Ocultar' : '👁 Mostrar'} reserva de renta sugerida
+            </button>
+            <span style={{ fontSize:'0.78rem', color:'var(--text-muted)', flex:1, minWidth:'240px' }}>
+              Línea informativa (no es salida real): apartar <strong style={{ color:'#225F74' }}>{fC(RESERVA_MENSUAL)}/mes</strong> de
+              jul-2026 a feb-2027 en cuenta separada para cubrir el saldo de marzo 2027.
+            </span>
+          </div>
+
+          <div style={{ overflowX:'auto', borderRadius:'10px', border:'1px solid var(--border-soft)', marginBottom:'12px' }}>
+            <table style={S.tbl}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Mes</th>
+                  <th style={{ ...S.th, textAlign:'right' }}>IVA</th>
+                  <th style={{ ...S.th, textAlign:'right' }}>Renta</th>
+                  {mostrarReserva && <th style={{ ...S.th, textAlign:'right' }}>Reserva sugerida</th>}
+                  <th style={{ ...S.th, textAlign:'right' }}>Total salida</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filasImp.map((f, i) => {
+                  const hl = f.esSaldoRenta;
+                  const rowBg = hl ? '#FFF5F5' : (i % 2 === 0 ? '#fff' : '#fdf8f8');
+                  return (
+                    <tr key={f.mes}
+                        style={hl ? { outline:'2px solid #FEB2B2', outlineOffset:'-2px' } : undefined}
+                        title={hl ? 'Saldo de renta 2026 — verificar reserva acumulada' : undefined}>
+                      <td style={{ ...S.td(i), background:rowBg, fontWeight:hl?700:400, color:hl?'#C53030':undefined, textTransform:'capitalize' }}>
+                        {mesLabel(f.mes)}{hl && ' ⚠️'}
+                      </td>
+                      <td style={{ ...S.td(i), background:rowBg, textAlign:'right' }}>
+                        <span style={{ fontWeight:600, color:f.ivaSalida>0?'#C53030':'var(--text-muted)' }}>{f.ivaSalida>0 ? fC(f.ivaSalida) : '₡0'}</span>
+                        <span style={{ fontSize:'0.68rem', display:'block', color:'var(--text-muted)' }}>
+                          {f.esRealIva ? 'real' : 'proy.'}{(f.ivaSalida===0 && f.credito>0) ? ' · crédito a favor' : ''}
+                        </span>
+                      </td>
+                      <td style={{ ...S.td(i), background:rowBg, textAlign:'right', fontWeight:hl?700:600, color:hl?'#C53030':(f.rentaSalida>0?'#7B341E':'var(--text-muted)') }}
+                          title={f.rentaEventos.map(e => `${e.concepto}: ${fC(e.monto)}`).join(' · ') || undefined}>
+                        {f.rentaSalida>0 ? fC(f.rentaSalida) : '—'}
+                      </td>
+                      {mostrarReserva && (
+                        <td style={{ ...S.td(i), background:rowBg, textAlign:'right', color:'#225F74', borderLeft:'2px dotted #225F74' }}
+                            title="Apartar en cuenta separada para cubrir el saldo de marzo 2027">
+                          {f.reserva>0 ? fC(f.reserva) : '—'}
+                        </td>
+                      )}
+                      <td style={{ ...S.td(i), background:rowBg, textAlign:'right', fontWeight:700, color:hl?'#C53030':'#7B341E' }}>
+                        {f.total>0 ? fC(f.total) : '₡0'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ ...S.td(0), fontWeight:700, borderTop:'2px solid var(--border-soft)' }}>TOTAL horizonte</td>
+                  <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#C53030', borderTop:'2px solid var(--border-soft)' }}>{fC(totIvaHoriz)}</td>
+                  <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#7B341E', borderTop:'2px solid var(--border-soft)' }}>{fC(totRentaHoriz)}</td>
+                  {mostrarReserva && <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#225F74', borderTop:'2px solid var(--border-soft)' }}>{fC(totReservaH)}</td>}
+                  <td style={{ ...S.td(0), textAlign:'right', fontWeight:700, color:'#7B341E', borderTop:'2px solid var(--border-soft)' }}>{fC(totImpHoriz)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {mostrarReserva && (
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'0.8rem', marginBottom:'16px' }}>
+              <span style={{ display:'inline-block', width:'26px', borderTop:'2px dotted #225F74' }}></span>
+              <span style={{ color:'#225F74' }}>Reserva de renta sugerida — apartar en cuenta separada para cubrir el saldo de marzo 2027.</span>
+            </div>
+          )}
+        </>
       )}
 
       <hr style={S.divider}/>
