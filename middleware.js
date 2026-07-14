@@ -9,6 +9,11 @@ const SHORTENER_HOST = (process.env.SHORTENER_DOMAIN || 'go.depositojimenezcr.co
 // inexistente o la ruta raíz.
 const PUBLIC_SITE = 'https://depositojimenezcr.com';
 
+// Subdominio público dedicado del Club del Enchapador. Su raíz sirve la página
+// del club y TODO lo servido bajo este host es público (nunca pasa por el guard
+// de sesión de SOL). Configurable por env var CLUB_DOMAIN.
+const CLUB_HOST = (process.env.CLUB_DOMAIN || 'club.depositojimenez.com').toLowerCase();
+
 export async function middleware(req) {
   // ────────────────────────────────────────────────────────────────────────
   // CHECK ESPECIAL: dominio del acortador.
@@ -19,7 +24,14 @@ export async function middleware(req) {
   // existente que sigue idéntico abajo.
   // ────────────────────────────────────────────────────────────────────────
   const host = (req.headers.get('host') || '').toLowerCase().split(':')[0];
-  if (host === SHORTENER_HOST) {
+
+  // La página pública del Club se identifica por su ruta exacta (/club o /club/*).
+  // La calculamos antes que nada porque el bloque del acortador trata CUALQUIER
+  // path como slug: hay que exceptuar /club para que go.depositojimenezcr.com/club
+  // sirva la página del club en vez de buscarla como link corto.
+  const clubPath = req.nextUrl.pathname === '/club' || req.nextUrl.pathname.startsWith('/club/');
+
+  if (host === SHORTENER_HOST && !clubPath) {
     const pathname = req.nextUrl.pathname;
 
     // Path raíz → e-commerce.
@@ -88,6 +100,28 @@ export async function middleware(req) {
   // propia auth, así que saltearlo acá no cambia la seguridad.)
   // ────────────────────────────────────────────────────────────────────────
   const { pathname } = req.nextUrl;
+
+  // ────────────────────────────────────────────────────────────────────────
+  // CLUB DEL ENCHAPADOR — página PÚBLICA.
+  // /club (en cualquier dominio) y todo el subdominio club.depositojimenez.com
+  // NO requieren sesión: el enchapador nunca debe ver el login. Marcamos la
+  // respuesta con x-club-public para que el layout raíz la renderice sin el
+  // chrome de SOL. En el subdominio, la raíz "/" se reescribe a /club (así no
+  // dependemos de un rewrite en next.config).
+  // OJO: /club es coincidencia EXACTA (clubPath) — el panel admin (/club-admin)
+  // NO entra acá y queda protegido por el guard de abajo.
+  // ────────────────────────────────────────────────────────────────────────
+  if (host === CLUB_HOST || clubPath) {
+    const h = new Headers(req.headers);
+    h.set('x-club-public', '1');
+    if (host === CLUB_HOST && (pathname === '/' || pathname === '')) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/club';
+      return NextResponse.rewrite(url, { request: { headers: h } });
+    }
+    return NextResponse.next({ request: { headers: h } });
+  }
+
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/_next') ||
