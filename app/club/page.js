@@ -28,14 +28,17 @@ const C = {
 };
 
 // Catálogo de premios (hardcodeado por ahora; luego se mueve a base).
+// `foto`: ruta a una imagen real en /public/club/premios/. Si es null (o la
+// imagen falla), la tarjeta muestra el emoji como respaldo. Para poner la foto
+// real de un producto, dejá un archivo con ese nombre en esa carpeta.
 const PREMIOS = [
-  { emoji: '🧤', nombre: 'Kit guantes + crucetas + esponjas', puntos: 10 },
-  { emoji: '🦵', nombre: 'Rodilleras profesionales', puntos: 25 },
-  { emoji: '🔧', nombre: 'Kit sistema de nivelación (clips + cuñas + pinza)', puntos: 40 },
-  { emoji: '📏', nombre: 'Juego de llanetas 6/10/12 mm', puntos: 50 },
-  { emoji: '📐', nombre: 'Nivel láser autonivelante', puntos: 120 },
-  { emoji: '🪚', nombre: 'Cortadora manual profesional 1.2 m', puntos: 180 },
-  { emoji: '⚡', nombre: 'Cortadora eléctrica de banco con agua', puntos: 300 },
+  { emoji: '🧤', nombre: 'Kit guantes + crucetas + esponjas', puntos: 10, foto: null },
+  { emoji: '🦵', nombre: 'Rodilleras profesionales', puntos: 25, foto: null },
+  { emoji: '🔧', nombre: 'Kit sistema de nivelación (clips + cuñas + pinza)', puntos: 40, foto: null },
+  { emoji: '📏', nombre: 'Juego de llanetas 6/10/12 mm', puntos: 50, foto: '/club/premios/llanetas.jpg' },
+  { emoji: '📐', nombre: 'Nivel láser autonivelante', puntos: 120, foto: '/club/premios/laser.jpg' },
+  { emoji: '🪚', nombre: 'Cortadora manual profesional 1.2 m', puntos: 180, foto: null },
+  { emoji: '⚡', nombre: 'Cortadora eléctrica de banco con agua', puntos: 300, foto: '/club/premios/cortadora-electrica.jpg' },
 ];
 
 const fontDisplay = "var(--font-bungee), system-ui, sans-serif";
@@ -213,10 +216,13 @@ function SaldoCard({ nombre, puntos }) {
               borderRadius: 999, transition: 'width .5s ease',
             }} />
           </div>
-          <p style={{ margin: '10px 0 0', fontSize: 13.5, opacity: 0.92 }}>
-            Te faltan <b style={{ color: '#ffd0ac' }}>{siguiente.puntos - puntos}</b> puntos para{' '}
-            <b>{siguiente.emoji} {siguiente.nombre}</b>
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+            <PremioFoto premio={siguiente} alcanzado={false} size={56} />
+            <p style={{ margin: 0, fontSize: 13.5, opacity: 0.95 }}>
+              Te faltan <b style={{ color: '#ffd0ac' }}>{siguiente.puntos - puntos}</b> puntos para{' '}
+              <b>{siguiente.nombre}</b>
+            </p>
+          </div>
         </>
       ) : (
         <p style={{ margin: '14px 0 0', fontSize: 14, opacity: 0.92 }}>
@@ -227,6 +233,32 @@ function SaldoCard({ nombre, puntos }) {
   );
 }
 
+// Foto del premio con respaldo al emoji (si no hay foto o si la imagen falla).
+function PremioFoto({ premio, alcanzado, size = 72 }) {
+  const [err, setErr] = useState(false);
+  const mostrarFoto = premio.foto && !err;
+  return (
+    <div style={{
+      width: size, height: size, flexShrink: 0,
+      borderRadius: 12, overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: alcanzado ? '#dcefe3' : '#f7eef0',
+      border: `1px solid ${alcanzado ? '#bfe3cd' : C.border}`,
+    }}>
+      {mostrarFoto ? (
+        <img
+          src={premio.foto}
+          alt={premio.nombre}
+          onError={() => setErr(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <span style={{ fontSize: size * 0.42 }}>{premio.emoji}</span>
+      )}
+    </div>
+  );
+}
+
 function CatalogoPremios({ saldo }) {
   return (
     <Card>
@@ -234,20 +266,20 @@ function CatalogoPremios({ saldo }) {
       <p style={{ margin: '0 0 14px', fontSize: 13, color: C.muted }}>
         {saldo === null ? 'Consultá tu cédula para ver cuáles ya alcanzaste.' : 'En verde, los que ya podés canjear.'}
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {PREMIOS.map((p) => {
           const alcanzado = saldo !== null && saldo >= p.puntos;
           return (
             <div key={p.nombre} style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 12px', borderRadius: 12,
+              padding: 10, borderRadius: 14,
               background: alcanzado ? C.greenBg : '#fff',
               border: `1px solid ${alcanzado ? '#bfe3cd' : C.border}`,
             }}>
-              <span style={{ fontSize: 26, flexShrink: 0 }}>{p.emoji}</span>
+              <PremioFoto premio={p} alcanzado={alcanzado} size={72} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{p.nombre}</div>
-                <div style={{ fontSize: 12.5, color: alcanzado ? C.green : C.muted, fontWeight: 600 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{p.nombre}</div>
+                <div style={{ fontSize: 12.5, color: alcanzado ? C.green : C.muted, fontWeight: 600, marginTop: 2 }}>
                   {p.puntos} puntos {alcanzado ? '· ¡ya lo tenés! ✅' : ''}
                 </div>
               </div>
