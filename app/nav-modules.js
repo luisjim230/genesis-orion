@@ -40,6 +40,7 @@ export const ALL_NAV = [
     { href: '/finanzas/bancos',   key: 'bancos',                icon: '🏦', name: 'Bancos' },
     { href: '/pagos',             key: 'pagos',                 icon: '💸', name: 'Coordinación de pagos' },
     { href: '/compras-proveedor', key: 'compras-proveedor',     icon: '🧾', name: 'Compras a Proveedor' },
+    { href: '/devoluciones',      key: 'devoluciones',          icon: '↩️', name: 'Devoluciones' },
   ]},
   { group: 'Gestión', items: [
     { href: '/tareas',            key: 'tareas',                icon: '✅', name: 'Tareas' },
