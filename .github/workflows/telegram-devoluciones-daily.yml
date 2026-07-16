@@ -1,0 +1,61 @@
+name: SOL — Devoluciones pendientes por Telegram
+
+# Cada mañana pide al endpoint de Vercel el resumen de devoluciones de dinero
+# que siguen sin pagarse y lo manda por Telegram, para que no se olvide ninguna
+# transferencia a clientes.
+#
+# Reusa secrets existentes:
+#   - TELEGRAM_BOT_TOKEN
+#   - TELEGRAM_CHAT_ID  (o TELEGRAM_CHAT_ID_DEVOLUCIONES si querés un chat distinto)
+
+on:
+  schedule:
+    # 9:00 AM hora Costa Rica (UTC-6) = 15:00 UTC, Lun–Sáb
+    - cron: '0 15 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build & send Devoluciones summary
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID_DEVOLUCIONES != '' && secrets.TELEGRAM_CHAT_ID_DEVOLUCIONES || secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
+            echo "Faltan secrets TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID"; exit 1
+          fi
+
+          # 1) Pedimos el mensaje al endpoint de Vercel.
+          RESP=$(curl -sS -X POST "https://sol.depositojimenez.com/api/devoluciones/alerts/daily")
+          echo "$RESP" | jq -r 'if .ok then "✓ endpoint OK" else "✗ error: " + (.error // "desconocido") end'
+          if [ "$(echo "$RESP" | jq -r '.ok')" != "true" ]; then
+            echo "$RESP" | jq .
+            exit 1
+          fi
+
+          # 2) Si no hay pendientes, no molestamos al chat.
+          if [ "$(echo "$RESP" | jq -r '.hay_pendientes')" != "true" ]; then
+            echo "Sin devoluciones pendientes; no se envía mensaje."
+            exit 0
+          fi
+
+          # 3) Construimos el payload para Telegram y mandamos.
+          PAYLOAD=$(echo "$RESP" | jq --arg chat "$TELEGRAM_CHAT_ID" '{
+            chat_id: $chat,
+            text: .message,
+            parse_mode: "HTML",
+            disable_web_page_preview: true
+          }')
+
+          TG_RESP=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "$TG_RESP" | jq -r 'if .ok then "✓ Mensaje enviado a Telegram" else "✗ Telegram error: \(.error_code) \(.description)" end'
+          if [ "$(echo "$TG_RESP" | jq -r '.ok')" != "true" ]; then
+            exit 1
+          fi

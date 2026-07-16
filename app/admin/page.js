@@ -52,6 +52,7 @@ const LABEL_OVERRIDE = {
   materiales:{label:'Cálculo de materiales',emoji:'🧱'},
   'fichas-tecnicas':{label:'Fichas Técnicas',emoji:'📋'},
   garantias:{label:'Devoluciones y Garantías',emoji:'🔄'},
+  devoluciones:{label:'Devoluciones (dinero)',emoji:'↩️'},
   encomiendas:{label:'Encomiendas',emoji:'📦'},
   rrhh:{label:'Permisos y Vacaciones',emoji:'👔'},
   admin:{label:'Admin',emoji:'🔐'},
@@ -59,6 +60,7 @@ const LABEL_OVERRIDE = {
 const MODULOS_EXTRA = [
   { key:'rotacion',   label:'Rotación',   emoji:'🔄' },
   { key:'vendedores', label:'Vendedores', emoji:'🏷️' },
+  { key:'devoluciones-aprobar', label:'Devoluciones · Aprobar pagos (gerente)', emoji:'✅' },
 ]
 const MODULOS = (() => {
   const fromNav = ALL_NAV_FLAT
@@ -77,7 +79,7 @@ const PERMISOS_ROL = {
   admin:     MODULOS.map(m => m.key),
   bodega:    ['dashboard','inventario','trazabilidad','rotacion','kronos','contenedores'],
   ventas:    ['dashboard','trazabilidad','comercial','seguimiento-proformas','reportes'],
-  finanzas:  ['cajas-aurora','entregas','dashboard','contenedores','mercado','ponderacion','finanzas'],
+  finanzas:  ['cajas-aurora','entregas','dashboard','contenedores','mercado','ponderacion','finanzas','devoluciones','devoluciones-aprobar'],
   logistica: ['dashboard','contenedores','cif','mercado','reportes'],
 }
 
