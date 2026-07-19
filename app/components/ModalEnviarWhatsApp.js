@@ -28,6 +28,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
   const [msg,setMsg]=useState(null)
   const [neoOk,setNeoOk]=useState(null)
   const [numeroSolOC,setNumeroSolOC]=useState(null)
+  const [waLink,setWaLink]=useState(null)
 
   useEffect(()=>{
     fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista=>{
@@ -41,7 +42,11 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
     const tel=telefono.trim().replace(/\D/g,'')
     if(!tel||tel.length<8){setMsg('Ingresa un numero valido. Ej: 50688887777');return}
     if(!proveedor||!String(proveedor).trim()){setMsg('Falta el nombre del proveedor — cerrá este modal y volvé a abrirlo desde la fila correcta.');return}
-    setEnviando(true); setMsg(null); setNeoOk(null)
+    setEnviando(true); setMsg(null); setNeoOk(null); setWaLink(null)
+    // iOS/Safari (iPad) solo permite abrir WhatsApp si la ventana se reserva en el
+    // mismo gesto del toque, ANTES de los await. Si no, el popup queda bloqueado.
+    let waWin=null
+    try{ waWin=window.open('','_blank') }catch(e){ waWin=null }
     if(tel!==guardado){
       try{await fetch('/api/kommo/proveedores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre_proveedor:proveedor,whatsapp:tel})})}catch(e){}
     }
@@ -93,10 +98,21 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
       }
     }catch(e){console.error('PDF error:',e)}
 
-    window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(waText),'_blank')
+    const waUrl='https://wa.me/'+tel+'?text='+encodeURIComponent(waText)
+    let abierto=false
+    if(waWin && !waWin.closed){
+      try{ waWin.location.href=waUrl; abierto=true }catch(e){ abierto=false }
+    }
     if(onEnviado)onEnviado({proveedor,telefono:tel})
     setEnviando(false)
-    onClose()
+    if(abierto){
+      onClose()
+    }else{
+      // Safari bloqueó el popup (típico en iPad): dejamos el modal abierto con un
+      // boton que abre WhatsApp con un solo toque (gesto directo, no lo bloquea).
+      if(waWin){try{waWin.close()}catch(e){}}
+      setWaLink(waUrl)
+    }
   }
 
   return(
@@ -115,6 +131,10 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
           {enviando?<>Encolando en NEO...</>:neoOk==='ok'?<>OC encolada - se subira a NEO automaticamente</>:neoOk==='error'?<>No se pudo encolar en NEO</>:<>Al enviar, la OC se subira automaticamente a NEO</>}
         </div>
         {msg&&<div style={{marginTop:12,padding:'8px 12px',borderRadius:8,fontSize:'0.83rem',background:'#fff5f5',color:'#C53030',border:'1px solid #FEB2B2'}}>{msg}</div>}
+        {waLink&&<div style={{marginTop:14,padding:'12px 14px',borderRadius:10,background:'#f0fff4',border:'1px solid #9AE6B4',textAlign:'center'}}>
+          <div style={{fontSize:'0.82rem',color:'#276749',marginBottom:10,lineHeight:1.4}}>La OC ya quedó guardada. Tocá el botón para abrir WhatsApp:</div>
+          <a href={waLink} target="_blank" rel="noopener noreferrer" onClick={()=>{setTimeout(onClose,400)}} style={{display:'inline-block',background:'#25D366',color:'#fff',textDecoration:'none',borderRadius:8,padding:'12px 26px',fontWeight:700,fontSize:'0.95rem',fontFamily:'DM Sans, sans-serif'}}>Abrir WhatsApp</a>
+        </div>}
         <div style={S.btnRow}>
           <button style={S.btnSecondary} onClick={onClose} disabled={enviando}>Cancelar</button>
           <button style={enviando?S.btnPrimaryDisabled:S.btnPrimary} onClick={enviar} disabled={enviando||cargando}>{enviando?'Enviando...':'Abrir WhatsApp'}</button>
