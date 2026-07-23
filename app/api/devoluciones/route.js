@@ -69,6 +69,8 @@ export async function POST(request) {
     const datos = validarDevolucion({
       cliente_nombre: form.get('cliente_nombre'),
       cliente_identificacion: form.get('cliente_identificacion'),
+      titular_cuenta: form.get('titular_cuenta'),
+      motivo: form.get('motivo'),
       monto: form.get('monto'),
       moneda: form.get('moneda'),
       metodo: form.get('metodo'),
@@ -76,6 +78,7 @@ export async function POST(request) {
       iban: form.get('iban'),
       banco: form.get('banco'),
       referencia_erp: form.get('referencia_erp'),
+      nota_credito: form.get('nota_credito'),
       notas: form.get('notas'),
     })
 

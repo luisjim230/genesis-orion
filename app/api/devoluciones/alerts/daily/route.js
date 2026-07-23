@@ -11,7 +11,7 @@ export async function POST() {
   return handle(async () => {
     const db = getDb()
     const { data } = await db.from('devoluciones')
-      .select('cliente_nombre, monto, moneda, metodo, creado_en, referencia_erp')
+      .select('cliente_nombre, monto, moneda, metodo, creado_en, referencia_erp, titular_cuenta')
       .eq('estado', 'pendiente')
       .order('creado_en', { ascending: true })
 
@@ -35,7 +35,8 @@ export async function POST() {
       else totalCrc += Number(d.monto)
       const alerta = dd >= 3 ? ' 🔴' : dd >= 2 ? ' 🟠' : ''
       const via = d.metodo === 'sinpe_movil' ? 'SINPE' : 'Transf.'
-      return `• <b>${d.cliente_nombre}</b> — ${fmtMoneda(d.monto, d.moneda)} · ${via} · ${dd}d${alerta}`
+      const titular = d.titular_cuenta ? ` · a nombre de ${d.titular_cuenta}` : ''
+      return `• <b>${d.cliente_nombre}</b> — ${fmtMoneda(d.monto, d.moneda)} · ${via}${titular} · ${dd}d${alerta}`
     })
 
     const totales = []
