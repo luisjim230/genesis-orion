@@ -63,6 +63,17 @@ export function validarDevolucion(input) {
 
   out.cliente_identificacion = String(input.cliente_identificacion || '').trim() || null
 
+  // Titular de la cuenta / SINPE al que se hace el reintegro. Obligatorio: es el
+  // dato que Marcela necesita para saber a nombre de quién sale la plata.
+  const titular = String(input.titular_cuenta || '').trim()
+  if (titular.length < 3) throw new HttpError(400, 'Indicá el nombre del titular de la cuenta o SINPE (mínimo 3 caracteres).')
+  out.titular_cuenta = titular
+
+  // Motivo explícito de la devolución. Obligatorio.
+  const motivo = String(input.motivo || '').trim()
+  if (motivo.length < 5) throw new HttpError(400, 'Indicá el motivo de la devolución (mínimo 5 caracteres).')
+  out.motivo = motivo
+
   const monto = Number(input.monto)
   if (!Number.isFinite(monto) || monto <= 0) throw new HttpError(400, 'El monto debe ser mayor a 0.')
   // Máximo 2 decimales.
@@ -96,6 +107,8 @@ export function validarDevolucion(input) {
   }
 
   out.referencia_erp = String(input.referencia_erp || '').trim() || null
+  // Número de Nota de Crédito (NC) asociada, si aplica. Opcional.
+  out.nota_credito = String(input.nota_credito || '').trim() || null
   out.notas = String(input.notas || '').trim() || null
 
   return out

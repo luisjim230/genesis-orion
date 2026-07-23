@@ -209,8 +209,11 @@ function Fila({ d, esGerente, perfil, onEditar, onModal }) {
         <div style={{ fontSize: '1.25em', fontWeight: 700, color: TEXT, marginBottom: 4 }}>{fmt(d.monto, d.moneda)}</div>
         <div style={{ fontSize: '0.82em', color: MUTED, lineHeight: 1.6 }}>
           <div>{METODO_LABEL[d.metodo]} · <b style={{ color: TEXT }}>{destino}</b>{d.banco ? ` · ${d.banco}` : ''}</div>
+          {d.titular_cuenta && <div>Titular: <b style={{ color: TEXT }}>{d.titular_cuenta}</b></div>}
+          {d.motivo && <div>Motivo: {d.motivo}</div>}
           {d.cliente_identificacion && <div>Cédula: {d.cliente_identificacion}</div>}
           {d.referencia_erp && <div>Ref ERP: {d.referencia_erp}</div>}
+          {d.nota_credito && <div>NC: {d.nota_credito}</div>}
           <div>Creada {new Date(d.creado_en).toLocaleDateString('es-CR')} por {d.creado_por || '—'}</div>
           {d.estado === 'pagada' && <div style={{ color: '#16a34a' }}>✓ Pagada {d.pagado_en ? new Date(d.pagado_en).toLocaleDateString('es-CR') : ''} por {d.pagado_por || '—'}{d.referencia_pago ? ` · comprobante ${d.referencia_pago}` : ''}</div>}
           {d.estado === 'rechazada' && d.motivo_rechazo && <div style={{ color: '#dc2626' }}>✗ Rechazo: {d.motivo_rechazo}</div>}
@@ -241,9 +244,10 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
   const e = editando || {}
   const [f, setF] = useState({
     cliente_nombre: e.cliente_nombre || '', cliente_identificacion: e.cliente_identificacion || '',
+    titular_cuenta: e.titular_cuenta || '', motivo: e.motivo || '',
     monto: e.monto || '', moneda: e.moneda || 'CRC', metodo: e.metodo || 'sinpe_movil',
     sinpe_numero: e.sinpe_numero || '', iban: e.iban || '', banco: e.banco || '',
-    referencia_erp: e.referencia_erp || '', notas: e.notas || '',
+    referencia_erp: e.referencia_erp || '', nota_credito: e.nota_credito || '', notas: e.notas || '',
   })
   const [file, setFile] = useState(null)
   const [enviando, setEnviando] = useState(false)
@@ -253,6 +257,8 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
 
   function validar() {
     if (f.cliente_nombre.trim().length < 3) return 'El nombre del cliente debe tener al menos 3 caracteres.'
+    if (f.titular_cuenta.trim().length < 3) return 'Indicá el nombre del titular de la cuenta o SINPE.'
+    if (f.motivo.trim().length < 5) return 'Indicá el motivo de la devolución (mínimo 5 caracteres).'
     const m = Number(f.monto)
     if (!(m > 0)) return 'El monto debe ser mayor a 0.'
     if (f.metodo === 'sinpe_movil') {
@@ -305,6 +311,10 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
           <label style={S.label}>Nombre del cliente *</label>
           <input style={S.input} value={f.cliente_nombre} onChange={ev => set('cliente_nombre', ev.target.value)} placeholder="Ej. Ferretería La Central" />
         </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={S.label}>Motivo de la devolución *</label>
+          <textarea style={S.textarea} value={f.motivo} onChange={ev => set('motivo', ev.target.value)} placeholder="Ej. Producto defectuoso, cliente canceló la compra, cobro duplicado…" />
+        </div>
         <div>
           <label style={S.label}>Identificación (opcional)</label>
           <input style={S.input} value={f.cliente_identificacion} onChange={ev => set('cliente_identificacion', ev.target.value)} placeholder="Cédula física / jurídica" />
@@ -312,6 +322,10 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
         <div>
           <label style={S.label}>Referencia ERP (opcional)</label>
           <input style={S.input} value={f.referencia_erp} onChange={ev => set('referencia_erp', ev.target.value)} placeholder="N.º de recibo del ERP" />
+        </div>
+        <div>
+          <label style={S.label}>N.º de Nota de Crédito (opcional)</label>
+          <input style={S.input} value={f.nota_credito} onChange={ev => set('nota_credito', ev.target.value)} placeholder="NC asociada, si aplica" />
         </div>
         <div>
           <label style={S.label}>Monto *</label>
@@ -334,6 +348,10 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
               </button>
             ))}
           </div>
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={S.label}>Nombre del titular de la cuenta / SINPE *</label>
+          <input style={S.input} value={f.titular_cuenta} onChange={ev => set('titular_cuenta', ev.target.value)} placeholder="A nombre de quién está la cuenta o el SINPE" />
         </div>
         {f.metodo === 'sinpe_movil' ? (
           <div style={{ gridColumn: '1 / -1' }}>
@@ -419,6 +437,9 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
           <div><b>Monto:</b> {fmt(dev.monto, dev.moneda)}</div>
           <div><b>Método:</b> {METODO_LABEL[dev.metodo]}</div>
           <div><b>Destino:</b> {destino}{dev.banco ? ` · ${dev.banco}` : ''}</div>
+          {dev.titular_cuenta && <div><b>Titular:</b> {dev.titular_cuenta}</div>}
+          {dev.motivo && <div><b>Motivo:</b> {dev.motivo}</div>}
+          {dev.nota_credito && <div><b>NC:</b> {dev.nota_credito}</div>}
         </div>
 
         {tipo === 'pagar' && (
