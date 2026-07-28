@@ -1,10 +1,10 @@
-import { getDb, handle, HttpError, BUCKET } from '../../_lib'
+import { getDb, handle, HttpError, BUCKET, contentTypePorNombre } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// GET /api/devoluciones/:id/recibo — streamea el PDF del recibo desde el bucket
-// privado. ?download=1 fuerza descarga; por defecto se muestra inline.
+// GET /api/devoluciones/:id/recibo — streamea el recibo de la NC (PDF o imagen)
+// desde el bucket privado. ?download=1 fuerza descarga; por defecto inline.
 export async function GET(request, { params }) {
   return handle(async () => {
     const { id } = await params
@@ -22,7 +22,7 @@ export async function GET(request, { params }) {
     const nombreSafe = (dev.recibo_nombre || 'recibo.pdf').replace(/"/g, '')
     return new Response(buf, {
       headers: {
-        'Content-Type': 'application/pdf',
+        'Content-Type': contentTypePorNombre(dev.recibo_path || dev.recibo_nombre),
         'Content-Disposition': `${dispo}; filename="${nombreSafe}"`,
         'Cache-Control': 'private, max-age=60',
       },
