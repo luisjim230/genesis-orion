@@ -114,35 +114,51 @@ export function validarDevolucion(input) {
   return out
 }
 
-// Sube un PDF al bucket privado. Devuelve { path, nombre } o lanza HttpError.
+// Tipos de imagen aceptados (comprobante de pago y recibo de la NC).
+const IMG_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+const IMG_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
+
+// Deduce el content-type a partir del nombre/ruta del archivo (PDF o imagen).
+export function contentTypePorNombre(nombre) {
+  const n = String(nombre || '').toLowerCase()
+  if (n.endsWith('.pdf')) return 'application/pdf'
+  if (n.endsWith('.png')) return 'image/png'
+  if (n.endsWith('.webp')) return 'image/webp'
+  if (n.endsWith('.heic')) return 'image/heic'
+  if (n.endsWith('.heif')) return 'image/heif'
+  if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg'
+  return 'application/pdf'
+}
+
+// Sube el recibo de la NC (PDF o imagen) al bucket privado.
+// Devuelve { path, nombre, contentType } o lanza HttpError.
 export async function subirRecibo(file, devolucionId) {
   if (!file || typeof file.arrayBuffer !== 'function') {
-    throw new HttpError(400, 'Debés adjuntar el PDF del recibo.')
+    throw new HttpError(400, 'Debés adjuntar el recibo de la NC (PDF o imagen).')
   }
   const tipo = file.type || ''
   const nombre = file.name || 'recibo.pdf'
-  if (tipo !== 'application/pdf' && !nombre.toLowerCase().endsWith('.pdf')) {
-    throw new HttpError(400, 'El recibo debe ser un archivo PDF.')
+  const esPdf = tipo === 'application/pdf' || nombre.toLowerCase().endsWith('.pdf')
+  const esImg = IMG_MIMES.includes(tipo) || IMG_EXT.test(nombre)
+  if (!esPdf && !esImg) {
+    throw new HttpError(400, 'El recibo debe ser un PDF o una imagen (JPG, PNG, WEBP o HEIC).')
   }
   const buffer = Buffer.from(await file.arrayBuffer())
-  if (buffer.length === 0) throw new HttpError(400, 'El PDF está vacío.')
-  if (buffer.length > MAX_BYTES) throw new HttpError(400, 'El PDF supera el máximo de 10 MB.')
+  if (buffer.length === 0) throw new HttpError(400, 'El archivo está vacío.')
+  if (buffer.length > MAX_BYTES) throw new HttpError(400, 'El archivo supera el máximo de 10 MB.')
 
   const safe = nombre.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
   const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}`
   const path = `${devolucionId}/${stamp}-${safe}`
+  const contentType = esPdf ? 'application/pdf' : (IMG_MIMES.includes(tipo) ? tipo : 'image/jpeg')
 
   const { error } = await getDb().storage
     .from(BUCKET)
-    .upload(path, buffer, { contentType: 'application/pdf', upsert: false })
-  if (error) throw new HttpError(500, 'No se pudo subir el PDF: ' + error.message)
+    .upload(path, buffer, { contentType, upsert: false })
+  if (error) throw new HttpError(500, 'No se pudo subir el recibo: ' + error.message)
 
-  return { path, nombre }
+  return { path, nombre, contentType }
 }
-
-// Tipos de imagen aceptados para el comprobante de la transferencia.
-const IMG_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-const IMG_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
 
 // Sube la imagen del comprobante de la transferencia al bucket privado.
 // Devuelve { path, nombre, contentType } o lanza HttpError.

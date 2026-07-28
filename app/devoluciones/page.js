@@ -221,9 +221,9 @@ function Fila({ d, esGerente, perfil, onEditar, onModal }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', justifyContent: 'center' }}>
-        <a href={`/api/devoluciones/${d.id}/recibo`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📄 Ver recibo</a>
+        <a href={`/api/devoluciones/${d.id}/recibo`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📄 Ver recibo NC</a>
         {d.comprobante_path && (
-          <a href={`/api/devoluciones/${d.id}/comprobante`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📷 Ver comprobante</a>
+          <a href={`/api/devoluciones/${d.id}/comprobante`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📷 Ver recibo de pago</a>
         )}
         {esGerente && d.estado === 'pendiente' && (
           <>
@@ -232,7 +232,7 @@ function Fila({ d, esGerente, perfil, onEditar, onModal }) {
           </>
         )}
         {esGerente && d.estado === 'pagada' && (
-          <button style={S.btnOutline} onClick={() => onModal('comprobante', d)}>{d.comprobante_path ? '📷 Cambiar comprobante' : '📷 Subir comprobante'}</button>
+          <button style={S.btnOutline} onClick={() => onModal('comprobante', d)}>{d.comprobante_path ? '📷 Cambiar recibo de pago' : '📷 Subir recibo de pago'}</button>
         )}
         {propio && puedeEditar && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -272,9 +272,13 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
     } else {
       if (!/^CR\d{20}$/.test(String(f.iban).replace(/\s/g, '').toUpperCase())) return 'La cuenta IBAN debe ser CR + 20 dígitos.'
     }
-    if (!editando && !file) return 'Adjuntá el PDF del recibo.'
-    if (file && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return 'El recibo debe ser un PDF.'
-    if (file && file.size > 10 * 1024 * 1024) return 'El PDF supera los 10 MB.'
+    if (!editando && !file) return 'Adjuntá el recibo de la NC (PDF o imagen).'
+    if (file) {
+      const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      const esImg = /^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')
+      if (!esPdf && !esImg) return 'El recibo debe ser un PDF o una imagen (JPG, PNG, WEBP o HEIC).'
+      if (file.size > 10 * 1024 * 1024) return 'El archivo supera los 10 MB.'
+    }
     return ''
   }
 
@@ -381,13 +385,13 @@ function FormDevolucion({ editando, perfil, onVolver, aviso }) {
           <textarea style={S.textarea} value={f.notas} onChange={ev => set('notas', ev.target.value)} placeholder="Observaciones…" />
         </div>
         <div style={{ gridColumn: '1 / -1' }}>
-          <label style={S.label}>Recibo PDF del ERP {editando ? '(dejá vacío para conservar el actual)' : '*'}</label>
+          <label style={S.label}>Recibo de la NC · PDF o imagen {editando ? '(dejá vacío para conservar el actual)' : '*'}</label>
           <div style={{ border: `2px dashed ${file ? GOLD : 'rgba(0,0,0,0.15)'}`, borderRadius: 12, padding: 18, textAlign: 'center', background: 'rgba(255,255,255,0.4)' }}
             onDragOver={ev => ev.preventDefault()}
             onDrop={ev => { ev.preventDefault(); const dropped = ev.dataTransfer.files?.[0]; if (dropped) setFile(dropped) }}>
-            <input id="recibo-input" type="file" accept="application/pdf" style={{ display: 'none' }} onChange={ev => setFile(ev.target.files?.[0] || null)} />
+            <input id="recibo-input" type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={ev => setFile(ev.target.files?.[0] || null)} />
             <label htmlFor="recibo-input" style={{ cursor: 'pointer', color: file ? TEXT : MUTED, fontSize: '0.85em' }}>
-              {file ? `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)` : '📎 Arrastrá el PDF acá o hacé clic para elegirlo'}
+              {file ? `📎 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)` : '📎 Arrastrá el PDF o la imagen acá o hacé clic para elegirlo'}
             </label>
           </div>
           {editando?.recibo_nombre && !file && <div style={{ fontSize: '0.78em', color: MUTED, marginTop: 6 }}>Actual: {editando.recibo_nombre}</div>}
@@ -460,7 +464,7 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
     } catch (ex) { setError(ex.message); setEnviando(false) }
   }
 
-  const titulo = { pagar: 'Confirmar pago', rechazar: 'Rechazar devolución', anular: 'Anular devolución', comprobante: 'Comprobante de la transferencia' }[tipo]
+  const titulo = { pagar: 'Confirmar pago', rechazar: 'Rechazar devolución', anular: 'Anular devolución', comprobante: 'Recibo de pago (transferencia)' }[tipo]
   const colorBtn = { pagar: '#22c55e', rechazar: '#ef4444', anular: '#ef4444', comprobante: GOLD }[tipo]
 
   return (
@@ -486,7 +490,7 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
         )}
         {(tipo === 'pagar' || tipo === 'comprobante') && (
           <div style={{ marginBottom: 14 }}>
-            <label style={S.label}>Imagen de la transferencia {tipo === 'pagar' ? '(opcional)' : '*'}</label>
+            <label style={S.label}>Recibo de pago · imagen de la transferencia {tipo === 'pagar' ? '(opcional)' : '*'}</label>
             {tipo === 'comprobante' && dev.comprobante_path && !file && (
               <div style={{ fontSize: '0.8em', color: MUTED, marginBottom: 8 }}>
                 Ya hay una imagen cargada — <a href={`/api/devoluciones/${dev.id}/comprobante`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontWeight: 600 }}>verla</a>. Si subís otra, la reemplaza.
