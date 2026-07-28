@@ -61,6 +61,7 @@ const MODULOS_EXTRA = [
   { key:'rotacion',   label:'Rotación',   emoji:'🔄' },
   { key:'vendedores', label:'Vendedores', emoji:'🏷️' },
   { key:'devoluciones-aprobar', label:'Devoluciones · Aprobar pagos (gerente)', emoji:'✅' },
+  { key:'empleados-salario', label:'RRHH · Ver salarios', emoji:'💰' },
 ]
 const MODULOS = (() => {
   const fromNav = ALL_NAV_FLAT

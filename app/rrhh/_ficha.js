@@ -12,9 +12,12 @@ const TIPO_SEG = {
   otro: { label: 'Otro', color: '#6b7280' },
 }
 
-export default function FichaEmpleado({ empleado, capacitaciones, seguimiento, solicitudes, onClose, onIrA }) {
+export default function FichaEmpleado({ empleado, empleados = [], capacitaciones, seguimiento, solicitudes, historial = [], puedeSalario, onClose, onAbrirFicha, onIrA }) {
   const capsEmp = useMemo(() => capacitaciones.filter(c => c.empleado_id === empleado.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')), [capacitaciones, empleado.id])
   const segEmp = useMemo(() => seguimiento.filter(s => s.empleado_id === empleado.id).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')), [seguimiento, empleado.id])
+  const lider = useMemo(() => empleados.find(e => e.id === empleado.lider_id), [empleados, empleado.lider_id])
+  const aCargo = useMemo(() => empleados.filter(e => e.lider_id === empleado.id).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')), [empleados, empleado.id])
+  const histEmp = useMemo(() => historial.filter(h => h.empleado_id === empleado.id).sort((a, b) => (b.creado_en || '').localeCompare(a.creado_en || '')), [historial, empleado.id])
 
   // Días de vacaciones usados en el año vigente
   const vacaciones = useMemo(() => {
@@ -42,14 +45,17 @@ export default function FichaEmpleado({ empleado, capacitaciones, seguimiento, s
       }}>
         {/* HEADER */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 18, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ width: 56, height: 56, borderRadius: '50%', background: colorAvatar(empleado.nombre), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3em', flexShrink: 0 }}>
-            {iniciales(empleado.nombre)}
+          <div style={{ width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', background: colorAvatar(empleado.nombre), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.3em', flexShrink: 0 }}>
+            {empleado.foto_url ? <img src={empleado.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : iniciales(empleado.nombre)}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '1.3em', fontWeight: 700 }}>{empleado.nombre}</div>
-            <div style={{ fontSize: '0.85em', color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
-              {empleado.puesto || 'Sin puesto'}{empleado.departamento ? ` · ${empleado.departamento}` : ''}
+            <div style={{ fontSize: '1.3em', fontWeight: 700 }}>
+              {empleado.nombre} {empleado.mesa_lideres && <span title="Mesa de Líderes" style={{ fontSize: '0.8em' }}>🏛️</span>}
             </div>
+            <div style={{ fontSize: '0.85em', color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+              {empleado.puesto || 'Sin puesto'}{empleado.departamento ? ` · ${empleado.departamento}` : ''}{empleado.sucursal ? ` · ${empleado.sucursal}` : ''}
+            </div>
+            {empleado.codigo_interno && <div style={{ fontSize: '0.74em', color: 'rgba(255,255,255,0.4)', marginTop: 2, fontFamily: 'monospace' }}>{empleado.codigo_interno}</div>}
           </div>
           <div style={{
             background: estColor + '22', color: estColor, border: `1px solid ${estColor}55`,
@@ -57,12 +63,53 @@ export default function FichaEmpleado({ empleado, capacitaciones, seguimiento, s
           }}>{(empleado.estado || 'activo').replace(/_/g, ' ')}</div>
         </div>
 
+        {/* PUESTO Y ORGANIZACIÓN */}
+        <Section titulo="Puesto y organización">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <DataBox label="Puesto" value={empleado.puesto || '—'} />
+            <DataBox label="Departamento" value={empleado.departamento || '—'} />
+            <DataBox label="Sucursal / ubicación" value={empleado.sucursal || '—'} />
+            <DataBox label="Líder directo" value={lider ? lider.nombre : '—'} onClick={lider && onAbrirFicha ? () => onAbrirFicha(lider.id) : null} />
+            {empleado.jornada && <DataBox label="Horario / jornada" value={empleado.jornada} />}
+            {empleado.fecha_puesto_actual && <DataBox label="Inicio en el puesto actual" value={fmtFecha(empleado.fecha_puesto_actual)} />}
+            {empleado.mesa_lideres && <DataBox label="Mesa de Líderes" value="Sí 🏛️" />}
+            {puedeSalario && <DataBox label="Salario" value={empleado.salario != null ? `₡${Number(empleado.salario).toLocaleString('es-CR')}` : '—'} />}
+          </div>
+          {empleado.descripcion_puesto && <div style={{ marginTop: 10 }}><DataBox label="Descripción del puesto" value={empleado.descripcion_puesto} /></div>}
+          {(empleado.proxima_evaluacion || empleado.proxima_reunion) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+              {empleado.proxima_evaluacion && <DataBox label="Próxima evaluación" value={fmtFecha(empleado.proxima_evaluacion)} />}
+              {empleado.proxima_reunion && <DataBox label="Próxima reunión 1:1" value={fmtFecha(empleado.proxima_reunion)} />}
+            </div>
+          )}
+        </Section>
+
+        {/* PERSONAS A CARGO */}
+        {aCargo.length > 0 && (
+          <Section titulo={`Personas a cargo · ${aCargo.length}`}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {aCargo.map(p => (
+                <div key={p.id} onClick={() => onAbrirFicha && onAbrirFicha(p.id)} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, cursor: onAbrirFicha ? 'pointer' : 'default',
+                  background: 'rgba(255,255,255,0.05)', borderRadius: 20, padding: '5px 12px 5px 5px',
+                }}>
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', background: colorAvatar(p.nombre), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.7em' }}>
+                    {p.foto_url ? <img src={p.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : iniciales(p.nombre)}
+                  </div>
+                  <span style={{ fontSize: '0.82em' }}>{p.nombre}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* DATOS PERSONALES */}
         <Section titulo="Datos personales">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <DataBox label="Cédula" value={empleado.cedula || '—'} />
             <DataBox label="Teléfono" value={empleado.telefono || '—'} />
             <DataBox label="Correo" value={empleado.email || '—'} />
+            {empleado.fecha_nacimiento && <DataBox label="Fecha de nacimiento" value={fmtFecha(empleado.fecha_nacimiento)} />}
             <DataBox label="Fecha de ingreso" value={fmtFecha(empleado.fecha_ingreso)} />
             {empleado.tipo_contrato && <DataBox label="Contrato" value={empleado.tipo_contrato.replace(/_/g, ' ')} />}
             {empleado.fecha_salida && <DataBox label="Fecha de salida" value={fmtFecha(empleado.fecha_salida)} />}
@@ -133,6 +180,28 @@ export default function FichaEmpleado({ empleado, capacitaciones, seguimiento, s
           {segEmp.length > 6 && <div style={{ fontSize: '0.82em', color: 'rgba(255,255,255,0.5)' }}>+{segEmp.length - 6} más...</div>}
         </Section>
 
+        {/* HISTORIAL DE CAMBIOS */}
+        <Section titulo="Historial de cambios">
+          {histEmp.length === 0 ? (
+            <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '14px 16px', color: 'rgba(255,255,255,0.5)', fontSize: '0.88em' }}>
+              Sin cambios registrados de puesto, departamento, líder o sucursal.
+            </div>
+          ) : histEmp.slice(0, 12).map(h => (
+            <div key={h.id} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '10px 14px', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: '0.82em', fontWeight: 700, textTransform: 'capitalize' }}>{h.campo}</span>
+                <span style={{ fontSize: '0.76em', color: 'rgba(255,255,255,0.5)' }}>{h.creado_en ? new Date(h.creado_en).toLocaleDateString('es-CR') : ''}</span>
+              </div>
+              <div style={{ fontSize: '0.84em', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>{h.valor_anterior || '—'}</span>
+                {' → '}
+                <span style={{ fontWeight: 600 }}>{h.valor_nuevo || '—'}</span>
+              </div>
+              {h.usuario && <div style={{ fontSize: '0.74em', color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>por {h.usuario}</div>}
+            </div>
+          ))}
+        </Section>
+
         {/* BOTONES */}
         <div style={{ display: 'flex', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
           <button onClick={onClose} style={{
@@ -172,11 +241,11 @@ function Section({ titulo, children }) {
   )
 }
 
-function DataBox({ label, value }) {
+function DataBox({ label, value, onClick }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '10px 14px' }}>
+    <div onClick={onClick || undefined} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '10px 14px', cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ fontSize: '0.72em', color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: '0.92em', fontWeight: 600 }}>{value}</div>
+      <div style={{ fontSize: '0.92em', fontWeight: 600, color: onClick ? '#c8a84b' : undefined }}>{value}</div>
     </div>
   )
 }

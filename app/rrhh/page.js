@@ -5,12 +5,14 @@ import { useAuth } from '../../lib/useAuth'
 import { S, GOLD, BG, TEXT, MUTED } from './_styles'
 import TabSolicitudes, { TabCalendario } from './_solicitudes'
 import TabEmpleados from './_empleados'
+import TabMesaLideres from './_mesa_lideres'
 import TabCapacitaciones from './_capacitaciones'
 import TabSeguimiento from './_seguimiento'
 import FichaEmpleado from './_ficha'
 
 const TABS = [
-  { key: 'empleados', label: '👥 Empleados' },
+  { key: 'mesa', label: '🏛️ Mesa de Líderes' },
+  { key: 'empleados', label: '👥 Directorio' },
   { key: 'solicitudes', label: '📅 Solicitudes' },
   { key: 'calendario', label: '🗓️ Calendario' },
   { key: 'capacitaciones', label: '🎓 Capacitaciones' },
@@ -18,28 +20,39 @@ const TABS = [
 ]
 
 export default function RRHHPage() {
-  const { perfil, loading: authLoad } = useAuth()
-  const [tab, setTab] = useState('empleados')
+  const { perfil, loading: authLoad, puedeVer } = useAuth()
+  const [tab, setTab] = useState('mesa')
   const [loading, setLoading] = useState(true)
   const [empleados, setEmpleados] = useState([])
   const [solicitudes, setSolicitudes] = useState([])
   const [capacitaciones, setCapacitaciones] = useState([])
   const [seguimiento, setSeguimiento] = useState([])
+  const [catalogos, setCatalogos] = useState({ departamentos: [], sucursales: [], puestos: [] })
+  const [historial, setHistorial] = useState([])
   const [fichaId, setFichaId] = useState(null)
+  const [filtroLider, setFiltroLider] = useState(null)
   const [empleadoIdNuevo, setEmpleadoIdNuevo] = useState({ capacitaciones: null, seguimiento: null })
+
+  const puedeSalario = perfil?.rol === 'admin' || (puedeVer && puedeVer('empleados-salario'))
 
   const cargar = useCallback(async () => {
     setLoading(true)
-    const [emp, sol, cap, seg] = await Promise.all([
+    const [emp, sol, cap, seg, dep, suc, pue, his] = await Promise.all([
       supabase.from('rrhh_empleados').select('*').order('nombre', { ascending: true }),
       supabase.from('rrhh_solicitudes').select('*').order('creado_en', { ascending: false }),
       supabase.from('rrhh_capacitaciones').select('*').order('creado_en', { ascending: false }),
       supabase.from('rrhh_seguimiento').select('*').order('creado_en', { ascending: false }),
+      supabase.from('rrhh_departamentos').select('*').eq('activo', true).order('orden', { ascending: true }),
+      supabase.from('rrhh_sucursales').select('*').eq('activo', true).order('orden', { ascending: true }),
+      supabase.from('rrhh_puestos').select('*').eq('activo', true).order('orden', { ascending: true }),
+      supabase.from('rrhh_empleados_historial').select('*').order('creado_en', { ascending: false }),
     ])
     setEmpleados(emp.data || [])
     setSolicitudes(sol.data || [])
     setCapacitaciones(cap.data || [])
     setSeguimiento(seg.data || [])
+    setCatalogos({ departamentos: dep.data || [], sucursales: suc.data || [], puestos: pue.data || [] })
+    setHistorial(his.data || [])
     setLoading(false)
   }, [])
 
@@ -83,8 +96,13 @@ export default function RRHHPage() {
         </div>
       </div>
 
+      {tab === 'mesa' && (
+        <TabMesaLideres empleados={empleados} onAbrirFicha={setFichaId} onIrDirectorio={(lider) => { setFiltroLider(lider); setTab('empleados') }} />
+      )}
       {tab === 'empleados' && (
-        <TabEmpleados empleados={empleados} capacitaciones={capacitaciones} seguimiento={seguimiento} solicitudes={solicitudes} perfil={perfil} recargar={cargar} onAbrirFicha={setFichaId} />
+        <TabEmpleados empleados={empleados} capacitaciones={capacitaciones} seguimiento={seguimiento} solicitudes={solicitudes}
+          perfil={perfil} catalogos={catalogos} puedeSalario={puedeSalario} recargar={cargar} onAbrirFicha={setFichaId}
+          filtroLiderInicial={filtroLider} limpiarFiltroLider={() => setFiltroLider(null)} />
       )}
       {tab === 'solicitudes' && (
         <TabSolicitudes solicitudes={solicitudes} empleados={empleados} perfil={perfil} recargar={cargar} />
@@ -105,10 +123,14 @@ export default function RRHHPage() {
       {fichaEmp && (
         <FichaEmpleado
           empleado={fichaEmp}
+          empleados={empleados}
           capacitaciones={capacitaciones}
           seguimiento={seguimiento}
           solicitudes={solicitudes}
+          historial={historial}
+          puedeSalario={puedeSalario}
           onClose={() => setFichaId(null)}
+          onAbrirFicha={setFichaId}
           onIrA={irA}
         />
       )}
