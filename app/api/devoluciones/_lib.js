@@ -140,6 +140,38 @@ export async function subirRecibo(file, devolucionId) {
   return { path, nombre }
 }
 
+// Tipos de imagen aceptados para el comprobante de la transferencia.
+const IMG_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+const IMG_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
+
+// Sube la imagen del comprobante de la transferencia al bucket privado.
+// Devuelve { path, nombre, contentType } o lanza HttpError.
+export async function subirComprobante(file, devolucionId) {
+  if (!file || typeof file.arrayBuffer !== 'function') {
+    throw new HttpError(400, 'Debés adjuntar la imagen del comprobante.')
+  }
+  const tipo = file.type || ''
+  const nombre = file.name || 'comprobante.jpg'
+  if (!IMG_MIMES.includes(tipo) && !IMG_EXT.test(nombre)) {
+    throw new HttpError(400, 'El comprobante debe ser una imagen (JPG, PNG, WEBP o HEIC).')
+  }
+  const buffer = Buffer.from(await file.arrayBuffer())
+  if (buffer.length === 0) throw new HttpError(400, 'La imagen está vacía.')
+  if (buffer.length > MAX_BYTES) throw new HttpError(400, 'La imagen supera el máximo de 10 MB.')
+
+  const safe = nombre.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+  const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}`
+  const path = `${devolucionId}/comprobante-${stamp}-${safe}`
+  const contentType = IMG_MIMES.includes(tipo) ? tipo : 'image/jpeg'
+
+  const { error } = await getDb().storage
+    .from(BUCKET)
+    .upload(path, buffer, { contentType, upsert: false })
+  if (error) throw new HttpError(500, 'No se pudo subir la imagen: ' + error.message)
+
+  return { path, nombre, contentType }
+}
+
 // Registra un cambio de estado en el historial (auditoría). Best-effort.
 export async function registrarHistorial(devolucionId, anterior, nuevo, detalle, actor) {
   await getDb().from('devoluciones_historial').insert({

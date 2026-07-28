@@ -222,11 +222,17 @@ function Fila({ d, esGerente, perfil, onEditar, onModal }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', justifyContent: 'center' }}>
         <a href={`/api/devoluciones/${d.id}/recibo`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📄 Ver recibo</a>
+        {d.comprobante_path && (
+          <a href={`/api/devoluciones/${d.id}/comprobante`} target="_blank" rel="noreferrer" style={{ ...S.btnOutline, textDecoration: 'none', display: 'inline-block' }}>📷 Ver comprobante</a>
+        )}
         {esGerente && d.estado === 'pendiente' && (
           <>
             <button style={S.btn('#22c55e')} onClick={() => onModal('pagar', d)}>✓ Marcar como pagada</button>
             <button style={S.btn('#ef4444')} onClick={() => onModal('rechazar', d)}>✗ Rechazar</button>
           </>
+        )}
+        {esGerente && d.estado === 'pagada' && (
+          <button style={S.btnOutline} onClick={() => onModal('comprobante', d)}>{d.comprobante_path ? '📷 Cambiar comprobante' : '📷 Subir comprobante'}</button>
         )}
         {propio && puedeEditar && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -405,27 +411,57 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
   const { tipo, dev } = modal
   const [ref, setRef] = useState('')
   const [motivo, setMotivo] = useState('')
+  const [file, setFile] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const destino = dev.metodo === 'sinpe_movil' ? dev.sinpe_numero : dev.iban
 
+  function validarImagen(f) {
+    if (!f) return ''
+    const okTipo = /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || '')
+    if (!okTipo) return 'El comprobante debe ser una imagen (JPG, PNG, WEBP o HEIC).'
+    if (f.size > 10 * 1024 * 1024) return 'La imagen supera los 10 MB.'
+    return ''
+  }
+
+  // Sube la imagen del comprobante de la transferencia al endpoint dedicado.
+  async function subirComprobante() {
+    const fd = new FormData()
+    fd.append('comprobante', file)
+    fd.append('actor_nombre', perfil?.nombre || perfil?.email || '')
+    fd.append('actor_id', perfil?.id || '')
+    const r = await fetch(`/api/devoluciones/${dev.id}/comprobante`, { method: 'POST', body: fd })
+    const j = await r.json()
+    if (!r.ok) throw new Error(j.error || 'No se pudo subir el comprobante.')
+  }
+
   async function confirmar() {
     if (tipo === 'rechazar' && motivo.trim().length < 5) { setError('El motivo debe tener al menos 5 caracteres.'); return }
+    if (tipo === 'comprobante' && !file) { setError('Elegí la imagen del comprobante.'); return }
+    const errImg = validarImagen(file)
+    if (errImg) { setError(errImg); return }
     setError(''); setEnviando(true)
     try {
+      if (tipo === 'comprobante') {
+        await subirComprobante()
+        onHecho('Comprobante guardado.')
+        return
+      }
       const body = { accion: tipo, actor_nombre: perfil?.nombre || perfil?.email || '', actor_id: perfil?.id || '' }
       if (tipo === 'pagar') body.referencia_pago = ref.trim()
       if (tipo === 'rechazar' || tipo === 'anular') body.motivo = motivo.trim()
       const r = await fetch(`/api/devoluciones/${dev.id}/estado`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Error.')
+      // Si al confirmar el pago se adjuntó la imagen de la transferencia, se sube.
+      if (tipo === 'pagar' && file) await subirComprobante()
       const msg = tipo === 'pagar' ? 'Pago confirmado.' : tipo === 'rechazar' ? 'Devolución rechazada.' : 'Devolución anulada.'
       onHecho(msg)
     } catch (ex) { setError(ex.message); setEnviando(false) }
   }
 
-  const titulo = { pagar: 'Confirmar pago', rechazar: 'Rechazar devolución', anular: 'Anular devolución' }[tipo]
-  const colorBtn = { pagar: '#22c55e', rechazar: '#ef4444', anular: '#ef4444' }[tipo]
+  const titulo = { pagar: 'Confirmar pago', rechazar: 'Rechazar devolución', anular: 'Anular devolución', comprobante: 'Comprobante de la transferencia' }[tipo]
+  const colorBtn = { pagar: '#22c55e', rechazar: '#ef4444', anular: '#ef4444', comprobante: GOLD }[tipo]
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1500, padding: 16 }}>
@@ -448,6 +484,24 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
             <input style={S.input} value={ref} onChange={ev => setRef(ev.target.value)} placeholder="N.º de comprobante SINPE / transferencia" />
           </div>
         )}
+        {(tipo === 'pagar' || tipo === 'comprobante') && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={S.label}>Imagen de la transferencia {tipo === 'pagar' ? '(opcional)' : '*'}</label>
+            {tipo === 'comprobante' && dev.comprobante_path && !file && (
+              <div style={{ fontSize: '0.8em', color: MUTED, marginBottom: 8 }}>
+                Ya hay una imagen cargada — <a href={`/api/devoluciones/${dev.id}/comprobante`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontWeight: 600 }}>verla</a>. Si subís otra, la reemplaza.
+              </div>
+            )}
+            <div style={{ border: `2px dashed ${file ? GOLD : 'rgba(0,0,0,0.15)'}`, borderRadius: 12, padding: 16, textAlign: 'center', background: 'rgba(0,0,0,0.02)' }}
+              onDragOver={ev => ev.preventDefault()}
+              onDrop={ev => { ev.preventDefault(); const dropped = ev.dataTransfer.files?.[0]; if (dropped) setFile(dropped) }}>
+              <input id="comprobante-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={ev => setFile(ev.target.files?.[0] || null)} />
+              <label htmlFor="comprobante-input" style={{ cursor: 'pointer', color: file ? TEXT : MUTED, fontSize: '0.85em' }}>
+                {file ? `📷 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)` : '📷 Tocá acá para elegir la foto del comprobante'}
+              </label>
+            </div>
+          </div>
+        )}
         {(tipo === 'rechazar') && (
           <div style={{ marginBottom: 14 }}>
             <label style={S.label}>Motivo del rechazo * (mín. 5 caracteres)</label>
@@ -463,7 +517,7 @@ function ModalAccion({ modal, perfil, onClose, onHecho, onError }) {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button style={S.btnOutline} onClick={onClose} disabled={enviando}>Cancelar</button>
           <button style={{ ...S.btn(colorBtn), opacity: enviando ? 0.6 : 1 }} disabled={enviando} onClick={confirmar}>
-            {enviando ? '…' : (tipo === 'pagar' ? 'Confirmar pago' : tipo === 'rechazar' ? 'Rechazar' : 'Anular')}
+            {enviando ? '…' : (tipo === 'pagar' ? 'Confirmar pago' : tipo === 'rechazar' ? 'Rechazar' : tipo === 'comprobante' ? 'Guardar comprobante' : 'Anular')}
           </button>
         </div>
       </div>
