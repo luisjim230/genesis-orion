@@ -1,4 +1,4 @@
-import { getDb, handle, HttpError, subirComprobante, registrarHistorial, BUCKET } from '../../_lib'
+import { getDb, handle, HttpError, subirComprobante, registrarHistorial, BUCKET, contentDisposition } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,11 +30,10 @@ export async function GET(request, { params }) {
     const buf = Buffer.from(await blob.arrayBuffer())
     const download = new URL(request.url).searchParams.get('download') === '1'
     const dispo = download ? 'attachment' : 'inline'
-    const nombreSafe = (dev.comprobante_nombre || 'comprobante.jpg').replace(/"/g, '')
     return new Response(buf, {
       headers: {
         'Content-Type': tipoImagen(dev.comprobante_path || dev.comprobante_nombre),
-        'Content-Disposition': `${dispo}; filename="${nombreSafe}"`,
+        'Content-Disposition': contentDisposition(dispo, dev.comprobante_nombre || 'comprobante.jpg'),
         'Cache-Control': 'private, max-age=60',
       },
     })

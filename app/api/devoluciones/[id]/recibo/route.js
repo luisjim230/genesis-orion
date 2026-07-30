@@ -1,4 +1,4 @@
-import { getDb, handle, HttpError, BUCKET, contentTypePorNombre } from '../../_lib'
+import { getDb, handle, HttpError, BUCKET, contentTypePorNombre, contentDisposition } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,11 +19,10 @@ export async function GET(request, { params }) {
     const buf = Buffer.from(await blob.arrayBuffer())
     const download = new URL(request.url).searchParams.get('download') === '1'
     const dispo = download ? 'attachment' : 'inline'
-    const nombreSafe = (dev.recibo_nombre || 'recibo.pdf').replace(/"/g, '')
     return new Response(buf, {
       headers: {
         'Content-Type': contentTypePorNombre(dev.recibo_path || dev.recibo_nombre),
-        'Content-Disposition': `${dispo}; filename="${nombreSafe}"`,
+        'Content-Disposition': contentDisposition(dispo, dev.recibo_nombre || 'recibo.pdf'),
         'Cache-Control': 'private, max-age=60',
       },
     })
