@@ -179,6 +179,12 @@ function TabRecurrentes() {
   const [notas, setNotas]         = useState('');
   const [msg, setMsg]             = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [devolPend, setDevolPend] = useState({ count: 0, total_crc: 0, total_usd: 0, atrasadas: 0 });
+
+  useEffect(() => {
+    fetch('/api/devoluciones/alerts/pendientes')
+      .then(r => r.json()).then(j => { if (j.ok) setDevolPend(j); }).catch(() => {});
+  }, []);
 
   const hoy = new Date();
   const diasMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
@@ -217,6 +223,29 @@ function TabRecurrentes() {
     <div>
       <h3 style={{ color:'var(--text-primary)', marginTop:0 }}>📜 Tareas recurrentes</h3>
       <div style={{ fontSize:'0.83rem', color:'var(--text-muted)', marginBottom:'16px' }}>Las tareas que se repiten cada mes.</div>
+
+      {devolPend.count > 0 && (
+        <a href="/devoluciones" style={{ textDecoration:'none' }}>
+          <div style={{
+            background: devolPend.atrasadas ? '#FFF5F5' : '#FFFAF0',
+            border: `1px solid ${devolPend.atrasadas ? '#FEB2B2' : '#FBD38D'}`,
+            borderLeft: `4px solid ${devolPend.atrasadas ? '#F56565' : '#ED8936'}`,
+            borderRadius:'8px', padding:'12px 16px', marginBottom:'16px',
+            color:'#7B341E', fontSize:'0.9rem',
+          }}>
+            ↩️ <strong>{devolPend.count} devolución{devolPend.count !== 1 ? 'es' : ''} a clientes pendiente{devolPend.count !== 1 ? 's' : ''} de pagar</strong>
+            {[
+              devolPend.total_crc ? `₡${Number(devolPend.total_crc).toLocaleString('es-CR')}` : null,
+              devolPend.total_usd ? `$${Number(devolPend.total_usd).toLocaleString('es-CR')}` : null,
+            ].filter(Boolean).length ? ` · ${[
+              devolPend.total_crc ? `₡${Number(devolPend.total_crc).toLocaleString('es-CR')}` : null,
+              devolPend.total_usd ? `$${Number(devolPend.total_usd).toLocaleString('es-CR')}` : null,
+            ].filter(Boolean).join(' + ')}` : ''}
+            {devolPend.atrasadas ? ` · ${devolPend.atrasadas} atrasada(s) 🔴` : ''}
+            <span style={{ color:'#C05621', fontWeight:600 }}> — Confirmá cada pago en Devoluciones →</span>
+          </div>
+        </a>
+      )}
 
       <Expander titulo="⚡ Agregar tarea mensual recurrente">
         <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:'16px' }}>
