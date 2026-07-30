@@ -118,6 +118,16 @@ export function validarDevolucion(input) {
 const IMG_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 const IMG_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
 
+// Arma un header Content-Disposition seguro. Los nombres de archivo suelen traer
+// caracteres no-ASCII (ej. las capturas de Mac/iPhone usan U+202F) que no entran
+// en un header HTTP. Damos un filename ASCII de respaldo + filename* en UTF-8.
+export function contentDisposition(dispo, nombre) {
+  const base = String(nombre || 'archivo')
+  const ascii = base.replace(/[\r\n"\\]/g, '').replace(/[^\x20-\x7E]/g, '_')
+  const encoded = encodeURIComponent(base).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+  return `${dispo}; filename="${ascii}"; filename*=UTF-8''${encoded}`
+}
+
 // Deduce el content-type a partir del nombre/ruta del archivo (PDF o imagen).
 export function contentTypePorNombre(nombre) {
   const n = String(nombre || '').toLowerCase()
