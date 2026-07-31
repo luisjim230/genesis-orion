@@ -31,19 +31,45 @@ function parseFecha(val) {
   return isNaN(d.getTime()) ? null : d
 }
 
+// Trae TODAS las filas de una tabla paginando de a 1000 (el límite por defecto
+// de PostgREST/Supabase). Sin esto, cualquier tabla con >1000 filas se trunca en
+// silencio. Fue exactamente el bug de "compras que no se actualizan": con >1000
+// órdenes, las más nuevas quedaban fuera de fechaOrdenMap, sus ítems perdían la
+// fecha_orden, caían en `ignorados_por_fecha` y nunca se marcaban como recibidos,
+// quedando "en tránsito" para siempre aunque la compra ya estuviera cargada.
+async function traerTodo(tabla, columnas, filtro) {
+  const PAGE = 1000
+  let filas = [], offset = 0
+  while (true) {
+    let q = getDb().from(tabla).select(columnas)
+    if (filtro) q = filtro(q)
+    // Orden estable por id para que la paginación no repita ni saltee filas.
+    q = q.order('id', { ascending: true }).range(offset, offset + PAGE - 1)
+    const { data, error } = await q
+    if (error) throw new Error(`traerTodo(${tabla}) falló: ${error.message}`)
+    if (!data || data.length === 0) break
+    filas = filas.concat(data)
+    if (data.length < PAGE) break
+    offset += PAGE
+  }
+  return filas
+}
+
 export async function ejecutarMatch() {
-  // Cargar fechas de órdenes por separado (no depender de joins FK)
-  const { data: todasOrdenes } = await getDb().from('ordenes_compra').select('id, fecha_orden')
+  // Cargar fechas de órdenes por separado (no depender de joins FK).
+  // Paginado: hay >1000 órdenes y sin esto las más nuevas se perdían.
+  const todasOrdenes = await traerTodo('ordenes_compra', 'id, fecha_orden')
   const fechaOrdenMap = {}
   for (const o of (todasOrdenes || [])) {
     if (o.id && o.fecha_orden) fechaOrdenMap[o.id] = o.fecha_orden
   }
 
-  // 1. Revertir matchs inválidos
-  const { data: itemsConFecha } = await getDb()
-    .from('ordenes_compra_items')
-    .select('id, fecha_recepcion, orden_id')
-    .in('estado_item', ['parcial', 'completo'])
+  // 1. Revertir matchs inválidos (paginado: hay >1000 ítems completos/parciales)
+  const itemsConFecha = await traerTodo(
+    'ordenes_compra_items',
+    'id, fecha_recepcion, orden_id',
+    q => q.in('estado_item', ['parcial', 'completo']),
+  )
 
   let revertidos = 0
   if (itemsConFecha?.length) {
@@ -81,12 +107,12 @@ export async function ejecutarMatch() {
   }
   if (todos.length === 0) return { ok: false, error: 'Sin datos en neo_items_comprados' }
 
-  // 3. Ítems pendientes/parciales
-  const { data: itemsPend } = await getDb()
-    .from('ordenes_compra_items')
-    .select('id, orden_id, codigo, cantidad_ordenada, cantidad_recibida, estado_item, creado_en')
-    .in('estado_item', ['pendiente', 'parcial'])
-    .order('creado_en', { ascending: false })
+  // 3. Ítems pendientes/parciales (paginado por si algún día superan las 1000)
+  const itemsPend = await traerTodo(
+    'ordenes_compra_items',
+    'id, orden_id, codigo, cantidad_ordenada, cantidad_recibida, estado_item, creado_en',
+    q => q.in('estado_item', ['pendiente', 'parcial']),
+  )
 
   const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos }
   if (!itemsPend || itemsPend.length === 0) return res

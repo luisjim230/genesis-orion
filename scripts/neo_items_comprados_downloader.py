@@ -200,6 +200,18 @@ async def setear_fechas(iframe, f_inicio, f_fin):
     return False
 
 
+async def esperar_red(page, timeout=15000):
+    """Espera a que la red se calme, pero NUNCA aborta si NEO deja conexiones
+    abiertas (polling/keepalive). Bajo carga de horario laboral 'networkidle'
+    puede no alcanzarse nunca y tira Timeout a los 30s; el flujo ya valida el
+    contenido real después de cada navegación, así que un timeout acá no es
+    fatal — seguimos de largo."""
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:
+        pass
+
+
 async def descargar():
     from playwright.async_api import async_playwright
 
@@ -217,13 +229,13 @@ async def descargar():
         await page.get_by_role("textbox", name="Usuario o correo electrónico").fill(NEO_USUARIO)
         await page.get_by_role("textbox", name="Contraseña").fill(NEO_CLAVE)
         await page.get_by_role("button", name="Ingresar").click()
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         log.info("Login OK")
 
         # ── Verificar empresa: Corporación Rojimo (984) ────────────────────────
         await page.get_by_title("Perfil").click()
         await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         log.info(f"  Empresa OK ({EMPRESA_ID} = Rojimo)")
 
         if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
@@ -236,7 +248,7 @@ async def descargar():
 
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
         await iframe.get_by_role("link", name=" Ítems comprados").click()
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         await page.wait_for_timeout(2000)
         log.info("✅ Ítems comprados cargado")
 

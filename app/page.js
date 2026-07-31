@@ -198,6 +198,7 @@ export default function DashboardPage() {
   const [contenedores, setContenedores] = useState([])
   const [tareas, setTareas] = useState([])
   const [recurrentesHoy, setRecurrentesHoy] = useState([])
+  const [devolPend, setDevolPend] = useState({ count: 0, total_crc: 0, total_usd: 0, atrasadas: 0 })
   const { perfil, loading: authLoading } = useAuth()
 
   const esAdmin = perfil?.rol === 'admin'
@@ -389,6 +390,13 @@ export default function DashboardPage() {
           tendNeta = unPrev3 ? un3 - unPrev3 : 0
         } catch(e) { /* no bloquear si falla */ }
 
+        // Punto de equilibrio EN VIVO (Panel de Incomodidad)
+        let equilibrio = null
+        try {
+          const { data: eq } = await supabase.from('incomodidad_equilibrio').select('*').maybeSingle()
+          equilibrio = eq
+        } catch(e) { /* no bloquear si falla */ }
+
         setKpis({
           stockCritico: criticos.length,
           contenedoresActivos: (envios || []).length,
@@ -407,6 +415,7 @@ export default function DashboardPage() {
           valorInventario,
           perKpi,
           tendNeta,
+          equilibrio,
         })
         setAlertas(criticos.slice(0, 5).map(i => ({
           icon: '⚠️',
@@ -418,6 +427,13 @@ export default function DashboardPage() {
         const hoyDia = new Date().getDate()
         const { data: recData } = await supabase.from('vega_recurrentes').select('*')
         setRecurrentesHoy((recData || []).filter(r => r.dia === hoyDia))
+
+        // Devoluciones a clientes pendientes de pagar (vía API; RLS bloquea el navegador).
+        try {
+          const rd = await fetch('/api/devoluciones/alerts/pendientes')
+          const jd = await rd.json()
+          if (jd.ok) setDevolPend(jd)
+        } catch (_) { /* no bloquear el dashboard si falla */ }
       } catch (e) {
         console.error(e)
       } finally {
@@ -455,6 +471,17 @@ export default function DashboardPage() {
           color="#7c3aed" loading={loading} href="/tareas" />
         <KpiCard icon="💸" label="Por pagar"      value={fmt_crc(kpis.totalPagar)}        sub="cuentas a proveedores" color="#f43f5e" loading={loading} href="/pagos" />
         <KpiCard icon="📥" label="Por cobrar"     value={fmt_crc(kpis.totalCobrar)}       sub="cuentas a clientes"    color="#0d9488" loading={loading} href="/finanzas" />
+        <KpiCard
+          icon="↩️"
+          label="Devoluciones"
+          value={devolPend.count ?? 0}
+          sub={devolPend.count
+            ? `${[devolPend.total_crc ? fmt_crc(devolPend.total_crc) : null, devolPend.total_usd ? fmt_usd(devolPend.total_usd) : null].filter(Boolean).join(' + ') || 'pendientes'} sin pagar${devolPend.atrasadas ? ` · ${devolPend.atrasadas} atrasada(s) 🔴` : ''}`
+            : 'todo al día ✓'}
+          color={devolPend.atrasadas ? '#f43f5e' : devolPend.count ? '#f59e0b' : '#059669'}
+          loading={loading}
+          href="/devoluciones"
+        />
         <KpiCard
           icon={posPositiva ? '🟢' : '🔴'}
           label="Posición neta"
@@ -529,6 +556,40 @@ export default function DashboardPage() {
         />
       </div>
 
+      <SectionTitle>PUNTO DE EQUILIBRIO · EN VIVO</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
+        <KpiCard
+          icon="🎯"
+          label="Equilibrio del mes"
+          value={fmt_crc(kpis.equilibrio?.equilibrio_ventas)}
+          sub="venta mínima para no perder"
+          color="#225F74"
+          loading={loading}
+          href="/incomodidad"
+        />
+        <KpiCard
+          icon={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100 ? '🎉' : '📈'}
+          label="Avance del mes"
+          value={kpis.equilibrio?.pct_equilibrio != null ? `${Math.round(parseFloat(kpis.equilibrio.pct_equilibrio))}%` : '—'}
+          sub={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100
+            ? '¡equilibrio cruzado! 🎉'
+            : (kpis.equilibrio?.dia_cruce ? `cruce estimado día ${kpis.equilibrio.dia_cruce}` : 'sin ventas del mes')}
+          color={parseFloat(kpis.equilibrio?.pct_equilibrio) >= 100 ? '#059669' : (kpis.equilibrio?.dia_cruce && kpis.equilibrio.dia_cruce <= 28 ? '#225F74' : '#f43f5e')}
+          loading={loading}
+          href="/incomodidad"
+        />
+        <KpiCard
+          icon="💵"
+          label="Gasto fijo / mes"
+          value={fmt_crc(kpis.equilibrio?.gasto_fijo_final)}
+          sub="automático · promedio 12 meses"
+          color="#ED6E2E"
+          loading={loading}
+          href="/incomodidad"
+        />
+      </div>
+
       <SectionTitle>RENTABILIDAD</SectionTitle>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14, marginBottom: 8 }}>
@@ -588,9 +649,23 @@ export default function DashboardPage() {
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
           }
         </div>
-        {recurrentesHoy.length > 0 && (
+        {(recurrentesHoy.length > 0 || devolPend.count > 0) && (
           <div style={{ ...GLASS.card, padding: '18px 20px' }}>
             <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            {devolPend.count > 0 && (
+              <Link href="/devoluciones" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, marginBottom: 8, background: devolPend.atrasadas ? '#f43f5e18' : '#f59e0b18', border: `1px solid ${devolPend.atrasadas ? '#f43f5e40' : '#f59e0b40'}` }}>
+                  <span style={{ fontSize: '1rem' }}>↩️</span>
+                  <span style={{ fontSize: '0.83rem', color: 'rgba(0,0,0,0.75)', flex: 1 }}>
+                    <b>{devolPend.count} devolución{devolPend.count !== 1 ? 'es' : ''} a clientes</b> sin pagar
+                    {[devolPend.total_crc ? fmt_crc(devolPend.total_crc) : null, devolPend.total_usd ? fmt_usd(devolPend.total_usd) : null].filter(Boolean).length
+                      ? ` · ${[devolPend.total_crc ? fmt_crc(devolPend.total_crc) : null, devolPend.total_usd ? fmt_usd(devolPend.total_usd) : null].filter(Boolean).join(' + ')}`
+                      : ''}
+                    {devolPend.atrasadas ? ` · ${devolPend.atrasadas} atrasada(s) 🔴` : ''}
+                  </span>
+                </div>
+              </Link>
+            )}
             {recurrentesHoy.map((r, i) => (
               <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.06)', fontSize: '0.84rem', color: 'rgba(0,0,0,0.75)' }}>
                 <span style={{ marginRight: 8 }}>🔁</span>{r.titulo}
