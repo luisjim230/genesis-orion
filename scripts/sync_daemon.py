@@ -399,7 +399,7 @@ def _disparar_reporte(nombre, script, flag):
     rc = -1
     try:
         r = subprocess.run([PYTHON, str(SCRIPTS / script), "--send"],
-                           cwd=str(SCRIPTS), capture_output=True, text=True, timeout=180)
+                           cwd=str(SCRIPTS), capture_output=True, text=True, timeout=300)
         rc = r.returncode
         log.info(f"{flag} {nombre} rc={rc}")
         if rc != 0:
@@ -411,7 +411,7 @@ def _disparar_reporte(nombre, script, flag):
 
 def _disparar_reporte_async(nombre, script, flag):
     """Como _disparar_reporte pero DESPRENDIDO: para agentes con IA + búsqueda web
-    (fletes, Gabriel) que tardan 2-5 min y no caben en el timeout serial de 180s.
+    (fletes, Gabriel) que tardan 2-5 min y no caben en el timeout serial de 300s.
     El script se manda solo a Telegram al terminar; no bloqueamos el daemon.
     El Latido (lun-sáb 20:00) y la frescura del reporte guardado son la red de
     seguridad si la corrida desprendida fallara."""

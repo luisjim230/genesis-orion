@@ -20,7 +20,7 @@ Uso:
   python vigilante_fletes.py            -> investiga e imprime (NO envía)
   python vigilante_fletes.py --send     -> envía el reporte a Telegram
 """
-import os, sys, json, urllib.request, urllib.error
+import os, sys, json, urllib.request, urllib.error, time
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -62,7 +62,7 @@ def enviar(msg):
         data=json.dumps({"chat_id": TG_CHAT, "text": msg, "parse_mode": "HTML",
                          "disable_web_page_preview": True}).encode(),
         headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read())
 
 SYSTEM = (
@@ -102,27 +102,38 @@ def investigar():
         "formato, con la lectura práctica para alguien que trae contenedores de acabados."
     )
     messages = [{"role": "user", "content": user}]
-    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}]
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 4}]
     last_text = ""
-    for _ in range(6):
-        body = {"model": MODEL, "max_tokens": 2000, "system": SYSTEM,
-                "tools": tools, "messages": messages}
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(body).encode(),
-            headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01",
-                     "content-type": "application/json"})
-        with urllib.request.urlopen(req, timeout=300) as r:
-            resp = json.loads(r.read())
-        if resp.get("stop_reason") == "refusal":
+    max_loops = 4
+    for loop_num in range(max_loops):
+        try:
+            body = {"model": MODEL, "max_tokens": 2000, "system": SYSTEM,
+                    "tools": tools, "messages": messages}
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=json.dumps(body).encode(),
+                headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                resp = json.loads(r.read())
+            if resp.get("stop_reason") == "refusal":
+                return None
+            txt = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+            if txt.strip():
+                last_text = txt.strip()
+            if resp.get("stop_reason") == "pause_turn":
+                messages.append({"role": "assistant", "content": resp["content"]})
+                continue
+            break
+        except urllib.error.URLError as e:
+            print(f"ERROR en loop {loop_num}: {e}")
+            if loop_num < max_loops - 1:
+                time.sleep(10)
+                continue
             return None
-        txt = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
-        if txt.strip():
-            last_text = txt.strip()
-        if resp.get("stop_reason") == "pause_turn":
-            messages.append({"role": "assistant", "content": resp["content"]})
-            continue
-        break
+        except Exception as e:
+            print(f"ERROR inesperado en loop {loop_num}: {e}")
+            return None
     return last_text or None
 
 def render():
