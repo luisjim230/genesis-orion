@@ -32,6 +32,12 @@ export default async function RootLayout({ children }) {
   // de SOL (sidebar/menú) y sin el gradiente del panel interno.
   const hdrs = await headers();
   const clubPublic = hdrs.get('x-club-public') === '1';
+  // La pantalla de login (marcada por el middleware con x-sol-login) se
+  // renderiza a pantalla completa, SIN el chrome de SOL (sidebar/menú mobile).
+  // Antes el sidebar se dibujaba al costado del login en pantallas anchas
+  // (iPad) y exponía todos los módulos.
+  const loginPage = hdrs.get('x-sol-login') === '1';
+  const bare = clubPublic || loginPage;
 
   return (
     <html lang="es">
@@ -40,7 +46,7 @@ export default async function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <GA4Script />
       </head>
-      {clubPublic ? (
+      {bare ? (
         <body className={rubik.className} style={{ margin: 0, minHeight: '100vh' }}>
           {children}
         </body>
