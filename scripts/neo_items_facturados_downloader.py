@@ -334,8 +334,10 @@ def subir_a_supabase(excel_path):
 
     # ── Upsert: insertar o actualizar por (factura, codigo_interno, bodega) ───
     log.info(f"Insertando/actualizando {total:,} registros...")
+    import time
     BATCH = 80
     ok = 0
+    fallidos = []
     for i in range(0, total, BATCH):
         lote = registros[i:i + BATCH]
         status = supa_request(
@@ -347,7 +349,32 @@ def subir_a_supabase(excel_path):
         if status and status < 300:
             ok += len(lote)
         else:
+            fallidos.append((i, lote))
             log.warning(f"  Lote {i}–{i+len(lote)} falló (status={status})")
+
+    # Segunda pasada: reintentar SOLO los lotes que quedaron caídos. Los fallos
+    # suelen ser blips de red transitorios y el upsert es idempotente
+    # (merge-duplicates), así que reinsertar no duplica. Sin esto, un solo hipo
+    # de red dejaba ok<total y marcaba TODO el sync como fallido (punto rojo)
+    # aunque la data terminara completa en la base — falsa alarma.
+    if fallidos:
+        log.info(f"  ↻ Reintentando {len(fallidos)} lote(s) que fallaron...")
+        time.sleep(5)
+        aun_fallidos = 0
+        for i, lote in fallidos:
+            status = supa_request(
+                "POST",
+                f"{TABLA}?on_conflict=factura,codigo_interno,bodega",
+                lote,
+                prefer="resolution=merge-duplicates,return=minimal"
+            )
+            if status and status < 300:
+                ok += len(lote)
+            else:
+                aun_fallidos += 1
+                log.error(f"  ❌ Lote {i} sigue fallando tras reintento (status={status})")
+        if aun_fallidos:
+            log.error(f"  ❌ {aun_fallidos} lote(s) no se pudieron cargar tras reintento")
 
     log.info(f"✅ Supabase: {ok:,}/{total:,} registros cargados")
     exito = ok == total
