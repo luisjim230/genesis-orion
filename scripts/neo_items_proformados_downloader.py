@@ -166,6 +166,18 @@ async def setear_fechas(iframe, f_inicio, f_fin):
     return False
 
 
+async def esperar_red(page, timeout=15000):
+    """Espera a que la red se calme, pero NUNCA aborta si NEO deja conexiones
+    abiertas (polling/keepalive). Bajo carga de horario laboral 'networkidle'
+    puede no alcanzarse nunca y tira Timeout a los 30s; el flujo ya valida el
+    contenido real después de cada navegación, así que un timeout acá no es
+    fatal — seguimos de largo."""
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:
+        pass
+
+
 async def descargar():
     f_inicio, f_fin = rango_30_dias()
     log.info(f"Últimos 30 días: {f_inicio[:2]}/{f_inicio[2:4]}/{f_inicio[4:]} → {f_fin[:2]}/{f_fin[2:4]}/{f_fin[4:]}")
@@ -180,12 +192,12 @@ async def descargar():
         await page.get_by_role("textbox", name="Usuario o correo electrónico").fill(NEO_USUARIO)
         await page.get_by_role("textbox", name="Contraseña").fill(NEO_CLAVE)
         await page.get_by_role("button", name="Ingresar").click()
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         log.info("Login OK")
 
         await page.get_by_title("Perfil").click()
         await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         log.info(f"  Empresa OK ({EMPRESA_ID} = Rojimo)")
 
         if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
@@ -197,7 +209,7 @@ async def descargar():
 
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
         await iframe.get_by_role("link", name=" Ítems proformados").click()
-        await page.wait_for_load_state("networkidle")
+        await esperar_red(page)
         await page.wait_for_timeout(2000)
         log.info("✅ Ítems proformados cargado")
 
@@ -208,11 +220,14 @@ async def descargar():
             await iframe.get_by_role("button", name="Refrescar").click()
         except Exception:
             pass
-        log.info("Esperando datos...")
+        log.info("Esperando datos (reporte grande, puede tardar varios minutos)...")
         try:
-            await iframe.locator("text=registros").wait_for(timeout=120_000)
+            await iframe.locator("text=registros").wait_for(timeout=180_000)
+            # Pausa extra para que termine el render antes de exportar
+            await page.wait_for_timeout(5_000)
         except Exception:
-            await page.wait_for_timeout(10_000)
+            log.warning("Timeout esperando 'registros' — esperando 15s extra")
+            await page.wait_for_timeout(15_000)
 
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         excel_path = DOWNLOAD_DIR / f"items_proformados_{ts}.xlsx"
@@ -345,9 +360,13 @@ def parse_y_subir(excel_path):
     en_rango = sum(1 for f in fechas_vistas if f and hace30 <= f <= hoy_str)
 
     if total == 0:
-        log.error("❌ Payload vacío")
-        alerta_telegram(f"⚠️ <b>Ítems proformados</b>\nSin datos en los últimos 30 días. Revisar NEO.")
-        return False
+        # El negocio SIEMPRE tiene proformas: 0 filas = descarga rota/incompleta
+        # (NEO no terminó de cargar el reporte), no la realidad. No lo tratamos
+        # como "sin datos" ni pisamos el último estado bueno del badge.
+        log.error("❌ Payload vacío — descarga incompleta (NEO no cargó a tiempo)")
+        alerta_telegram("⚠️ <b>Ítems proformados</b>\nDescarga vacía (NEO no cargó a tiempo). "
+                        "No se tocó la data existente; se reintenta en la próxima corrida.")
+        return None
 
     if en_rango == 0:
         log.warning(f"⚠️ Hay {total} líneas pero ninguna en los últimos 30 días")
@@ -375,6 +394,12 @@ def main():
     try:
         excel = asyncio.run(descargar())
         ok = parse_y_subir(excel)
+        if ok is None:
+            # Descarga vacía/incompleta: NO pisar el último estado bueno del badge
+            # (el morning run ya dejó datos frescos). Salgo con error para que el
+            # daemon lo registre, pero sin marcar el reporte como fallido.
+            log.warning("Descarga vacía — conservo el sync_status anterior y salgo con error.")
+            sys.exit(1)
         supa_upsert_sync_status("proformas_items", exitoso=ok)
         sys.exit(0 if ok else 1)
     except Exception as e:
