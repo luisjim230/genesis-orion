@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 
@@ -15,6 +15,19 @@ export default function LoginPage() {
   const [pass, setPass]             = useState('');
   const [error, setError]           = useState(null);
   const [loading, setLoading]       = useState(false);
+
+  // Si el dispositivo ya tiene una sesión válida (ej. un iPad que quedó logueado
+  // hace días), no tiene sentido mostrarle el login: lo mandamos directo a la
+  // app. Evita que se quede en la pantalla de login con una sesión viva detrás.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/');
+        router.refresh();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleLogin(e) {
     e.preventDefault();

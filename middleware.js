@@ -122,8 +122,20 @@ export async function middleware(req) {
     return NextResponse.next({ request: { headers: h } });
   }
 
+  // Login: es una página PÚBLICA (no requiere sesión) pero, a diferencia del
+  // resto, NO debe mostrar el chrome de SOL (sidebar/menú mobile). En pantallas
+  // anchas (iPad en horizontal) el sidebar quedaba visible al costado del login
+  // y, si había una sesión vieja todavía en cookies, listaba todos los módulos
+  // y dejaba entrar sin volver a autenticarse. Marcamos la respuesta con
+  // x-sol-login para que el layout raíz la renderice a pantalla completa, igual
+  // que la página pública del Club.
+  if (pathname.startsWith('/login')) {
+    const h = new Headers(req.headers);
+    h.set('x-sol-login', '1');
+    return NextResponse.next({ request: { headers: h } });
+  }
+
   if (
-    pathname.startsWith('/login') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/marcar-interno') ||
