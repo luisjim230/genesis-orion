@@ -10,8 +10,10 @@ name: SOL — Devoluciones pendientes por Telegram
 
 on:
   schedule:
-    # 9:00 AM hora Costa Rica (UTC-6) = 15:00 UTC, Lun–Sáb
-    - cron: '0 15 * * 1-6'
+    # ~9:25 AM hora Costa Rica (UTC-6). Minuto escalonado (no en punto) para
+    # esquivar la congestión de GitHub al inicio de cada hora, que atrasa y a
+    # veces cancela las corridas programadas. Lunes–Sábado.
+    - cron: '25 15 * * 1-6'
   workflow_dispatch:
 
 jobs:

@@ -50,7 +50,10 @@
 - **Override por módulo:** secrets adicionales tipo `TELEGRAM_CHAT_ID_METRICAS` permiten
   apuntar mensajes a un chat distinto (ej. canal del equipo de WhatsApp). El workflow ya
   tiene la lógica de fallback a `TELEGRAM_CHAT_ID` si el override no está.
-- **Hora estándar de cron:** `0 15 * * 1-6` (9am Costa Rica, lun–sáb). Domingo se omite.
+- **Hora estándar de cron:** ~9am Costa Rica (15:xx UTC), lun–sáb (`* * 1-6`). Domingo se omite.
+  **NUNCA usar minuto en punto (`0 15`)**: GitHub congestiona el inicio de cada hora y atrasa/cancela
+  las corridas programadas. Escalonar cada workflow en un minuto distinto (ej. `7 15`, `13 15`, `19 15`,
+  `25 15`, `31 15`) para que no compitan todos juntos por un runner.
 
 ### GA4 / Métricas Web
 
