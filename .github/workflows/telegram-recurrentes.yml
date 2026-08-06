@@ -2,9 +2,10 @@ name: SOL — Tareas recurrentes por Telegram
 
 on:
   schedule:
-    # 9:00 AM hora Costa Rica (UTC-6) = 15:00 UTC
-    # Lunes–Sábado (domingo se omite, tienda cerrada)
-    - cron: '0 15 * * 1-6'
+    # ~9:07 AM hora Costa Rica (UTC-6). Minuto escalonado (no en punto) para
+    # esquivar la congestión de GitHub al inicio de cada hora, que atrasa y a
+    # veces cancela las corridas programadas. Lunes–Sábado (domingo se omite).
+    - cron: '7 15 * * 1-6'
   workflow_dispatch:
 
 jobs:
