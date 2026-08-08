@@ -127,9 +127,12 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
       if (esCrear) {
         // Aviso anti-duplicado para asientos manuales (no bloquea)
         if (avisarDuplicados && !overrideDupRef.current) {
-          const centros = [...new Set(lineas.map((l) => l.centro_costo_id).filter(Boolean))]
+          // Línea de gasto principal = el débito más grande
+          const principal = lineas.filter((l) => Number(l.debe) > 0)
+            .reduce((best, l) => (!best || Number(l.debe) > Number(best.debe) ? l : best), null)
           const q = new URLSearchParams({ fecha, total: String(totalDebe) })
-          if (centros.length) q.set('centros', centros.join(','))
+          if (principal?.cuenta) q.set('cuenta', principal.cuenta)
+          if (principal?.centro_costo_id) q.set('centro', String(principal.centro_costo_id))
           const sim = await api('/asientos/similares?' + q.toString()).catch(() => [])
           if (Array.isArray(sim) && sim.length) { setDupAviso(sim); setSaving(false); return null }
         }
