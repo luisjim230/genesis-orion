@@ -27,14 +27,15 @@ export async function POST(request, { params }) {
     const { data: lineas } = await db.from('conta_asiento_lineas').select('*').eq('asiento_id', id).order('orden')
     if (!lineas || lineas.length < 2) return bad('El asiento necesita al menos dos líneas.')
 
-    // Todas las cuentas deben ser imputables y activas
+    // Todas las cuentas deben ser imputables, activas y permitidas en gastos
     const codigos = [...new Set(lineas.map((l) => l.cuenta).filter(Boolean))]
-    const { data: cuentas } = await db.from('conta_cuentas').select('codigo,imputable,activa').in('codigo', codigos)
+    const { data: cuentas } = await db.from('conta_cuentas').select('codigo,imputable,activa,permitida_en_gastos').in('codigo', codigos)
     const mapa = new Map((cuentas || []).map((c) => [c.codigo, c]))
     for (const l of lineas) {
       const c = mapa.get(l.cuenta)
       if (!c) return bad(`La cuenta ${l.cuenta || '(vacía)'} no existe en el catálogo.`)
       if (!c.imputable || !c.activa) return bad(`La cuenta ${l.cuenta} no es imputable: elegí una cuenta de detalle.`)
+      if (!c.permitida_en_gastos) return bad(`La cuenta ${l.cuenta} no se puede usar en este módulo (es de ingreso, costo o patrimonio).`)
     }
 
     // Cuadre (defensa en el front; la base también lo valida)

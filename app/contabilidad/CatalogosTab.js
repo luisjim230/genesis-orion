@@ -62,7 +62,8 @@ function Proveedores({ cat, email, esAdmin, recargarCat }) {
     try {
       await guardar({ actor: email, recurso: 'proveedor', id: edit.id,
         clasificacion: edit.clasificacion, cuenta_sugerida: edit.cuenta_sugerida || null,
-        centro_costo_id: edit.centro_costo_id || null, deducible_default: edit.deducible_default, notas: edit.notas || null })
+        centro_costo_id: edit.centro_costo_id || null, deducible_default: edit.deducible_default,
+        cuenta_contrapartida: edit.cuenta_contrapartida || null, notas: edit.notas || null })
       setMsg({ ok: true, t: 'Guardado.' }); setEdit(null); recargarCat?.()
     } catch (e) { setMsg({ ok: false, t: e.message }) }
   }
@@ -104,6 +105,9 @@ function Proveedores({ cat, email, esAdmin, recargarCat }) {
           </Campo>
           <Campo label="Centro de costo">
             <Combobox items={centroItems} value={edit.centro_costo_id} onChange={(v) => setEdit({ ...edit, centro_costo_id: v })} placeholder="—" />
+          </Campo>
+          <Campo label="Cuenta de contrapartida (vacío = Caja General 10-10-10-01)">
+            <Combobox items={cuentaItems} grouped value={edit.cuenta_contrapartida} onChange={(v) => setEdit({ ...edit, cuenta_contrapartida: v })} placeholder="10-10-10-01 · Caja General (por defecto)" />
           </Campo>
           <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 13, margin: '4px 0' }}>
             <input type="checkbox" checked={edit.deducible_default !== false} onChange={(e) => setEdit({ ...edit, deducible_default: e.target.checked })} /> Deducible por defecto

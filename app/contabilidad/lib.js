@@ -108,14 +108,18 @@ export function nombreCuenta(porCodigo, codigo) {
   return c ? `${c.codigo} · ${c.nombre}` : (codigo || '—')
 }
 
+// Cuenta placeholder para gasto sin clasificar (imputable=false).
+export const CUENTA_SIN_CLASIFICAR = '00-SIN-CLASIFICAR'
+
 // ── Constructores de items para los comboboxes ───────────────────────────────
-// Solo cuentas imputable=true AND activa=true son seleccionables.
+// Este módulo es SOLO para gastos: solo se ofrecen cuentas
+// imputable=true AND activa=true AND permitida_en_gastos=true.
 // priority = códigos "más usados" por el proveedor (van arriba).
 export function buildItemsCuentas(cuentas, priority = []) {
   const porCodigo = indexCuentas(cuentas)
   const prio = new Set(priority.filter(Boolean))
   return (cuentas || [])
-    .filter((c) => c.imputable && c.activa)
+    .filter((c) => c.imputable && c.activa && c.permitida_en_gastos)
     .map((c) => ({
       value: c.codigo,
       main: c.codigo,

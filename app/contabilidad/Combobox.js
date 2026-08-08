@@ -12,7 +12,7 @@ import { C, norm } from './lib'
 // items: [{ value, main, sub, group?, keywords?, priority?, disabled? }]
 export default function Combobox({
   items, value, onChange, placeholder = 'Buscar…', disabled = false,
-  grouped = false, autoFocus = false, ariaLabel, tabIndex, onEnterEmpty,
+  grouped = false, autoFocus = false, ariaLabel, tabIndex, onEnterEmpty, warn = false,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -116,9 +116,11 @@ export default function Combobox({
         tabIndex={tabIndex}
         style={{
           width: '100%', textAlign: 'left', padding: '7px 10px', borderRadius: 8,
-          border: `1px solid ${open ? C.naranja : C.bordeFuerte}`,
-          background: disabled ? '#f3f4f6' : 'white', color: selected ? '#111827' : C.grisClaro,
-          fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+          border: `1px solid ${open ? C.naranja : (warn && !selected ? C.ambar : C.bordeFuerte)}`,
+          background: disabled ? '#f3f4f6' : (warn && !selected ? C.ambarBg : 'white'),
+          color: selected ? '#111827' : (warn ? C.ambar : C.grisClaro),
+          fontSize: 13, fontWeight: warn && !selected ? 600 : 400,
+          cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6,
           outline: 'none', boxShadow: open ? `0 0 0 3px ${C.naranja}33` : 'none',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
