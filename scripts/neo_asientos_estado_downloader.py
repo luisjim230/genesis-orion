@@ -182,6 +182,22 @@ def to_iso_date(v):
 
 # ─── DESCARGA ─────────────────────────────────────────────────────────────────
 
+async def escribir_fecha(campo, valor_ddmmaaaa, etiqueta):
+    """Escribe una fecha en un campo con máscara DD/MM/YYYY de forma robusta:
+    selecciona todo (incluido el año), borra y tipea los 8 dígitos uno por uno.
+    Verifica y loguea el valor que quedó."""
+    await campo.click(click_count=3)          # selecciona todo el contenido
+    await campo.press("Backspace")            # borra la selección, año incluido
+    # Tipear dígito por dígito para que la máscara arme DD/MM/YYYY
+    await campo.press_sequentially(valor_ddmmaaaa, delay=70)
+    await campo.press("Tab")
+    try:
+        quedo = await campo.input_value()
+    except Exception:
+        quedo = "?"
+    log.info(f"  Fecha {etiqueta} OK: escribí {valor_ddmmaaaa} → quedó '{quedo}'")
+
+
 async def descargar(inicio, fin):
     from playwright.async_api import async_playwright
 
@@ -227,15 +243,14 @@ async def descargar(inicio, fin):
         log.info("✅ Asientos contables cargado")
 
         # ── Fechas ─────────────────────────────────────────────────────────────
-        # OJO: en esta pantalla el campo es #fFechaInicial (no #fFechaInicio).
-        await iframe.locator("#fFechaInicial").click(click_count=3)
-        await iframe.locator("#fFechaInicial").fill(f_inicio)
-        log.info(f"  Fecha inicio OK: {f_inicio}")
+        # OJO: en esta pantalla el campo es #fFechaInicial (no #fFechaInicio) y
+        # tiene máscara DD/MM/YYYY (el año queda "pegado"). Por eso NO usamos
+        # .fill(): seleccionamos todo, borramos y tipeamos los 8 dígitos uno por
+        # uno, que es como la máscara arma la fecha bien.
+        await escribir_fecha(iframe.locator("#fFechaInicial"), f_inicio, "inicio")
         try:
             await iframe.locator("#fFechaFinal").wait_for(timeout=8000)
-            await iframe.locator("#fFechaFinal").click(click_count=3)
-            await iframe.locator("#fFechaFinal").fill(f_fin)
-            log.info(f"  Fecha fin OK: {f_fin}")
+            await escribir_fecha(iframe.locator("#fFechaFinal"), f_fin, "fin")
         except Exception:
             log.warning(f"  No se encontró #fFechaFinal — continuando solo con inicio={f_inicio}")
 
