@@ -1,0 +1,81 @@
+# Módulo Contabilidad (`/contabilidad`)
+
+Panel para armar asientos contables en Génesis Orión y mandarlos a la cola de
+NEO. El robot (Playwright) que sube los asientos se construye aparte: el panel
+termina su trabajo cuando un asiento queda en estado `aprobado`.
+
+## Alcance de esta entrega
+
+- Solo panel web. **No** incluye el robot de NEO ni la conexión a Gmail.
+- Trabaja sobre las tablas `conta_*` que **ya existían** en Supabase. No crea ni
+  migra tablas.
+
+## Estructura
+
+### Frontend — `app/contabilidad/`
+- `page.js` — módulo con 4 pestañas, buscador universal (`⌘K`) y ayuda (`?`).
+- `lib.js` — helpers de cliente (formato ₡, normalización, fetch, hook de
+  catálogos, constructores de items para los comboboxes, paleta de marca).
+- `Combobox.js` — combobox accesible (teclado + mouse, sin acentos, por código y
+  nombre, agrupado por cuenta título, prioriza las más usadas).
+- `AsientoEditor.js` — editor de asiento línea por línea (reutilizado en Bandeja
+  y Montar). Totales en vivo, control de gasto inusual, atajos y aprobación.
+- `BandejaTab.js` — dropzone XML/PDF, lista de borradores y vista dividida
+  (visor de PDF o resumen legible del XML + editor).
+- `MontarTab.js` — captura manual, con precarga desde plantilla.
+- `EnviadosTab.js` — enviados, panel de atención, filtros, reintentar y export.
+- `CatalogosTab.js` — mantenimiento de proveedores, cuentas, centros y plantillas.
+
+### Backend — `app/api/contabilidad/`
+Todas las rutas usan el `service_role` key (bypassa RLS) vía `_lib.js`.
+- `_lib.js` — parser XML v4.4, clasificación, armado de asiento, reglas de IVA y
+  CABYS (leídas de las tablas, **nunca hardcodeadas**), persistencia y bitácora.
+- `catalogos/` — GET de todos los catálogos + rol del usuario; `mantenimiento/`
+  para edición (solo admin).
+- `asientos/` — listar/crear; `asientos/[id]` ver/editar/descartar/reintentar;
+  `asientos/[id]/aprobar` aprueba con validación de rol, monto máximo,
+  imputabilidad y cuadre, y deja rastro en `conta_bitacora`.
+- `procesar/` — recibe XML y/o PDF (multipart), clasifica y crea borradores.
+- `archivo/` — URL firmada para el visor. `gasto-historico/` — gasto por cuenta
+  (mes actual/anterior) y estadística del proveedor. `exportar/` — Excel.
+
+## Reglas de negocio implementadas
+
+- Solo se ofrecen cuentas `imputable = true AND activa = true` en los selectores.
+- IVA: una línea por cada tarifa distinta del desglose (separa 13% / 1% / 2%),
+  con la cuenta que sale de `conta_reglas_iva`.
+- Clasificación en orden: OC → mercadería (ignora) → proveedor mercadería
+  (ignora) → preguntar (avisa) → gasto (usa cuenta/centro sugeridos) →
+  desconocido (borrador con la cuenta de gasto sin clasificar).
+- Se rechaza cualquier factura cuyo receptor no sea la cédula `3101317661`.
+- El XML manda sobre el PDF si existe para la misma clave.
+- Aprendizaje: al aprobar, se guarda la cédula del emisor en el centro de costo
+  usado (si estaba en blanco).
+- Los totales (`total_debe` / `total_haber`) los calcula un trigger: el front no
+  los escribe. Los errores de los triggers/constraints se muestran en claro.
+
+### Cuenta placeholder para gasto sin clasificar
+
+La columna `conta_asiento_lineas.cuenta` es `NOT NULL` con FK a `conta_cuentas`,
+así que una cuenta "en blanco" no se puede guardar. Para proveedores nuevos se
+usa la cuenta **título `70` (GASTOS OPERATIVOS, imputable=false)** como
+placeholder: satisface el FK pero, al no ser imputable, la aprobación queda
+bloqueada hasta que un humano elija la cuenta de detalle real.
+
+## Variables de entorno
+
+- `SUPABASE_SERVICE_ROLE_KEY` — ya usada por otros módulos (Vercel).
+- `ANTHROPIC_API_KEY` — **nueva, opcional**. Solo se necesita para leer **PDFs**
+  (usa el modelo Haiku). Los **XML funcionan sin ella**. Si falta, la carga de
+  PDF devuelve un mensaje claro pidiendo configurarla en Vercel.
+
+## Storage
+
+Bucket privado `contabilidad` (creado): guarda los XML/PDF de las facturas. El
+visor los abre con URL firmada temporal.
+
+## Atajos de teclado
+
+`⌘S` guardar · `⌘Enter` aprobar · `⌘K` buscador · `Enter` nueva línea ·
+`⌘⌫` borrar línea · `⌘↓/⌘↑` navegar facturas · `Esc` cerrar · `?` ayuda.
+Toda acción con atajo tiene también su botón visible en pantalla.
