@@ -11,10 +11,11 @@ conciliar y dejar de contar como reales los asientos Anulados o Registrados.
 Está calcado de neo_movimientos_contables_downloader.py y usa el mismo
 neo_session.py para el manejo de sesión.
 
-Cómo correr manualmente (M1):
-  cd ~/Documents/GitHub/genesis-orion/scripts
-  python3 neo_asientos_estado_downloader.py                 # últimos 90 días
-  python3 neo_asientos_estado_downloader.py --desde 01/01/2026 --hasta 31/03/2026
+Cómo correr manualmente (M1) — usar el Python del venv, NO python3 del sistema:
+  cd ~/genesis-orion
+  .venv/bin/python scripts/neo_asientos_estado_downloader.py                 # últimos 90 días
+  .venv/bin/python scripts/neo_asientos_estado_downloader.py --desde 2026-05-01
+  .venv/bin/python scripts/neo_asientos_estado_downloader.py --desde 01/01/2026 --hasta 31/03/2026
 
 Horario automático: LaunchAgent com.sol.neo-asientos-estado (lun–sáb 7:30/12:30/17:30).
 
@@ -65,8 +66,6 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 # Perfil de Chrome propio para no compartir cookies con los otros downloaders
 PROFILE_DIR  = BASE / ".pw-profile-asientos"
 LOG_FILE     = BASE / "neo-asientos-estado.log"
-# Nombre del enlace en el menú de Contabilidad (ajustable con Codegen si NEO lo cambia)
-LINK_ASIENTOS = os.getenv("NEO_LINK_ASIENTOS", " Asientos contables")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -183,6 +182,22 @@ def to_iso_date(v):
 
 # ─── DESCARGA ─────────────────────────────────────────────────────────────────
 
+async def escribir_fecha(campo, valor_ddmmaaaa, etiqueta):
+    """Escribe una fecha en un campo con máscara DD/MM/YYYY de forma robusta:
+    selecciona todo (incluido el año), borra y tipea los 8 dígitos uno por uno.
+    Verifica y loguea el valor que quedó."""
+    await campo.click(click_count=3)          # selecciona todo el contenido
+    await campo.press("Backspace")            # borra la selección, año incluido
+    # Tipear dígito por dígito para que la máscara arme DD/MM/YYYY
+    await campo.press_sequentially(valor_ddmmaaaa, delay=70)
+    await campo.press("Tab")
+    try:
+        quedo = await campo.input_value()
+    except Exception:
+        quedo = "?"
+    log.info(f"  Fecha {etiqueta} OK: escribí {valor_ddmmaaaa} → quedó '{quedo}'")
+
+
 async def descargar(inicio, fin):
     from playwright.async_api import async_playwright
 
@@ -221,21 +236,23 @@ async def descargar(inicio, fin):
         await page.wait_for_timeout(2000)
 
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
-        await iframe.get_by_role("link", name=LINK_ASIENTOS).click()
+        # Usar el id (a#108007). Por nombre matchea 2 links (también "Informe de
+        # asientos") y da strict mode violation. Descubierto con Playwright codegen.
+        await iframe.locator("a#108007").click()
         await page.wait_for_load_state("networkidle")
         log.info("✅ Asientos contables cargado")
 
         # ── Fechas ─────────────────────────────────────────────────────────────
-        await iframe.locator("#fFechaInicio").click(click_count=3)
-        await iframe.locator("#fFechaInicio").fill(f_inicio)
-        log.info(f"  Fecha inicio OK: {f_inicio}")
+        # OJO: en esta pantalla el campo es #fFechaInicial (no #fFechaInicio) y
+        # tiene máscara DD/MM/YYYY (el año queda "pegado"). Por eso NO usamos
+        # .fill(): seleccionamos todo, borramos y tipeamos los 8 dígitos uno por
+        # uno, que es como la máscara arma la fecha bien.
+        await escribir_fecha(iframe.locator("#fFechaInicial"), f_inicio, "inicio")
         try:
-            await iframe.locator("#fFechaFin").wait_for(timeout=10000)
-            await iframe.locator("#fFechaFin").click(click_count=3)
-            await iframe.locator("#fFechaFin").fill(f_fin)
-            log.info(f"  Fecha fin OK: {f_fin}")
+            await iframe.locator("#fFechaFinal").wait_for(timeout=8000)
+            await escribir_fecha(iframe.locator("#fFechaFinal"), f_fin, "fin")
         except Exception:
-            log.warning(f"  No se encontró #fFechaFin — continuando con inicio={f_inicio}")
+            log.warning(f"  No se encontró #fFechaFinal — continuando solo con inicio={f_inicio}")
 
         # ── Refrescar y esperar datos ──────────────────────────────────────────
         await iframe.get_by_role("button", name="Refrescar").click()
