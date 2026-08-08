@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Combobox from './Combobox'
 import {
-  C, MOD, fmtCRC, r2, api, indexCuentas,
+  C, MOD, fmtCRC, fmtFecha, r2, api, indexCuentas,
   buildItemsCuentas, buildItemsCentros, CUENTA_SIN_CLASIFICAR,
 } from './lib'
 
@@ -10,7 +10,7 @@ import {
 // props:
 //   asiento (con lineas), cat (catálogos), email, onSaved, onApproved,
 //   avisos [], emisorCedula (para gasto inusual), compact
-export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, onDescartar, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar' }) {
+export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, onDescartar, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar', avisarDuplicados = false }) {
   const esCrear = mode === 'crear' || !asiento.id
   const puedeAprobar = ['aprobador', 'admin'].includes(cat?.yo?.rol)
   const montoMax = cat?.yo?.monto_maximo != null ? Number(cat.yo.monto_maximo) : null
@@ -26,6 +26,8 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
   const [msg, setMsg] = useState(null)
   const [saving, setSaving] = useState(false)
   const [historico, setHistorico] = useState({ por_cuenta: {}, proveedor_stats: null })
+  const [dupAviso, setDupAviso] = useState(null) // candidatos parecidos (Montar)
+  const overrideDupRef = useRef(false)
 
   // Las cuentas ya usadas en este asiento flotan arriba ("más usadas")
   const cuentasUsadas = useMemo(() => lineas.map((l) => l.cuenta).filter((c) => c && c !== CUENTA_SIN_CLASIFICAR), [lineas])
@@ -123,6 +125,15 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
         deducible, lineas: lineasPayload,
       }
       if (esCrear) {
+        // Aviso anti-duplicado para asientos manuales (no bloquea)
+        if (avisarDuplicados && !overrideDupRef.current) {
+          const centros = [...new Set(lineas.map((l) => l.centro_costo_id).filter(Boolean))]
+          const q = new URLSearchParams({ fecha, total: String(totalDebe) })
+          if (centros.length) q.set('centros', centros.join(','))
+          const sim = await api('/asientos/similares?' + q.toString()).catch(() => [])
+          if (Array.isArray(sim) && sim.length) { setDupAviso(sim); setSaving(false); return null }
+        }
+        overrideDupRef.current = false
         const creado = await api('/asientos', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ...base, tipo_origen: asiento.tipo_origen || 'manual', plantilla_id: asiento.plantilla_id || null, creado_por: email }),
@@ -140,7 +151,7 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
       return { id: asiento.id }
     } catch (e) { setMsg({ ok: false, t: e.message }); return null }
     finally { setSaving(false) }
-  }, [esCrear, asiento.id, asiento.tipo_origen, asiento.plantilla_id, email, fecha, descripcion, moneda, tipoCambio, deducible, lineas, onSaved, onCreated])
+  }, [esCrear, asiento.id, asiento.tipo_origen, asiento.plantilla_id, email, fecha, descripcion, moneda, tipoCambio, deducible, lineas, onSaved, onCreated, avisarDuplicados, totalDebe])
 
   const aprobar = useCallback(async () => {
     if (esCrear) { setMsg({ ok: false, t: 'Primero guardá el borrador; aprobalo desde la Bandeja.' }); return }
@@ -298,6 +309,12 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
           background: msg.ok ? '#dcfce7' : '#fee2e2', color: msg.ok ? C.verde : C.rojo }}>{msg.t}</div>
       )}
 
+      {dupAviso && (
+        <DupAviso candidatos={dupAviso} moneda={moneda}
+          onGuardarIgual={() => { overrideDupRef.current = true; setDupAviso(null); guardar() }}
+          onCancelar={() => setDupAviso(null)} />
+      )}
+
       {/* Acciones */}
       <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
         <button onClick={guardar} disabled={saving} style={btn(C.petroleo)}>
@@ -392,6 +409,58 @@ function desformatMiles(txt) {
   s = s.replace(/\./g, '').replace(',', '.')
   if (s === '' || s === '-' || s === '.') return s === '-' ? '-' : ''
   return s
+}
+
+// Aviso ámbar de posible duplicado (Montar). No bloquea.
+function DupAviso({ candidatos, moneda, onGuardarIgual, onCancelar }) {
+  const [verId, setVerId] = useState(null)
+  const [detalle, setDetalle] = useState(null)
+  async function verExistente(id) {
+    if (verId === id) { setVerId(null); setDetalle(null); return }
+    setVerId(id); setDetalle(null)
+    try { setDetalle(await api(`/asientos/${id}`)) } catch { /* */ }
+  }
+  return (
+    <div style={{ marginTop: 12, background: C.ambarBg, border: `1px solid ${C.ambar}66`, borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ fontWeight: 700, color: C.ambar, fontSize: 13.5, marginBottom: 6 }}>
+        ⚠️ Ya hay {candidatos.length > 1 ? 'asientos parecidos' : 'un asiento parecido'}. ¿Es el mismo gasto?
+      </div>
+      {candidatos.map((c) => (
+        <div key={c.id} style={{ borderTop: `1px solid ${C.ambar}33`, paddingTop: 7, marginTop: 7 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, color: '#111827' }}>
+              <b>#{c.id}</b> · {fmtFecha(c.fecha)} · <b>{fmtCRC(c.total_debe, c.moneda || moneda)}</b>
+              <span style={{ color: C.gris }}> · {c.estado}{c.descripcion ? ` · ${c.descripcion}` : ''}</span>
+            </div>
+            <button onClick={() => verExistente(c.id)}
+              style={{ background: 'white', color: C.vino, border: `1px solid ${C.bordeFuerte}`, borderRadius: 7, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {verId === c.id ? 'Ocultar' : 'Ver el existente'}
+            </button>
+          </div>
+          {verId === c.id && detalle && (
+            <div style={{ marginTop: 6, background: 'white', borderRadius: 8, border: `1px solid ${C.borde}`, padding: '8px 10px' }}>
+              {(detalle.lineas || []).map((l) => (
+                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0', borderBottom: `1px solid ${C.borde}` }}>
+                  <span>{l.cuenta}{l.observacion ? ` · ${l.observacion}` : ''}</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{Number(l.debe) > 0 ? 'D ' + fmtCRC(l.debe, moneda) : 'H ' + fmtCRC(l.haber, moneda)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button onClick={onGuardarIgual}
+          style={{ background: C.petroleo, color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Es distinto, guardar igual
+        </button>
+        <button onClick={onCancelar}
+          style={{ background: 'white', color: C.gris, border: `1px solid ${C.bordeFuerte}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // Ícono de advertencia con detalle en tooltip (hover y foco de teclado).

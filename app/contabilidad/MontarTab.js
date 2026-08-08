@@ -54,6 +54,7 @@ export default function MontarTab({ cat, email, onCreado }) {
         email={email}
         onCreated={(a) => { onCreado?.(a); limpiar() }}
         autoFocusPrimera={!plantillaId}
+        avisarDuplicados
       />
     </div>
   )
