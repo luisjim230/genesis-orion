@@ -1,6 +1,6 @@
 import {
   getDb, ok, bad, handle, cargarContexto, buscarProveedor,
-  armarLineasGasto, crearAsientoConLineas, HttpError,
+  armarLineasGasto, crearAsientoConLineas, modoPruebaActivo, HttpError,
 } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +62,7 @@ export async function POST(request) {
       deducible: proveedor?.deducible_default !== false,
       creado_por: b.creado_por || null,
       pdf_url: f.pdf_path || null,
+      es_prueba: await modoPruebaActivo(),
     }, lineas)
 
     // La factura pasa a estar contabilizada: sale de "Ignoradas"

@@ -368,6 +368,7 @@ export async function crearAsientoConLineas(asiento, lineas) {
     estado: 'borrador',
     creado_por: asiento.creado_por || null,
     pdf_url: asiento.pdf_url || null,
+    es_prueba: asiento.es_prueba === true,
   }).select('*').single()
   if (error) {
     if (error.code === '23505') throw new HttpError(409, 'Ya existe un asiento activo para esta factura.')
@@ -420,4 +421,27 @@ export async function bitacora(asientoId, accion, actor, detalle) {
       asiento_id: asientoId, accion, actor: actor || 'sistema', detalle: detalle || null,
     })
   } catch { /* la bitácora nunca debe romper el flujo principal */ }
+}
+
+// Bitácora de cambios de catálogo/config (sin asiento asociado).
+export async function bitacoraCatalogo(accion, actor, detalle) {
+  return bitacora(null, accion, actor, detalle)
+}
+
+// ── Rol / config ─────────────────────────────────────────────────────────────
+export async function aprobadorDe(email) {
+  if (!email) return null
+  const { data } = await getDb().from('conta_aprobadores')
+    .select('*').eq('email', email).eq('activo', true).maybeSingle()
+  return data || null
+}
+export async function esAdmin(email) {
+  const a = await aprobadorDe(email)
+  return a?.rol === 'admin'
+}
+
+// Flag global de modo prueba (guardado en la base, igual para todos).
+export async function modoPruebaActivo() {
+  const { data } = await getDb().from('conta_config').select('valor').eq('clave', 'modo_prueba').maybeSingle()
+  return data?.valor?.activo === true
 }

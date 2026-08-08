@@ -154,10 +154,11 @@ export function buildItemsProveedores(proveedores) {
 // ── Estados / semáforo ───────────────────────────────────────────────────────
 export const ESTADO_META = {
   borrador:     { label: 'Borrador',     icon: '📝', color: C.gris },
-  aprobado:     { label: 'Aprobado',     icon: '⏳', color: C.petroleo },
-  enviando:     { label: 'Enviando',     icon: '🔄', color: C.naranja },
-  sincronizado: { label: 'Sincronizado', icon: '✅', color: C.verde },
-  conciliado:   { label: 'Conciliado',   icon: '✅✅', color: C.verde },
-  error:        { label: 'Error',        icon: '❌', color: C.rojo },
+  aprobado:     { label: 'Aprobado',     icon: '⏳', color: C.petroleo, hint: 'esperando al robot' },
+  enviando:     { label: 'Enviando',     icon: '🔄', color: C.naranja, hint: 'el robot está trabajando' },
+  sincronizado: { label: 'Sincronizado', icon: '📝', color: C.petroleo, hint: 'en NEO como Registrado, esperando a Marcela' },
+  conciliado:   { label: 'Conciliado',   icon: '✅', color: C.verde, hint: 'Marcela lo aplicó en NEO' },
+  rechazado:    { label: 'Rechazado',    icon: '❌', color: C.rojo, hint: 'Marcela lo anuló en NEO' },
+  error:        { label: 'Error',        icon: '⚠️', color: C.ambar, hint: 'falló el envío' },
   descartado:   { label: 'Descartado',   icon: '🗑️', color: C.grisClaro },
 }

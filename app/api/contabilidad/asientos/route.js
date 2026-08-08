@@ -1,4 +1,4 @@
-import { getDb, ok, bad, handle, crearAsientoConLineas } from '../_lib'
+import { getDb, ok, bad, handle, crearAsientoConLineas, modoPruebaActivo } from '../_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +64,7 @@ export async function POST(request) {
       tipo_cambio: b.tipo_cambio || null,
       deducible: b.deducible !== false,
       creado_por: b.creado_por || null,
+      es_prueba: await modoPruebaActivo(),
     }, lineas)
 
     return ok(a)
