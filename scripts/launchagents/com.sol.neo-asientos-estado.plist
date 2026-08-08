@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent del descargador de estados de asientos de NEO (solo lectura).
+  Corre lunes a sábado a las 7:30, 12:30 y 17:30 (no domingo).
+  Usa /bin/zsh -lc para que el shell de login resuelva python3 (pyenv/homebrew).
+
+  Instalación en la M1 (un solo comando):
+    cp ~/Documents/GitHub/genesis-orion/scripts/launchagents/com.sol.neo-asientos-estado.plist ~/Library/LaunchAgents/ \
+      && launchctl unload ~/Library/LaunchAgents/com.sol.neo-asientos-estado.plist 2>/dev/null; \
+       launchctl load ~/Library/LaunchAgents/com.sol.neo-asientos-estado.plist \
+      && echo "LaunchAgent cargado"
+
+  Si tu clon del repo NO está en ~/Documents/GitHub/genesis-orion, ajustá las
+  rutas de abajo antes de copiarlo.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sol.neo-asientos-estado</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd ~/Documents/GitHub/genesis-orion/scripts &amp;&amp; python3 neo_asientos_estado_downloader.py</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/USUARIO/Documents/GitHub/genesis-orion/scripts</string>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>6</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/Users/USUARIO/Documents/GitHub/genesis-orion/scripts/neo-asientos-estado.launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/USUARIO/Documents/GitHub/genesis-orion/scripts/neo-asientos-estado.launchd.err.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
