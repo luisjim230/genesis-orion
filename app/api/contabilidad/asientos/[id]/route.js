@@ -1,4 +1,4 @@
-import { getDb, ok, bad, handle, bitacora, sanearLineas, HttpError } from '../../_lib'
+import { getDb, ok, bad, handle, bitacora, sanearLineas, aprobadorDe, HttpError } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,9 +32,27 @@ export async function PATCH(request, { params }) {
     if (!a) throw new HttpError(404, 'Asiento no encontrado.')
 
     if (b.accion === 'descartar') {
-      const { error } = await db.from('conta_asientos').update({ estado: 'descartado' }).eq('id', id)
+      const motivo = (b.motivo || '').toString().trim() || 'Sin motivo'
+      const { error } = await db.from('conta_asientos').update({ estado: 'descartado', detalle_error: motivo }).eq('id', id)
       if (error) throw error
-      await bitacora(id, 'descartado', actor, { estado_anterior: a.estado })
+      // Liberar la factura para poder reprocesar el mismo XML
+      if (a.clave_factura) {
+        await db.from('conta_facturas').update({ procesada: false }).eq('clave', a.clave_factura)
+      }
+      await bitacora(id, 'descartado', actor, { estado_anterior: a.estado, motivo })
+      return ok({ ok: true })
+    }
+
+    if (b.accion === 'recuperar') {
+      if (a.estado !== 'descartado') return bad('Solo se puede recuperar un asiento descartado.')
+      const apro = await aprobadorDe(actor)
+      if (!apro || !['aprobador', 'admin'].includes(apro.rol)) return bad('Solo aprobador o admin pueden recuperar.', 403)
+      const { error } = await db.from('conta_asientos').update({ estado: 'borrador', detalle_error: null }).eq('id', id)
+      if (error) throw error
+      if (a.clave_factura) {
+        await db.from('conta_facturas').update({ procesada: true }).eq('clave', a.clave_factura)
+      }
+      await bitacora(id, 'recuperado', actor, {})
       return ok({ ok: true })
     }
 

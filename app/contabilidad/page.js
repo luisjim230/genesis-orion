@@ -88,7 +88,7 @@ export default function ContabilidadPage() {
         <>
           {tab === 'bandeja' && <BandejaTab cat={cat} email={email} recargarCat={recargar} onMontarManual={() => setTab('montar')} />}
           {tab === 'montar' && <MontarTab cat={cat} email={email} onCreado={() => setTab('bandeja')} />}
-          {tab === 'enviados' && <EnviadosTab email={email} esAdmin={cat?.yo?.rol === 'admin'} />}
+          {tab === 'enviados' && <EnviadosTab email={email} rol={cat?.yo?.rol} />}
           {tab === 'catalogos' && <CatalogosTab cat={cat} email={email} recargarCat={recargar} />}
         </>
       )}

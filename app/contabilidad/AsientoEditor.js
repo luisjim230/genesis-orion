@@ -10,7 +10,7 @@ import {
 // props:
 //   asiento (con lineas), cat (catálogos), email, onSaved, onApproved,
 //   avisos [], emisorCedula (para gasto inusual), compact
-export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar' }) {
+export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, onDescartar, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar' }) {
   const esCrear = mode === 'crear' || !asiento.id
   const puedeAprobar = ['aprobador', 'admin'].includes(cat?.yo?.rol)
   const montoMax = cat?.yo?.monto_maximo != null ? Number(cat.yo.monto_maximo) : null
@@ -27,7 +27,9 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
   const [saving, setSaving] = useState(false)
   const [historico, setHistorico] = useState({ por_cuenta: {}, proveedor_stats: null })
 
-  const cuentaItems = useMemo(() => buildItemsCuentas(cat?.cuentas, [descripcion && null].filter(Boolean)), [cat, descripcion])
+  // Las cuentas ya usadas en este asiento flotan arriba ("más usadas")
+  const cuentasUsadas = useMemo(() => lineas.map((l) => l.cuenta).filter((c) => c && c !== CUENTA_SIN_CLASIFICAR), [lineas])
+  const cuentaItems = useMemo(() => buildItemsCuentas(cat?.cuentas, cuentasUsadas), [cat, cuentasUsadas])
   const centroItems = useMemo(() => buildItemsCentros(cat?.centros), [cat])
 
   useEffect(() => {
@@ -159,18 +161,14 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
       const mod = e.metaKey || e.ctrlKey
       if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); guardar() }
       else if (mod && e.key === 'Enter') { e.preventDefault(); if (!esCrear) aprobar() }
+      else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); if (!esCrear && onDescartar) onDescartar(asiento.id) }
       else if (mod && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); borrarLinea(activeLine) }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [guardar, aprobar, borrarLinea, activeLine, esCrear])
+  }, [guardar, aprobar, borrarLinea, activeLine, esCrear, onDescartar, asiento.id])
 
   const cell = { padding: '4px 6px', borderBottom: `1px solid ${C.borde}`, verticalAlign: 'top' }
-  const numInput = {
-    width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: `1px solid ${C.bordeFuerte}`,
-    borderRadius: 6, fontSize: 13, textAlign: 'right', fontVariantNumeric: 'tabular-nums', outline: 'none',
-    fontFamily: 'Rubik, sans-serif',
-  }
 
   return (
     <div>
@@ -213,9 +211,9 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
             <tr style={{ background: C.petroleo, color: 'white' }}>
               <th style={th}>Cuenta</th>
               <th style={th}>Centro de costo</th>
-              <th style={{ ...th, textAlign: 'right', width: 130 }}>Debe</th>
-              <th style={{ ...th, textAlign: 'right', width: 130 }}>Haber</th>
-              <th style={th}>Observación</th>
+              <th style={{ ...th, textAlign: 'right', minWidth: 150 }}>Debe</th>
+              <th style={{ ...th, textAlign: 'right', minWidth: 150 }}>Haber</th>
+              <th style={{ ...th, width: 110 }}>Observación</th>
               <th style={{ ...th, width: 34 }}></th>
             </tr>
           </thead>
@@ -229,22 +227,26 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
               return (
                 <tr key={idx} onFocusCapture={() => setActiveLine(idx)}
                   style={{ background: idx === activeLine ? C.crema : 'white' }}>
-                  <td style={{ ...cell, minWidth: 200 }}>
-                    <Combobox
-                      items={cuentaItems} value={sinClasificar ? null : l.cuenta} grouped
-                      onChange={(v) => setLinea(idx, { cuenta: v })}
-                      placeholder={sinClasificar ? '⚠️ Falta clasificar' : 'Elegir cuenta…'}
-                      warn={sinClasificar} ariaLabel="Cuenta contable"
-                      autoFocus={autoFocusPrimera && idx === 0 && !l.cuenta}
-                    />
-                    {sinClasificar && <div style={{ fontSize: 10.5, color: C.ambar, marginTop: 2, fontWeight: 600 }}>⚠️ Falta clasificar</div>}
-                    {noImput && <div style={{ fontSize: 10.5, color: C.rojo, marginTop: 2 }}>No imputable</div>}
-                    {notaCuenta && <div style={{ fontSize: 10.5, color: C.ambar, marginTop: 2 }}>⚠️ {notaCuenta}</div>}
-                    {Number(l.debe) > 0 && h && (
-                      <div style={{ fontSize: 10.5, color: C.gris, marginTop: 2 }}>
-                        Mes: {fmtCRC(h.mes_actual, moneda)} · Anterior: {fmtCRC(h.mes_anterior, moneda)}
+                  <td style={{ ...cell, minWidth: 220 }}>
+                    <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Combobox
+                          items={cuentaItems} value={sinClasificar ? null : l.cuenta} grouped
+                          onChange={(v) => setLinea(idx, { cuenta: v })}
+                          placeholder={sinClasificar ? 'Falta clasificar' : 'Elegir cuenta…'}
+                          warn={sinClasificar} ariaLabel="Cuenta contable"
+                          autoFocus={autoFocusPrimera && idx === 0 && !l.cuenta}
+                        />
                       </div>
-                    )}
+                      {notaCuenta && <WarnIcon texto={notaCuenta} />}
+                    </div>
+                    {/* Franja de estado de altura fija: nunca desarma la fila */}
+                    <div style={{ height: 15, marginTop: 2, fontSize: 10.5, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {sinClasificar ? <span style={{ color: C.ambar, fontWeight: 600 }}>Falta clasificar</span>
+                        : noImput ? <span style={{ color: C.rojo }}>No se puede usar en gastos</span>
+                        : (Number(l.debe) > 0 && h) ? <span style={{ color: C.gris }}>Mes {fmtCRC(h.mes_actual, moneda)} · anterior {fmtCRC(h.mes_anterior, moneda)}</span>
+                        : null}
+                    </div>
                   </td>
                   <td style={{ ...cell, minWidth: 180 }}>
                     <Combobox
@@ -254,17 +256,17 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
                     />
                   </td>
                   <td style={cell}>
-                    <input type="number" step="0.01" value={l.debe} style={numInput}
-                      onChange={(e) => setLinea(idx, { debe: e.target.value, haber: e.target.value ? '' : l.haber })}
-                      onKeyDown={(e) => onLineaKey(e, idx)} aria-label="Debe" />
+                    <MoneyInput value={l.debe} ariaLabel="Debe"
+                      onChangeRaw={(raw) => setLinea(idx, { debe: raw, haber: raw ? '' : l.haber })}
+                      onKeyDown={(e) => onLineaKey(e, idx)} />
                   </td>
                   <td style={cell}>
-                    <input type="number" step="0.01" value={l.haber} style={numInput}
-                      onChange={(e) => setLinea(idx, { haber: e.target.value, debe: e.target.value ? '' : l.debe })}
-                      onKeyDown={(e) => onLineaKey(e, idx)} aria-label="Haber" />
+                    <MoneyInput value={l.haber} ariaLabel="Haber"
+                      onChangeRaw={(raw) => setLinea(idx, { haber: raw, debe: raw ? '' : l.debe })}
+                      onKeyDown={(e) => onLineaKey(e, idx)} />
                   </td>
                   <td style={cell}>
-                    <input value={l.observacion || ''} style={{ ...inp, minWidth: 120 }}
+                    <input value={l.observacion || ''} style={{ ...inp, minWidth: 90 }}
                       onChange={(e) => setLinea(idx, { observacion: e.target.value })}
                       onKeyDown={(e) => onLineaKey(e, idx)} aria-label="Observación" />
                   </td>
@@ -284,8 +286,8 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
         + Agregar línea <kbd style={kbd}>Enter</kbd>
       </button>
 
-      {/* Totales */}
-      <div style={{ display: 'flex', gap: 18, justifyContent: 'flex-end', alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+      {/* Totales (más grandes que las líneas) */}
+      <div style={{ display: 'flex', gap: 22, justifyContent: 'flex-end', alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
         <Total label="Debe" value={fmtCRC(totalDebe, moneda)} />
         <Total label="Haber" value={fmtCRC(totalHaber, moneda)} />
         <Total label="Diferencia" value={fmtCRC(diferencia, moneda)} color={diferencia === 0 ? C.verde : C.rojo} />
@@ -309,6 +311,13 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
           </button>
         )}
         {!esCrear && razonBloqueo && <span style={{ fontSize: 12, color: C.rojo, alignSelf: 'center' }}>🔒 {razonBloqueo}</span>}
+        {!esCrear && onDescartar && (
+          <button onClick={() => onDescartar(asiento.id)} disabled={saving}
+            title="Descartar este borrador"
+            style={{ marginLeft: 'auto', background: 'white', color: C.gris, border: `1px solid ${C.bordeFuerte}`, borderRadius: 9, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Descartar borrador <kbd style={kbd}>{MOD}D</kbd>
+          </button>
+        )}
       </div>
     </div>
   )
@@ -344,8 +353,63 @@ function Campo({ label, children, grow }) {
 function Total({ label, value, color }) {
   return (
     <div style={{ textAlign: 'right' }}>
-      <div style={{ fontSize: 10, color: C.gris, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: color || C.vino, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.gris, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+      <div style={{ fontSize: 23, fontWeight: 800, color: color || C.vino, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
+  )
+}
+
+// Input de monto: muestra separador de miles en vivo, guarda el número crudo.
+function MoneyInput({ value, onChangeRaw, onKeyDown, ariaLabel }) {
+  const display = formatMiles(value)
+  return (
+    <input
+      inputMode="decimal"
+      value={display}
+      aria-label={ariaLabel}
+      onChange={(e) => onChangeRaw(desformatMiles(e.target.value))}
+      onKeyDown={onKeyDown}
+      style={{
+        width: '100%', minWidth: 130, boxSizing: 'border-box', padding: '6px 9px',
+        border: `1px solid ${C.bordeFuerte}`, borderRadius: 6, fontSize: 14, textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums', outline: 'none', fontFamily: 'Rubik, sans-serif',
+      }}
+    />
+  )
+}
+// "16025.5" -> "16.025,5"  (separador de miles con punto, decimal con coma)
+function formatMiles(raw) {
+  if (raw === '' || raw == null) return ''
+  const s = String(raw)
+  const neg = s.startsWith('-')
+  const [ent, dec] = s.replace('-', '').split('.')
+  const entFmt = (ent || '').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return (neg ? '-' : '') + entFmt + (dec != null ? ',' + dec : '')
+}
+// "16.025,5" -> "16025.5"  (número crudo para guardar)
+function desformatMiles(txt) {
+  let s = String(txt).replace(/[^\d,.-]/g, '')
+  s = s.replace(/\./g, '').replace(',', '.')
+  if (s === '' || s === '-' || s === '.') return s === '-' ? '-' : ''
+  return s
+}
+
+// Ícono de advertencia con detalle en tooltip (hover y foco de teclado).
+function WarnIcon({ texto }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button type="button" aria-label={`Aviso: ${texto}`} title={texto}
+        onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)} onBlur={() => setShow(false)}
+        style={{ background: 'none', border: 'none', cursor: 'help', fontSize: 15, padding: 0, lineHeight: 1, color: C.ambar }}>⚠️</button>
+      {show && (
+        <span role="tooltip" style={{
+          position: 'absolute', top: '120%', right: 0, zIndex: 3500, width: 240,
+          background: '#111827', color: 'white', fontSize: 11.5, lineHeight: 1.35,
+          padding: '7px 9px', borderRadius: 7, boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
+        }}>{texto}</span>
+      )}
+    </span>
   )
 }

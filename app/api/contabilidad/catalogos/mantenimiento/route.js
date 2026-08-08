@@ -19,8 +19,13 @@ export async function POST(request) {
 
     if (b.recurso === 'proveedor') {
       const upd = {}
-      for (const k of ['clasificacion', 'cuenta_sugerida', 'centro_costo_id', 'deducible_default', 'notas', 'plantilla_id', 'cuenta_contrapartida']) {
+      for (const k of ['clasificacion', 'cuenta_sugerida', 'centro_costo_id', 'deducible_default', 'notas', 'plantilla_id', 'cuenta_contrapartida', 'cedula']) {
         if (k in b) upd[k] = b[k] === '' ? null : b[k]
+      }
+      // La cédula es única: evitar chocar con otro proveedor
+      if (upd.cedula) {
+        const { data: dup } = await db.from('conta_proveedores').select('id,nombre').eq('cedula', upd.cedula).neq('id', b.id).maybeSingle()
+        if (dup) return bad(`Esa cédula ya está en "${dup.nombre}".`)
       }
       upd.actualizado_en = new Date().toISOString()
       const { data, error } = await db.from('conta_proveedores').update(upd).eq('id', b.id).select('*').single()

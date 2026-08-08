@@ -52,18 +52,40 @@ export async function GET(request) {
   })
 }
 
-// POST /api/contabilidad/enviados  { accion:'descartar_prueba', actor }  (admin)
+// POST /api/contabilidad/enviados
+//   { accion:'descartar_prueba', actor }        -> descarta todos los de prueba
+//   { accion:'vaciar_descartados_90', actor }   -> borra descartados con +90 días
+// Ambas solo admin.
 export async function POST(request) {
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))
-    if (b.accion !== 'descartar_prueba') return bad('Acción no reconocida.')
-    if (!(await esAdmin(b.actor))) return bad('Solo un admin puede descartar los asientos de prueba.', 403)
-    const { data, error } = await db.from('conta_asientos')
-      .update({ estado: 'descartado' })
-      .eq('es_prueba', true).neq('estado', 'descartado').select('id')
-    if (error) throw error
-    await bitacoraCatalogo('descartar_prueba', b.actor, { cantidad: (data || []).length })
-    return ok({ descartados: (data || []).length })
+    if (!(await esAdmin(b.actor))) return bad('Solo un admin puede hacer esta limpieza.', 403)
+
+    if (b.accion === 'descartar_prueba') {
+      const { data, error } = await db.from('conta_asientos')
+        .update({ estado: 'descartado' })
+        .eq('es_prueba', true).neq('estado', 'descartado').select('id')
+      if (error) throw error
+      await bitacoraCatalogo('descartar_prueba', b.actor, { cantidad: (data || []).length })
+      return ok({ descartados: (data || []).length })
+    }
+
+    if (b.accion === 'vaciar_descartados_90') {
+      const corte = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
+      const { data: viejos } = await db.from('conta_asientos')
+        .select('id').eq('estado', 'descartado').lt('actualizado_en', corte)
+      const ids = (viejos || []).map((x) => x.id)
+      // Dejar rastro-resumen ANTES de borrar (la bitácora de esos asientos se
+      // borra en cascada, así que este resumen es la respuesta que queda).
+      await bitacoraCatalogo('vaciar_descartados_90', b.actor, { cantidad: ids.length, ids })
+      if (ids.length) {
+        const { error } = await db.from('conta_asientos').delete().in('id', ids)
+        if (error) throw error
+      }
+      return ok({ eliminados: ids.length })
+    }
+
+    return bad('Acción no reconocida.')
   })
 }

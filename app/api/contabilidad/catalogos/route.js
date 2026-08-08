@@ -10,7 +10,7 @@ export async function GET(request) {
     const db = getDb()
     const email = new URL(request.url).searchParams.get('email')
 
-    const [cuentas, centros, proveedores, reglas, cabys, plantillas, plineas, yo, cfg] = await Promise.all([
+    const [cuentas, centros, proveedores, reglas, cabys, plantillas, plineas, yo, cfg, uiCfg] = await Promise.all([
       db.from('conta_cuentas').select('codigo,nombre,tipo,codigo_padre,nivel,imputable,activa,permitida_en_gastos,notas').order('codigo'),
       db.from('conta_centros_costo').select('id,nombre_neo,cedula,activo').order('nombre_neo'),
       db.from('conta_proveedores').select('*').order('nombre'),
@@ -20,6 +20,7 @@ export async function GET(request) {
       db.from('conta_plantilla_lineas').select('*').order('plantilla_id').order('orden'),
       email ? db.from('conta_aprobadores').select('*').eq('email', email).maybeSingle() : Promise.resolve({ data: null }),
       db.from('conta_config').select('valor').eq('clave', 'modo_prueba').maybeSingle(),
+      email ? db.from('conta_config').select('valor').eq('clave', 'ui:' + email.toLowerCase()).maybeSingle() : Promise.resolve({ data: null }),
     ])
 
     const lineasPorPlantilla = {}
@@ -37,6 +38,7 @@ export async function GET(request) {
       plantillas: plantillasFull,
       yo: yo.data || null,
       modo_prueba: cfg.data?.valor?.activo === true,
+      ui_prefs: uiCfg.data?.valor || {},
     })
   })
 }
