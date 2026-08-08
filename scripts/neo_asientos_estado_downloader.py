@@ -236,9 +236,11 @@ async def descargar(inicio, fin):
         await page.wait_for_timeout(2000)
 
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
-        # Usar el id (a#108007). Por nombre matchea 2 links (también "Informe de
-        # asientos") y da strict mode violation. Descubierto con Playwright codegen.
-        await iframe.locator("a#108007").click()
+        # Usar el id 108007. OJO: como empieza con dígito, "a#108007" NO es un
+        # selector CSS válido; hay que usar el selector de atributo a[id="108007"].
+        # Por nombre matchea 2 links (también "Informe de asientos") -> strict
+        # mode violation. Descubierto con Playwright codegen.
+        await iframe.locator('a[id="108007"]').click()
         await page.wait_for_load_state("networkidle")
         log.info("✅ Asientos contables cargado")
 
