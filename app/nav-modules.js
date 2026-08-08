@@ -35,6 +35,7 @@ export const ALL_NAV = [
   ]},
   { group: 'Finanzas', items: [
     { href: '/finanzas',          key: 'finanzas',              icon: '💰', name: 'Finanzas' },
+    { href: '/contabilidad',      key: 'contabilidad',          icon: '📒', name: 'Contabilidad' },
     { href: '/proyeccion',        key: 'proyeccion',            icon: '🎯', name: 'Proyección & Equilibrio' },
     { href: '/incomodidad',       key: 'incomodidad',           icon: '🔥', name: 'Panel de Incomodidad' },
     { href: '/finanzas/bancos',   key: 'bancos',                icon: '🏦', name: 'Bancos' },
