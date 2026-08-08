@@ -7,10 +7,10 @@ export const BUCKET = 'contabilidad'
 export const MAX_BYTES = 15 * 1024 * 1024 // 15 MB
 export const RECEPTOR_EMPRESA = '3101317661' // Corporación Rojimo S.A.
 export const CONTRAPARTIDA_DEFAULT = '10-10-10-01' // Caja General
-// Cuenta título (imputable=false) usada como placeholder cuando no sabemos la
+// Cuenta especial (imputable=false) usada como placeholder cuando no sabemos la
 // cuenta de gasto (proveedor nuevo). Satisface el FK pero el gating de
 // aprobación la bloquea hasta que un humano elija la cuenta real de detalle.
-export const CUENTA_SIN_CLASIFICAR = '70' // GASTOS OPERATIVOS
+export const CUENTA_SIN_CLASIFICAR = '00-SIN-CLASIFICAR'
 
 let _sb
 export function getDb() {
@@ -322,7 +322,7 @@ export function armarLineasGasto(factura, proveedor, ctx, destino = 'gasto') {
 }
 
 // ── Persistir factura + asiento + líneas (borrador) ──────────────────────────
-export async function guardarFactura(factura, clasificacion, { xml_path = null, pdf_path = null } = {}) {
+export async function guardarFactura(factura, clasificacion, { xml_path = null, pdf_path = null, procesada = true } = {}) {
   const db = getDb()
   const row = {
     clave: factura.clave,
@@ -346,7 +346,7 @@ export async function guardarFactura(factura, clasificacion, { xml_path = null, 
     condicion_venta: factura.condicion_venta || null,
     clasificacion: clasificacion || 'por_clasificar',
     xml_path, pdf_path,
-    procesada: true,
+    procesada,
   }
   const { data, error } = await db.from('conta_facturas').upsert(row, { onConflict: 'clave' }).select('*').single()
   if (error) throw new HttpError(500, 'No se pudo guardar la factura: ' + error.message)

@@ -19,7 +19,7 @@ export async function POST(request) {
 
     if (b.recurso === 'proveedor') {
       const upd = {}
-      for (const k of ['clasificacion', 'cuenta_sugerida', 'centro_costo_id', 'deducible_default', 'notas', 'plantilla_id']) {
+      for (const k of ['clasificacion', 'cuenta_sugerida', 'centro_costo_id', 'deducible_default', 'notas', 'plantilla_id', 'cuenta_contrapartida']) {
         if (k in b) upd[k] = b[k] === '' ? null : b[k]
       }
       upd.actualizado_en = new Date().toISOString()

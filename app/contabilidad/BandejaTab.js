@@ -11,7 +11,14 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
   const [subiendo, setSubiendo] = useState(false)
   const [resultado, setResultado] = useState(null)
   const [dragOver, setDragOver] = useState(false)
+  const [ignoradas, setIgnoradas] = useState([])
+  const [verIgnoradas, setVerIgnoradas] = useState(false)
+  const [convirtiendo, setConvirtiendo] = useState(null)
   const fileRef = useRef(null)
+
+  const cargarIgnoradas = useCallback(async () => {
+    try { setIgnoradas(await api('/facturas?vista=ignoradas')) } catch { /* */ }
+  }, [])
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -24,7 +31,7 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
     finally { setLoading(false) }
   }, [selId])
 
-  useEffect(() => { cargar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cargar(); cargarIgnoradas() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar detalle del seleccionado
   useEffect(() => {
@@ -58,11 +65,22 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
       if (email) fd.append('creado_por', email)
       const res = await api('/procesar', { method: 'POST', body: fd })
       setResultado(res)
-      await cargar()
+      await cargar(); await cargarIgnoradas()
+      if ((res.ignorados || []).length) setVerIgnoradas(true)
       recargarCat?.()
     } catch (e) { setResultado({ error: e.message }) }
     finally { setSubiendo(false) }
-  }, [email, cargar, recargarCat])
+  }, [email, cargar, cargarIgnoradas, recargarCat])
+
+  const convertir = useCallback(async (clave) => {
+    setConvirtiendo(clave)
+    try {
+      const r = await api('/facturas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'convertir', clave, creado_por: email }) })
+      await cargar(); await cargarIgnoradas()
+      if (r.asiento_id) setSelId(r.asiento_id)
+    } catch (e) { alert(e.message) }
+    finally { setConvirtiendo(null) }
+  }, [email, cargar, cargarIgnoradas])
 
   return (
     <div>
@@ -90,6 +108,34 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
       </div>
 
       {resultado && <ResultadoCarga r={resultado} onClose={() => setResultado(null)} />}
+
+      {/* Ignoradas (plegable) */}
+      {ignoradas.length > 0 && (
+        <div style={{ border: `1px solid ${C.ambar}55`, background: C.ambarBg + '66', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
+          <button onClick={() => setVerIgnoradas((v) => !v)}
+            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: C.ambar, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'inherit' }}>
+            <span>⏭️ Ignoradas ({ignoradas.length}) — leídas pero no contabilizadas</span>
+            <span>{verIgnoradas ? '▲' : '▼'}</span>
+          </button>
+          {verIgnoradas && (
+            <div style={{ borderTop: `1px solid ${C.ambar}33`, maxHeight: 320, overflowY: 'auto' }}>
+              {ignoradas.map((f) => (
+                <div key={f.clave} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${C.ambar}22`, fontSize: 12.5 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre_emisor || f.cedula_emisor || 'Proveedor'}</div>
+                    <div style={{ color: C.gris, fontSize: 11.5 }}>
+                      {fmtFecha(f.fecha_emision)} · {fmtCRC(f.total_comprobante, f.moneda)}{f.num_oc ? ` · ${f.num_oc}` : ''}
+                    </div>
+                  </div>
+                  <button disabled={convirtiendo === f.clave} onClick={() => convertir(f.clave)} style={btn(C.petroleo)}>
+                    {convirtiendo === f.clave ? 'Convirtiendo…' : 'Convertir en gasto'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Split: lista | detalle */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) 1fr', gap: 14, alignItems: 'start' }}>

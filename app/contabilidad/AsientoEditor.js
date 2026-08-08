@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Combobox from './Combobox'
 import {
   C, MOD, fmtCRC, r2, api, indexCuentas,
-  buildItemsCuentas, buildItemsCentros,
+  buildItemsCuentas, buildItemsCentros, CUENTA_SIN_CLASIFICAR,
 } from './lib'
 
 // Editor de asiento línea por línea. Reutilizado en Bandeja y Montar.
@@ -67,20 +67,25 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
   }, [historico, totalDebe])
 
   // ── Gating de aprobación (espejo de la validación del backend) ──────────────
-  const cuentasNoImputables = useMemo(() => lineas
-    .filter((l) => l.cuenta)
-    .filter((l) => { const c = porCodigo.get(l.cuenta); return !c || !c.imputable || !c.activa })
-    .map((l) => l.cuenta), [lineas, porCodigo])
+  const cuentaInvalida = useMemo(() => {
+    for (const l of lineas) {
+      if (!l.cuenta) continue
+      const c = porCodigo.get(l.cuenta)
+      if (!c || !c.imputable || !c.activa) return { cuenta: l.cuenta, motivo: 'no es imputable' }
+      if (!c.permitida_en_gastos) return { cuenta: l.cuenta, motivo: 'no es válida para gastos' }
+    }
+    return null
+  }, [lineas, porCodigo])
 
   const razonBloqueo = useMemo(() => {
     if (lineas.filter((l) => Number(l.debe) || Number(l.haber)).length < 2) return 'Necesita al menos dos líneas con monto.'
     if (diferencia !== 0) return `No cuadra: diferencia de ${fmtCRC(Math.abs(diferencia), moneda)}.`
     if (lineas.some((l) => !l.cuenta)) return 'Hay líneas sin cuenta.'
-    if (cuentasNoImputables.length) return `Cuenta no imputable: ${cuentasNoImputables[0]}.`
+    if (cuentaInvalida) return `Cuenta ${cuentaInvalida.cuenta} ${cuentaInvalida.motivo}.`
     if (!puedeAprobar) return 'Tu rol no puede aprobar (solo aprobador o admin).'
     if (montoMax != null && totalDebe > montoMax) return `Supera tu monto máximo (${fmtCRC(montoMax, moneda)}).`
     return null
-  }, [lineas, diferencia, cuentasNoImputables, puedeAprobar, montoMax, totalDebe, moneda])
+  }, [lineas, diferencia, cuentaInvalida, puedeAprobar, montoMax, totalDebe, moneda])
 
   // ── Manipulación de líneas ──────────────────────────────────────────────────
   const setLinea = useCallback((idx, patch) => {
@@ -217,18 +222,24 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
           <tbody>
             {lineas.map((l, idx) => {
               const h = historico.por_cuenta?.[l.cuenta]
-              const noImput = l.cuenta && (() => { const c = porCodigo.get(l.cuenta); return !c || !c.imputable })()
+              const cuentaObj = l.cuenta ? porCodigo.get(l.cuenta) : null
+              const sinClasificar = l.cuenta === CUENTA_SIN_CLASIFICAR
+              const noImput = !sinClasificar && l.cuenta && (!cuentaObj || !cuentaObj.imputable)
+              const notaCuenta = cuentaObj?.notas
               return (
                 <tr key={idx} onFocusCapture={() => setActiveLine(idx)}
                   style={{ background: idx === activeLine ? C.crema : 'white' }}>
                   <td style={{ ...cell, minWidth: 200 }}>
                     <Combobox
-                      items={cuentaItems} value={l.cuenta} grouped
+                      items={cuentaItems} value={sinClasificar ? null : l.cuenta} grouped
                       onChange={(v) => setLinea(idx, { cuenta: v })}
-                      placeholder="Elegir cuenta…" ariaLabel="Cuenta contable"
+                      placeholder={sinClasificar ? '⚠️ Falta clasificar' : 'Elegir cuenta…'}
+                      warn={sinClasificar} ariaLabel="Cuenta contable"
                       autoFocus={autoFocusPrimera && idx === 0 && !l.cuenta}
                     />
+                    {sinClasificar && <div style={{ fontSize: 10.5, color: C.ambar, marginTop: 2, fontWeight: 600 }}>⚠️ Falta clasificar</div>}
                     {noImput && <div style={{ fontSize: 10.5, color: C.rojo, marginTop: 2 }}>No imputable</div>}
+                    {notaCuenta && <div style={{ fontSize: 10.5, color: C.ambar, marginTop: 2 }}>⚠️ {notaCuenta}</div>}
                     {Number(l.debe) > 0 && h && (
                       <div style={{ fontSize: 10.5, color: C.gris, marginTop: 2 }}>
                         Mes: {fmtCRC(h.mes_actual, moneda)} · Anterior: {fmtCRC(h.mes_anterior, moneda)}

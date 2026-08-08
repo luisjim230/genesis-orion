@@ -72,9 +72,11 @@ async function procesarFactura(factura, file, ctx, creadoPor) {
   // 4) Subir el archivo al bucket privado
   const storagePath = await subirArchivo(file, factura)
 
-  // 5) Mercadería / ignorar -> guardamos la factura pero NO creamos asiento
+  // 5) Mercadería / ignorar -> guardamos la factura (nunca se borra) marcada
+  //    procesada=false, para que aparezca en "Ignoradas" y se pueda revisar /
+  //    convertir en gasto. NO creamos asiento.
   if (cls.decision === 'ignorar') {
-    await guardarFactura(factura, 'mercaderia', storagePath)
+    await guardarFactura(factura, 'mercaderia', { ...storagePath, procesada: false })
     return { tipo: 'ignorado', archivo: nombre, motivo: cls.motivo, proveedor: proveedor?.nombre || factura.nombre_emisor }
   }
 

@@ -41,7 +41,9 @@ Todas las rutas usan el `service_role` key (bypassa RLS) vía `_lib.js`.
 
 ## Reglas de negocio implementadas
 
-- Solo se ofrecen cuentas `imputable = true AND activa = true` en los selectores.
+- Módulo **solo de gastos**: los selectores ofrecen únicamente cuentas
+  `imputable = true AND activa = true AND permitida_en_gastos = true` (283 de 340;
+  quedan fuera Ingreso, Costo y Patrimonio). La aprobación valida lo mismo.
 - IVA: una línea por cada tarifa distinta del desglose (separa 13% / 1% / 2%),
   con la cuenta que sale de `conta_reglas_iva`.
 - Clasificación en orden: OC → mercadería (ignora) → proveedor mercadería
@@ -58,9 +60,28 @@ Todas las rutas usan el `service_role` key (bypassa RLS) vía `_lib.js`.
 
 La columna `conta_asiento_lineas.cuenta` es `NOT NULL` con FK a `conta_cuentas`,
 así que una cuenta "en blanco" no se puede guardar. Para proveedores nuevos se
-usa la cuenta **título `70` (GASTOS OPERATIVOS, imputable=false)** como
-placeholder: satisface el FK pero, al no ser imputable, la aprobación queda
-bloqueada hasta que un humano elija la cuenta de detalle real.
+usa la cuenta **`00-SIN-CLASIFICAR` (imputable=false)** como placeholder:
+satisface el FK pero, al no ser imputable, la aprobación queda bloqueada hasta
+que un humano elija la cuenta de detalle real. En la interfaz se muestra en
+ámbar con "Falta clasificar" para que no se confunda con una cuenta real.
+
+### Facturas ignoradas
+
+Las facturas de mercadería o con orden de compra no se descartan: se guardan en
+`conta_facturas` con `clasificacion = 'mercaderia'` y `procesada = false`, y
+aparecen en la sección plegable **"Ignoradas (N)"** de la Bandeja. Desde ahí, el
+botón **"Convertir en gasto"** crea el borrador y marca la factura como
+procesada. Una factura leída nunca se borra.
+
+### Contrapartida por proveedor
+
+`conta_proveedores.cuenta_contrapartida` (editable en Catálogos → Proveedores)
+define la cuenta del haber. Si es `null`, se usa `10-10-10-01` Caja General.
+
+### Avisos de cuenta (`notas`)
+
+Si la cuenta seleccionada tiene texto en `conta_cuentas.notas`, se muestra debajo
+del campo en ámbar con ⚠️ (informativo, no bloquea). Aplica en Bandeja y Montar.
 
 ## Variables de entorno
 
