@@ -134,14 +134,17 @@ function Proveedores({ cat, email, esAdmin, recargarCat }) {
     let l = cat?.proveedores || []
     if (filtro === 'por_clasificar') l = l.filter((p) => ['por_clasificar', 'preguntar'].includes(p.clasificacion) || !p.cuenta_sugerida)
     else if (filtro === 'preguntar') l = l.filter((p) => p.clasificacion === 'preguntar')
+    else if (filtro === 'sin_cedula') l = l.filter((p) => !p.cedula)
     const nq = norm(q)
     if (nq) l = l.filter((p) => norm(p.nombre + ' ' + (p.cedula || '')).includes(nq))
-    return l.slice(0, 300)
+    // Orden por defecto: los que más pesan primero (veces_visto desc)
+    return [...l].sort((a, b) => (b.veces_visto || 0) - (a.veces_visto || 0)).slice(0, 300)
   }, [cat, q, filtro])
 
   async function onSave() {
     try {
       await guardar({ actor: email, recurso: 'proveedor', id: edit.id,
+        cedula: edit.cedula || null,
         clasificacion: edit.clasificacion, cuenta_sugerida: edit.cuenta_sugerida || null,
         centro_costo_id: edit.centro_costo_id || null, deducible_default: edit.deducible_default,
         cuenta_contrapartida: edit.cuenta_contrapartida || null, notas: edit.notas || null })
@@ -154,20 +157,20 @@ function Proveedores({ cat, email, esAdmin, recargarCat }) {
       <Barra>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar proveedor…" style={inp} />
         <select value={filtro} onChange={(e) => setFiltro(e.target.value)} style={inp}>
-          <option value="todos">Todos</option><option value="por_clasificar">Por clasificar</option><option value="preguntar">Preguntar</option>
+          <option value="todos">Todos</option><option value="por_clasificar">Por clasificar</option><option value="preguntar">Preguntar</option><option value="sin_cedula">Sin cédula</option>
         </select>
       </Barra>
       <Msg msg={msg} />
       <Tabla>
-        <thead><tr style={trh}><th style={th}>Proveedor</th><th style={th}>Cédula</th><th style={th}>Clasificación</th><th style={th}>Cuenta sugerida</th><th style={th}>Confianza</th><th style={th}></th></tr></thead>
+        <thead><tr style={trh}><th style={th}>Proveedor</th><th style={th}>Cédula</th><th style={{ ...th, textAlign: 'right' }}>Visto</th><th style={th}>Clasificación</th><th style={th}>Cuenta sugerida</th><th style={th}></th></tr></thead>
         <tbody>
           {lista.map((p) => (
             <tr key={p.id} style={tr}>
               <td style={td}>{p.nombre}</td>
-              <td style={td}>{p.cedula || '—'}</td>
+              <td style={td}>{p.cedula || <span style={{ color: C.ambar }}>sin cédula</span>}</td>
+              <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{p.veces_visto || 0}</td>
               <td style={td}><Chip v={p.clasificacion} /></td>
               <td style={td}>{p.cuenta_sugerida || '—'}</td>
-              <td style={td}>{p.confianza != null ? Math.round(p.confianza) + '%' : '—'}</td>
               <td style={td}>{esAdmin && <button style={btnSm} onClick={() => setEdit({ ...p })}>Editar</button>}</td>
             </tr>
           ))}
@@ -176,6 +179,9 @@ function Proveedores({ cat, email, esAdmin, recargarCat }) {
 
       {edit && (
         <Modal onClose={() => setEdit(null)} titulo={`Editar: ${edit.nombre}`}>
+          <Campo label="Cédula">
+            <input value={edit.cedula || ''} onChange={(e) => setEdit({ ...edit, cedula: e.target.value })} style={inp} placeholder="Cédula del proveedor" />
+          </Campo>
           <Campo label="Clasificación">
             <select value={edit.clasificacion} onChange={(e) => setEdit({ ...edit, clasificacion: e.target.value })} style={inp}>
               {['gasto', 'mercaderia', 'preguntar', 'ignorar', 'por_clasificar'].map((x) => <option key={x} value={x}>{x}</option>)}

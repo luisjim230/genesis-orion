@@ -2,7 +2,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { C, fmtCRC, fmtFecha, fmtFechaHora, api, ESTADO_META } from './lib'
 
-export default function EnviadosTab({ email, esAdmin }) {
+export default function EnviadosTab({ email, rol }) {
+  const esAdmin = rol === 'admin'
+  const puedeRecuperar = rol === 'admin' || rol === 'aprobador'
   const [rows, setRows] = useState([])
   const [conciliacionActiva, setConciliacionActiva] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -49,11 +51,31 @@ export default function EnviadosTab({ email, esAdmin }) {
   }, [email, cargar])
 
   async function descartarPruebas() {
-    if (!confirm('¿Descartar TODOS los asientos de prueba? Esto los marca como descartados y no se puede deshacer.')) return
+    if (!confirm('¿Descartar todos los asientos de prueba? Quedan consultables como descartados.')) return
     setBusy('prueba')
     try {
       const r = await api('/enviados', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'descartar_prueba', actor: email }) })
       alert(`Se descartaron ${r.descartados} asiento(s) de prueba.`)
+      await cargar()
+    } catch (e) { alert(e.message) }
+    finally { setBusy(null) }
+  }
+
+  const recuperar = useCallback(async (id) => {
+    setBusy(id)
+    try {
+      await api(`/asientos/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'recuperar', actor: email }) })
+      await cargar()
+    } catch (e) { alert(e.message) }
+    finally { setBusy(null) }
+  }, [email, cargar])
+
+  async function vaciarDescartados() {
+    if (prompt('Esto elimina definitivamente los descartados con más de 90 días. Escribí VACIAR para confirmar:') !== 'VACIAR') return
+    setBusy('vaciar')
+    try {
+      const r = await api('/enviados', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'vaciar_descartados_90', actor: email }) })
+      alert(`Se eliminaron ${r.eliminados} descartado(s) viejo(s).`)
       await cargar()
     } catch (e) { alert(e.message) }
     finally { setBusy(null) }
@@ -95,7 +117,7 @@ export default function EnviadosTab({ email, esAdmin }) {
         <Campo label="Estado">
           <select value={estado} onChange={(e) => setEstado(e.target.value)} style={inp}>
             <option value="todos">Todos</option>
-            {['aprobado', 'enviando', 'sincronizado', 'conciliado', 'rechazado', 'error'].map((s) => <option key={s} value={s}>{ESTADO_META[s].label}</option>)}
+            {['aprobado', 'enviando', 'sincronizado', 'conciliado', 'rechazado', 'error', 'descartado'].map((s) => <option key={s} value={s}>{ESTADO_META[s].label}</option>)}
           </select>
         </Campo>
         <Campo label="Desde"><input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={inp} /></Campo>
@@ -106,7 +128,9 @@ export default function EnviadosTab({ email, esAdmin }) {
         </label>
         <button onClick={cargar} style={btn(C.petroleo)}>Filtrar</button>
         <button onClick={exportar} style={btn(C.verde)}>⬇ Exportar Excel</button>
-        {esAdmin && <button onClick={descartarPruebas} disabled={busy === 'prueba'} style={btn(C.ambar)}>🧪 Descartar pruebas</button>}
+        {esAdmin && estado === 'descartado' && <button onClick={descartarPruebas} disabled={busy === 'prueba'} style={btn(C.ambar)}>🧪 Descartar pruebas</button>}
+        {esAdmin && estado === 'descartado' && <button onClick={vaciarDescartados} disabled={busy === 'vaciar'} style={btn(C.rojo)}>🗑️ Vaciar +90 días</button>}
+        {esAdmin && estado !== 'descartado' && <button onClick={descartarPruebas} disabled={busy === 'prueba'} style={btn(C.ambar)}>🧪 Descartar pruebas</button>}
       </div>
 
       {/* Tabla */}
@@ -139,7 +163,10 @@ export default function EnviadosTab({ email, esAdmin }) {
                       <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtCRC(r.total_debe, r.moneda)}</td>
                       <td style={td}>{r.asiento_neo || '—'}</td>
                       <td style={{ ...td, fontSize: 11.5 }}>{r.aprobado_por || '—'}<br /><span style={{ color: C.gris }}>{fmtFechaHora(r.aprobado_en)}</span></td>
-                      <td style={td}>{r.estado === 'error' && <button disabled={busy === r.id} onClick={() => reintentar(r.id)} style={btnSm(C.naranja)}>{busy === r.id ? '…' : 'Reintentar'}</button>}</td>
+                      <td style={td}>
+                        {r.estado === 'error' && <button disabled={busy === r.id} onClick={() => reintentar(r.id)} style={btnSm(C.naranja)}>{busy === r.id ? '…' : 'Reintentar'}</button>}
+                        {r.estado === 'descartado' && puedeRecuperar && <button disabled={busy === r.id} onClick={() => recuperar(r.id)} style={btnSm(C.petroleo)}>{busy === r.id ? '…' : 'Recuperar'}</button>}
+                      </td>
                     </tr>
                   )
                 })}

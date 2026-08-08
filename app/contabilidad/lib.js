@@ -120,14 +120,19 @@ export function buildItemsCuentas(cuentas, priority = []) {
   const prio = new Set(priority.filter(Boolean))
   return (cuentas || [])
     .filter((c) => c.imputable && c.activa && c.permitida_en_gastos)
-    .map((c) => ({
-      value: c.codigo,
-      main: c.codigo,
-      sub: c.nombre,
-      group: tituloPadre(porCodigo, c),
-      keywords: c.codigo + ' ' + c.nombre + ' ' + (c.tipo || ''),
-      priority: prio.has(c.codigo) ? 10 : 0,
-    }))
+    .map((c) => {
+      const grupo = tituloPadre(porCodigo, c)
+      return {
+        value: c.codigo,
+        main: c.nombre,                                   // 1ª línea: el nombre (se envuelve)
+        sub: `${c.codigo} · ${c.tipo}${grupo ? ' · ' + grupo : ''}`, // 2ª línea: apoyo
+        display: `${c.codigo} · ${c.nombre}`,             // texto del disparador
+        group: grupo,
+        keywords: c.codigo + ' ' + c.nombre + ' ' + (c.tipo || ''),
+        priority: prio.has(c.codigo) ? 10 : 0,
+        veces: 0,
+      }
+    })
 }
 export function buildItemsCentros(centros, priority = []) {
   const prio = new Set(priority.filter(Boolean))
@@ -136,18 +141,21 @@ export function buildItemsCentros(centros, priority = []) {
     .map((c) => ({
       value: c.id,
       main: c.nombre_neo,
-      sub: c.cedula || '',
+      sub: c.cedula ? `Cédula ${c.cedula}` : '',
       keywords: c.nombre_neo + ' ' + (c.cedula || ''),
       priority: prio.has(c.id) ? 10 : 0,
+      veces: 0,
     }))
 }
-export function buildItemsProveedores(proveedores) {
+export function buildItemsProveedores(proveedores, priority = []) {
+  const prio = new Set(priority.filter(Boolean))
   return (proveedores || []).map((p) => ({
     value: p.id,
     main: p.nombre,
-    sub: (p.cedula || '') + (p.clasificacion ? ` · ${p.clasificacion}` : ''),
+    sub: `${p.cedula || 'sin cédula'} · ${p.cuenta_sugerida || 'sin cuenta'} · visto ${p.veces_visto || 0} veces`,
     keywords: p.nombre + ' ' + (p.cedula || ''),
-    priority: (p.veces_visto || 0) > 20 ? 5 : 0,
+    priority: prio.has(p.id) ? 10 : 0,
+    veces: p.veces_visto || 0,
   }))
 }
 

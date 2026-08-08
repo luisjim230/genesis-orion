@@ -98,6 +98,7 @@ export function parseFacturaXML(xmlRaw) {
   const cedEmisor = (val(firstBlock(emisorBlock, 'Identificacion') || '', 'Numero') || '').trim()
   const cedReceptor = (val(firstBlock(receptorBlock, 'Identificacion') || '', 'Numero') || '').trim()
   const nombreEmisor = val(emisorBlock, 'Nombre') || ''
+  const correoEmisor = (val(emisorBlock, 'CorreoElectronico') || '').trim() || null
 
   const resumen = firstBlock(xml, 'ResumenFactura') || ''
   const moneda = val(firstBlock(resumen, 'CodigoTipoMoneda') || resumen, 'CodigoMoneda') || 'CRC'
@@ -154,6 +155,8 @@ export function parseFacturaXML(xmlRaw) {
   const totalDescuentos = num(resumen, 'TotalDescuentos') || lineas.reduce((s, l) => s + l.descuento, 0)
   const totalGravado = num(resumen, 'TotalGravado')
   const totalExento = num(resumen, 'TotalExento')
+  const totalNoSujeto = num(resumen, 'TotalNoSujeto') || num(resumen, 'TotalMercNoSujeta')
+  const totalExonerado = num(resumen, 'TotalExonerado')
   const ventaNeta = num(resumen, 'TotalVentaNeta') || (totalComprobante - totalImpuesto)
 
   return {
@@ -162,12 +165,15 @@ export function parseFacturaXML(xmlRaw) {
     tipo_documento: rootName(xml),
     cedula_emisor: cedEmisor,
     nombre_emisor: nombreEmisor,
+    correo_emisor: correoEmisor,
     cedula_receptor: cedReceptor,
     fecha_emision: val(xml, 'FechaEmision'),
     moneda,
     tipo_cambio: tipoCambio,
     total_gravado: totalGravado,
     total_exento: totalExento,
+    total_no_sujeto: totalNoSujeto,
+    total_exonerado: totalExonerado,
     total_descuentos: totalDescuentos,
     total_impuesto: totalImpuesto,
     total_comprobante: totalComprobante,
@@ -330,12 +336,15 @@ export async function guardarFactura(factura, clasificacion, { xml_path = null, 
     tipo_documento: factura.tipo_documento || null,
     cedula_emisor: factura.cedula_emisor || null,
     nombre_emisor: factura.nombre_emisor || null,
+    correo_emisor: factura.correo_emisor || null,
     cedula_receptor: factura.cedula_receptor || null,
     fecha_emision: factura.fecha_emision || null,
     moneda: factura.moneda || 'CRC',
     tipo_cambio: factura.tipo_cambio || null,
     total_gravado: factura.total_gravado || 0,
     total_exento: factura.total_exento || 0,
+    total_no_sujeto: factura.total_no_sujeto || 0,
+    total_exonerado: factura.total_exonerado || 0,
     total_descuentos: factura.total_descuentos || 0,
     total_impuesto: factura.total_impuesto || 0,
     total_comprobante: factura.total_comprobante || 0,

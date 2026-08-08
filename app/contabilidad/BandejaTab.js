@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import AsientoEditor from './AsientoEditor'
-import { C, fmtCRC, fmtFecha, api } from './lib'
+import Combobox from './Combobox'
+import { C, MOD, fmtCRC, fmtFecha, api, norm, buildItemsProveedores } from './lib'
 
 export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) {
   const [lista, setLista] = useState([])
@@ -14,7 +15,17 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
   const [ignoradas, setIgnoradas] = useState([])
   const [verIgnoradas, setVerIgnoradas] = useState(false)
   const [convirtiendo, setConvirtiendo] = useState(null)
+  const [descartar, setDescartar] = useState(null) // { id }
+  const [resumenColapsado, setResumenColapsado] = useState(!!cat?.ui_prefs?.resumen_colapsado)
+  const [listaColapsada, setListaColapsada] = useState(!!cat?.ui_prefs?.lista_colapsada)
   const fileRef = useRef(null)
+
+  // Guardar preferencias de UI por usuario (en la base, no en el navegador)
+  const guardarPref = useCallback((patch) => {
+    api('/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actor: email, ui_prefs: patch }) }).catch(() => {})
+  }, [email])
+  const toggleResumen = () => { setResumenColapsado((v) => { guardarPref({ resumen_colapsado: !v }); return !v }) }
+  const toggleLista = () => { setListaColapsada((v) => { guardarPref({ lista_colapsada: !v }); return !v }) }
 
   const cargarIgnoradas = useCallback(async () => {
     try { setIgnoradas(await api('/facturas?vista=ignoradas')) } catch { /* */ }
@@ -82,6 +93,26 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
     finally { setConvirtiendo(null) }
   }, [email, cargar, cargarIgnoradas])
 
+  const confirmarDescarte = useCallback(async (id, motivo) => {
+    try {
+      await api(`/asientos/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'descartar', motivo, actor: email }) })
+      setDescartar(null)
+      if (selId === id) setSelId(null)
+      await cargar(); await cargarIgnoradas()
+    } catch (e) { alert(e.message) }
+  }, [email, selId, cargar, cargarIgnoradas])
+
+  const recargarDetalle = useCallback(async () => {
+    if (selId) { try { setDetalle(await api(`/asientos/${selId}`)) } catch { /* */ } }
+  }, [selId])
+
+  // ¿El emisor de la factura abierta está amarrado a un proveedor por cédula?
+  const proveedorAmarrado = useMemo(() => {
+    const ced = detalle?.factura?.cedula_emisor
+    if (!ced) return true // sin cédula (manual) → no aplica amarre
+    return (cat?.proveedores || []).some((p) => p.cedula === ced)
+  }, [detalle, cat])
+
   return (
     <div>
       {/* Dropzone + puertas de entrada */}
@@ -138,41 +169,54 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
       )}
 
       {/* Split: lista | detalle */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) 1fr', gap: 14, alignItems: 'start' }}>
-        {/* Lista */}
-        <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 12px', background: C.crema, fontSize: 12, fontWeight: 700, color: C.vino, borderBottom: `1px solid ${C.borde}` }}>
-            Borradores ({lista.length})
+      <div style={{ display: 'grid', gridTemplateColumns: `${listaColapsada ? '44px' : 'minmax(260px, 340px)'} 1fr`, gap: 14, alignItems: 'start' }}>
+        {/* Lista (colapsable a franja angosta) */}
+        {listaColapsada ? (
+          <button onClick={toggleLista} title="Mostrar borradores"
+            style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, padding: '10px 0', cursor: 'pointer', writingMode: 'vertical-rl', fontSize: 12, fontWeight: 700, color: C.vino, height: 200, fontFamily: 'inherit' }}>
+            ▸ Borradores ({lista.length})
+          </button>
+        ) : (
+          <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ padding: '8px 12px', background: C.crema, fontSize: 12, fontWeight: 700, color: C.vino, borderBottom: `1px solid ${C.borde}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Borradores ({lista.length})</span>
+              <button onClick={toggleLista} title="Colapsar la lista" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gris, fontSize: 14 }}>◂</button>
+            </div>
+            {loading ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>Cargando…</div>
+              : lista.length === 0 ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>No hay borradores. Soltá una factura arriba.</div>
+              : (
+                <div style={{ maxHeight: 620, overflowY: 'auto' }}>
+                  {lista.map((a) => (
+                    <div key={a.id} onClick={() => setSelId(a.id)}
+                      style={{
+                        padding: '9px 10px 9px 12px', borderBottom: `1px solid ${C.borde}`, cursor: 'pointer',
+                        background: a.id === selId ? C.naranja + '18' : 'white',
+                        borderLeft: `3px solid ${a.id === selId ? C.naranja : 'transparent'}`,
+                        display: 'flex', gap: 6, alignItems: 'flex-start',
+                      }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {a.proveedor_nombre || a.descripcion || 'Sin proveedor'}
+                          </span>
+                          <span style={{ display: 'flex', gap: 4 }}>
+                            {a.es_prueba && <PruebaChip />}
+                            <OrigenChip origen={a.tipo_origen} />
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+                          <span style={{ fontSize: 11.5, color: C.gris }}>{fmtFecha(a.fecha)}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.vino, fontVariantNumeric: 'tabular-nums' }}>{fmtCRC(a.total_debe, a.moneda)}</span>
+                        </div>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); setDescartar({ id: a.id }) }} title="Descartar este borrador"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.grisClaro, fontSize: 14, padding: '0 2px' }} aria-label="Descartar borrador">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
           </div>
-          {loading ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>Cargando…</div>
-            : lista.length === 0 ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>No hay borradores. Soltá una factura arriba.</div>
-            : (
-              <div style={{ maxHeight: 620, overflowY: 'auto' }}>
-                {lista.map((a) => (
-                  <div key={a.id} onClick={() => setSelId(a.id)}
-                    style={{
-                      padding: '10px 12px', borderBottom: `1px solid ${C.borde}`, cursor: 'pointer',
-                      background: a.id === selId ? C.naranja + '18' : 'white',
-                      borderLeft: `3px solid ${a.id === selId ? C.naranja : 'transparent'}`,
-                    }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.proveedor_nombre || a.descripcion || 'Sin proveedor'}
-                      </span>
-                      <span style={{ display: 'flex', gap: 4 }}>
-                        {a.es_prueba && <PruebaChip />}
-                        <OrigenChip origen={a.tipo_origen} />
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
-                      <span style={{ fontSize: 11.5, color: C.gris }}>{fmtFecha(a.fecha)}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.vino, fontVariantNumeric: 'tabular-nums' }}>{fmtCRC(a.total_debe, a.moneda)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-        </div>
+        )}
 
         {/* Detalle: visor + editor */}
         <div>
@@ -181,23 +225,41 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
               Elegí un borrador de la lista.
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.9fr) minmax(0,1.1fr)', gap: 14, alignItems: 'start' }}>
-              <Visor key={detalle.id} factura={detalle.factura} asiento={detalle} />
-              <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, padding: 16 }}>
-                <AsientoEditor
-                  key={detalle.id}
-                  asiento={detalle} cat={cat} email={email}
-                  emisorCedula={detalle.factura?.cedula_emisor}
-                  avisos={avisosDe(detalle)}
-                  onSaved={cargar}
-                  onApproved={() => { cargar() }}
-                  autoFocusPrimera
-                />
+            <>
+              {!proveedorAmarrado && (
+                <AmarrePanel detalle={detalle} cat={cat} email={email}
+                  onListo={async () => { await cargar(); await recargarDetalle(); recargarCat?.() }} />
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: resumenColapsado ? '1fr' : 'minmax(0,0.85fr) minmax(0,1.15fr)', gap: 14, alignItems: 'start' }}>
+                {!resumenColapsado && (
+                  <Visor key={detalle.id} factura={detalle.factura} asiento={detalle} onColapsar={toggleResumen} />
+                )}
+                <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, padding: 16 }}>
+                  {resumenColapsado && (
+                    <button onClick={toggleResumen} style={{ background: 'white', border: `1px solid ${C.bordeFuerte}`, borderRadius: 8, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: C.vino, marginBottom: 10 }}>
+                      ▸ Ver resumen de la factura
+                    </button>
+                  )}
+                  <AsientoEditor
+                    key={detalle.id}
+                    asiento={detalle} cat={cat} email={email}
+                    emisorCedula={detalle.factura?.cedula_emisor}
+                    avisos={avisosDe(detalle)}
+                    onSaved={cargar}
+                    onApproved={() => { cargar() }}
+                    onDescartar={(id) => setDescartar({ id })}
+                    autoFocusPrimera
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
+
+      {descartar && (
+        <DescartarModal onClose={() => setDescartar(null)} onConfirmar={(motivo) => confirmarDescarte(descartar.id, motivo)} />
+      )}
     </div>
   )
 }
@@ -205,14 +267,14 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
 function avisosDe(detalle) {
   const a = []
   const f = detalle.factura
-  if (detalle.tipo_origen === 'pdf') a.push('Leído de PDF, verificá los montos.')
-  if (f?.clasificacion === 'preguntar') a.push('Este proveedor a veces vende mercadería. Confirmá que esto es gasto.')
-  if (f?.clasificacion === 'por_clasificar') a.push('Proveedor sin clasificar / nuevo: revisá las cuentas antes de aprobar.')
+  if (detalle.tipo_origen === 'pdf') a.push('Se leyó de un PDF. Revisá que los montos estén bien antes de aprobar.')
+  if (f?.clasificacion === 'preguntar') a.push('Este proveedor a veces vende mercadería. Confirmá que esto es un gasto.')
+  if (f?.clasificacion === 'por_clasificar') a.push('Este proveedor es nuevo. Amarralo a uno existente o elegí sus cuentas.')
   return a
 }
 
 // ── Visor: PDF embebido o resumen legible del XML ────────────────────────────
-function Visor({ factura, asiento }) {
+function Visor({ factura, asiento, onColapsar }) {
   const [url, setUrl] = useState(null)
   const path = factura?.pdf_path || asiento?.pdf_url
   useEffect(() => {
@@ -223,8 +285,9 @@ function Visor({ factura, asiento }) {
 
   return (
     <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, overflow: 'hidden', position: 'sticky', top: 12 }}>
-      <div style={{ padding: '9px 12px', background: C.crema, fontSize: 12, fontWeight: 700, color: C.vino, borderBottom: `1px solid ${C.borde}` }}>
-        {url ? 'Factura (PDF)' : 'Resumen de la factura'}
+      <div style={{ padding: '9px 12px', background: C.crema, fontSize: 12, fontWeight: 700, color: C.vino, borderBottom: `1px solid ${C.borde}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{url ? 'Factura (PDF)' : 'Resumen de la factura'}</span>
+        <button onClick={onColapsar} title="Ocultar el resumen para tener más espacio" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gris, fontSize: 13, fontFamily: 'inherit' }}>◂ Ocultar</button>
       </div>
       {url ? (
         <iframe title="factura" src={url} style={{ width: '100%', height: 620, border: 'none' }} />
@@ -248,6 +311,8 @@ function ResumenXML({ factura }) {
       <Fila k="Moneda" v={factura.moneda} />
       <Fila k="Gravado" v={fmtCRC(factura.total_gravado, factura.moneda)} />
       <Fila k="Exento" v={fmtCRC(factura.total_exento, factura.moneda)} />
+      {Number(factura.total_no_sujeto) > 0 && <Fila k="No sujeto" v={fmtCRC(factura.total_no_sujeto, factura.moneda)} />}
+      {Number(factura.total_exonerado) > 0 && <Fila k="Exonerado" v={fmtCRC(factura.total_exonerado, factura.moneda)} />}
       <Fila k="Descuentos" v={fmtCRC(factura.total_descuentos, factura.moneda)} />
       <Fila k="Impuesto" v={fmtCRC(factura.total_impuesto, factura.moneda)} />
       <Fila k="Total" v={fmtCRC(factura.total_comprobante, factura.moneda)} bold />
@@ -318,6 +383,100 @@ function ResultadoCarga({ r, onClose }) {
           {rechazados.map((x, i) => <li key={'r' + i} style={{ color: C.rojo }}>{x.archivo}: {x.motivo}</li>)}
         </ul>
       )}
+    </div>
+  )
+}
+
+// ── Amarre de proveedor por cédula ───────────────────────────────────────────
+function AmarrePanel({ detalle, cat, email, onListo }) {
+  const f = useMemo(() => detalle.factura || {}, [detalle])
+  const [sel, setSel] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  // Sugerencias: tokens del nombre y correo del emisor contra los nombres
+  const sugeridos = useMemo(() => {
+    const base = norm((f.nombre_emisor || '') + ' ' + (f.correo_emisor || ''))
+    const tokens = [...new Set(base.split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !/^\d+$/.test(t)))]
+    if (!tokens.length) return []
+    const scored = (cat?.proveedores || []).map((p) => {
+      const np = norm(p.nombre)
+      const score = tokens.reduce((s, t) => s + (np.includes(t) ? 1 : 0), 0)
+      return { p, score }
+    }).filter((x) => x.score > 0)
+    scored.sort((a, b) => b.score - a.score || (b.p.veces_visto || 0) - (a.p.veces_visto || 0))
+    return scored.slice(0, 3).map((x) => x.p.id)
+  }, [f, cat])
+
+  const items = useMemo(() => buildItemsProveedores(cat?.proveedores, sugeridos), [cat, sugeridos])
+
+  async function amarrar() {
+    if (!sel) return
+    setBusy(true); setMsg(null)
+    try {
+      await api('/proveedores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'amarrar', asiento_id: detalle.id, proveedor_id: sel, actor: email }) })
+      await onListo?.()
+    } catch (e) { setMsg(e.message) } finally { setBusy(false) }
+  }
+  async function esNuevo() {
+    setBusy(true); setMsg(null)
+    try {
+      await api('/proveedores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'nuevo', asiento_id: detalle.id, actor: email }) })
+      await onListo?.()
+    } catch (e) { setMsg(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div style={{ background: '#fff7ed', border: `1px solid ${C.naranja}55`, borderRadius: 12, padding: '13px 16px', marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, color: C.vino, fontSize: 14 }}>¿Este proveedor ya existe con otro nombre?</div>
+      <div style={{ fontSize: 12.5, color: C.gris, margin: '2px 0 10px' }}>
+        Llegó <b>{f.nombre_emisor || 'un emisor'}</b> (cédula {f.cedula_emisor}). Amarralo a un proveedor existente para no volver a preguntar, o marcalo como nuevo.
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <Combobox items={items} value={sel} onChange={setSel} placeholder="Buscar el proveedor existente…" ariaLabel="Proveedor existente" />
+        </div>
+        <button onClick={amarrar} disabled={!sel || busy} style={{ ...btn(C.naranja), opacity: sel && !busy ? 1 : 0.5 }}>
+          {busy ? 'Amarrando…' : 'Amarrar a este proveedor'}
+        </button>
+        <button onClick={esNuevo} disabled={busy} style={{ background: 'white', color: C.vino, border: `1px solid ${C.bordeFuerte}`, borderRadius: 9, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Es nuevo de verdad
+        </button>
+      </div>
+      {msg && <div style={{ marginTop: 8, color: C.rojo, fontSize: 12.5 }}>⚠️ {msg}</div>}
+    </div>
+  )
+}
+
+// ── Modal de descarte con motivo ─────────────────────────────────────────────
+function DescartarModal({ onClose, onConfirmar }) {
+  const RAPIDOS = ['Estaba probando', 'Factura equivocada', 'Duplicada', 'No es gasto']
+  const [motivo, setMotivo] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+  async function confirmar() { setBusy(true); await onConfirmar(motivo.trim() || 'Sin motivo'); setBusy(false) }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '60px 16px' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', borderRadius: 14, padding: '20px 22px', width: '100%', maxWidth: 440 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.vino, marginBottom: 4 }}>Descartar el borrador</div>
+        <div style={{ fontSize: 12.5, color: C.gris, marginBottom: 12 }}>No se borra: queda consultable y podés recuperarlo desde Enviados. ¿Por qué lo descartás?</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {RAPIDOS.map((r) => (
+            <button key={r} onClick={() => setMotivo(r)}
+              style={{ padding: '5px 11px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
+                border: `1px solid ${motivo === r ? C.naranja : C.bordeFuerte}`, background: motivo === r ? C.naranja + '18' : 'white', color: motivo === r ? C.vino : C.gris }}>{r}</button>
+          ))}
+        </div>
+        <input autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (podés escribir el tuyo)"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 8, border: `1px solid ${C.bordeFuerte}`, fontSize: 13, outline: 'none' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button onClick={confirmar} disabled={busy} style={btn(C.vino)}>{busy ? 'Descartando…' : 'Descartar'}</button>
+          <button onClick={onClose} style={{ background: 'white', color: C.gris, border: `1px solid ${C.bordeFuerte}`, borderRadius: 9, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+        </div>
+      </div>
     </div>
   )
 }
