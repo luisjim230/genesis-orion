@@ -14,6 +14,29 @@ export default function EnviadosTab({ email, rol }) {
   const [proveedor, setProveedor] = useState('')
   const [incluirPrueba, setIncluirPrueba] = useState(true)
   const [busy, setBusy] = useState(null)
+  const [descarga, setDescarga] = useState(null) // { ultima_carga, total_asientos, en_curso }
+
+  const cargarDescarga = useCallback(async () => {
+    try { setDescarga(await api('/estado-descarga')) } catch { /* */ }
+  }, [])
+  useEffect(() => { cargarDescarga() }, [cargarDescarga])
+  // Mientras hay una descarga en curso, refrescar cada 15s
+  useEffect(() => {
+    if (!descarga?.en_curso) return
+    const t = setInterval(cargarDescarga, 15000)
+    return () => clearInterval(t)
+  }, [descarga?.en_curso, cargarDescarga])
+
+  async function actualizarEstados() {
+    setBusy('descarga')
+    try {
+      const r = await api('/estado-descarga', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actor: email }) })
+      await cargarDescarga()
+      if (r.ya_en_curso) alert('Ya hay una actualización en curso.')
+      else alert('Actualización encolada. La M1 la corre en aproximadamente un minuto.')
+    } catch (e) { alert(e.message) }
+    finally { setBusy(null) }
+  }
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -31,14 +54,16 @@ export default function EnviadosTab({ email, rol }) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Panel de atención (fuente: estado + diagnóstico de la vista)
+  // Panel de atención. En NEO todo asiento subido queda Aplicado (=conciliado) o
+  // Anulado (=rechazado); no existe estado intermedio "esperando a Marcela". Por
+  // eso solo importan: error de envío, anulados en NEO y los que el robot dice
+  // haber subido pero no aparecen.
   const atencion = useMemo(() => {
     const err = rows.filter((r) => r.estado === 'error')
-    const rech = rows.filter((r) => r.estado === 'rechazado')
-    const sin48 = rows.filter((r) => r.estado === 'sincronizado' && (r.horas_desde_envio ?? 0) > 48)
+    const rech = rows.filter((r) => r.estado === 'rechazado' || r.diagnostico === 'anulado_en_neo')
     // Solo alarmar por "no aparece en NEO" cuando la conciliación está activa
     const noAparece = conciliacionActiva ? rows.filter((r) => r.diagnostico === 'no_aparece_en_neo') : []
-    return { err, rech, sin48, noAparece, total: err.length + rech.length + sin48.length + noAparece.length }
+    return { err, rech, noAparece, total: err.length + rech.length + noAparece.length }
   }, [rows, conciliacionActiva])
 
   const reintentar = useCallback(async (id) => {
@@ -91,9 +116,27 @@ export default function EnviadosTab({ email, rol }) {
 
   return (
     <div>
+      {/* Indicador de última carga de estados de NEO + botón de actualizar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'white', border: `1px solid ${C.borde}`, borderRadius: 10, padding: '9px 14px', marginBottom: 12 }}>
+        <span style={{ fontSize: 18 }}>🔄</span>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: C.vino }}>
+            Estados NEO {descarga?.ultima_carga ? `actualizados: ${fmtFechaHora(descarga.ultima_carga)}` : 'sin cargar todavía'}
+          </div>
+          <div style={{ fontSize: 11.5, color: C.gris }}>
+            {descarga?.total_asientos ? `${descarga.total_asientos.toLocaleString('es-CR')} asientos en base` : '—'}
+            {descarga?.en_curso && <span style={{ color: C.naranja, fontWeight: 600 }}> · actualizando ahora…</span>}
+          </div>
+        </div>
+        <button onClick={actualizarEstados} disabled={busy === 'descarga' || descarga?.en_curso}
+          style={{ ...btn(C.petroleo), opacity: descarga?.en_curso ? 0.5 : 1 }}>
+          {descarga?.en_curso ? 'Actualizando…' : 'Actualizar ahora'}
+        </button>
+      </div>
+
       {!conciliacionActiva && (
         <div style={{ background: C.crema, border: `1px solid ${C.borde}`, borderRadius: 8, padding: '8px 12px', fontSize: 12.5, color: C.gris, marginBottom: 12 }}>
-          ℹ️ La conciliación con NEO aún no está activa (falta el descargador de estados). Los estados se muestran según lo que registró el panel.
+          ℹ️ La conciliación con NEO aún no está activa (falta la primera carga de estados). Tocá “Actualizar ahora” o esperá la corrida de las 9pm.
         </div>
       )}
 
@@ -105,8 +148,7 @@ export default function EnviadosTab({ email, rol }) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 10 }}>
             <AtencionCard titulo="En error" items={atencion.err} color={C.ambar} onReintentar={reintentar} busy={busy} />
-            <AtencionCard titulo="Rechazados en NEO" items={atencion.rech} color={C.rojo} />
-            <AtencionCard titulo="Sin revisar +48h" items={atencion.sin48} color={C.petroleo} />
+            <AtencionCard titulo="Anulados en NEO" items={atencion.rech} color={C.rojo} />
             <AtencionCard titulo="No aparece en NEO" items={atencion.noAparece} color={C.rojo} />
           </div>
         )}

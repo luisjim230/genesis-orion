@@ -62,6 +62,7 @@ SCRIPT_MAP = {
     "items_facturados":        "neo_items_facturados_downloader.py",
     "informe_ventas_vendedor": "neo_informe_ventas_vendedor_downloader.py",
     "movimientos_contables":   "neo_movimientos_contables_downloader.py",
+    "asientos_estado":         "neo_asientos_estado_downloader.py",
     "lista_items":             "neo_lista_items_downloader.py",
     "proformas_cabecera":      "neo_proformas_downloader.py",
     "proformas_items":         "neo_items_proformados_downloader.py",
