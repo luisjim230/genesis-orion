@@ -83,6 +83,33 @@ define la cuenta del haber. Si es `null`, se usa `10-10-10-01` Caja General.
 Si la cuenta seleccionada tiene texto en `conta_cuentas.notas`, se muestra debajo
 del campo en ámbar con ⚠️ (informativo, no bloquea). Aplica en Bandeja y Montar.
 
+### Gestión de aprobadores
+
+Sub-pestaña **Catálogos → Aprobadores**, visible y editable solo para rol
+`admin`. Alta/edición/activar-desactivar sobre `conta_aprobadores`. Candados: email
+único y válido, un admin no puede quitarse a sí mismo el rol, y no se puede dejar
+el sistema sin admin activo. Todo cambio queda en `conta_bitacora` (se hizo
+`asiento_id` nullable para poder registrar cambios de catálogo).
+
+### Modo prueba
+
+Interruptor global en la cabecera (solo admin lo cambia; el estado vive en
+`conta_config.modo_prueba`, igual para todos). Mientras está activo, todo asiento
+nuevo se crea con `es_prueba = true` y se muestra con etiqueta **PRUEBA** en ámbar
+(Bandeja y Enviados). En Enviados hay filtro "Incluir pruebas" y botón admin
+"Descartar pruebas" (con confirmación).
+
+### Semáforo y conciliación (Enviados)
+
+El semáforo y el panel de atención salen de la vista `v_conta_conciliacion`
+(no se calculan en el front). Estados: ⏳ aprobado · 🔄 enviando · 📝 sincronizado
+(en NEO como Registrado, esperando a Marcela) · ✅ conciliado (Marcela lo aplicó)
+· ❌ rechazado (Marcela lo anuló) · ⚠️ error. Van al panel de atención: error,
+rechazado, sincronizado con +48h, y —solo cuando la conciliación está activa—
+"no aparece en NEO". Mientras `neo_asientos_estado` esté vacía (falta el
+descargador), se muestra un aviso discreto de que la conciliación aún no está
+activa, sin alarmar.
+
 ## Variables de entorno
 
 - `SUPABASE_SERVICE_ROLE_KEY` — ya usada por otros módulos (Vercel).

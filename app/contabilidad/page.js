@@ -60,11 +60,18 @@ export default function ContabilidadPage() {
           <h1 style={{ fontFamily: fontTitulo, fontSize: '1.9rem', color: C.vino, margin: '2px 0 0', letterSpacing: '0.01em' }}>📒 Contabilidad</h1>
           <p style={{ fontSize: 13, color: C.gris, margin: '3px 0 0' }}>Armá el asiento acá, corregilo y mandalo a NEO. {cat?.yo ? `Tu rol: ${cat.yo.rol}.` : 'Sin rol asignado (solo lectura).'}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <ModoPrueba cat={cat} email={email} onChange={recargar} />
           <button onClick={() => setBuscador(true)} style={btnGhost}>🔍 Buscar <kbd style={kbd}>{MOD}K</kbd></button>
           <button onClick={() => setAyuda(true)} style={btnGhost}>Atajos <kbd style={kbd}>?</kbd></button>
         </div>
       </div>
+
+      {cat?.modo_prueba && (
+        <div style={{ background: C.ambarBg, border: `1px solid ${C.ambar}55`, borderRadius: 10, padding: '9px 14px', marginBottom: 14, fontSize: 13, color: C.ambar, fontWeight: 600 }}>
+          🧪 Modo prueba activo — todo asiento que se cree queda marcado como PRUEBA y no es real.
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `2px solid ${C.borde}`, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -81,7 +88,7 @@ export default function ContabilidadPage() {
         <>
           {tab === 'bandeja' && <BandejaTab cat={cat} email={email} recargarCat={recargar} onMontarManual={() => setTab('montar')} />}
           {tab === 'montar' && <MontarTab cat={cat} email={email} onCreado={() => setTab('bandeja')} />}
-          {tab === 'enviados' && <EnviadosTab email={email} />}
+          {tab === 'enviados' && <EnviadosTab email={email} esAdmin={cat?.yo?.rol === 'admin'} />}
           {tab === 'catalogos' && <CatalogosTab cat={cat} email={email} recargarCat={recargar} />}
         </>
       )}
@@ -95,6 +102,40 @@ export default function ContabilidadPage() {
 function enCampo(e) {
   const t = e.target
   return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+}
+
+// Interruptor global de modo prueba. Solo admin puede cambiarlo; el estado vive
+// en la base (igual para todos). El resto solo ve el indicador cuando está activo.
+function ModoPrueba({ cat, email, onChange }) {
+  const [busy, setBusy] = useState(false)
+  const activo = !!cat?.modo_prueba
+  const esAdmin = cat?.yo?.rol === 'admin'
+
+  async function toggle() {
+    setBusy(true)
+    try {
+      await api('/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actor: email, modo_prueba: !activo }) })
+      await onChange?.()
+    } catch (e) { alert(e.message) }
+    finally { setBusy(false) }
+  }
+
+  if (!esAdmin) {
+    return activo ? <span style={{ fontSize: 12, fontWeight: 700, color: C.ambar, background: C.ambarBg, border: `1px solid ${C.ambar}55`, borderRadius: 8, padding: '6px 10px' }}>🧪 PRUEBA</span> : null
+  }
+  return (
+    <button onClick={toggle} disabled={busy} title="Modo prueba (solo admin)"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7, cursor: busy ? 'wait' : 'pointer',
+        border: `1px solid ${activo ? C.ambar : C.bordeFuerte}`, borderRadius: 8, padding: '6px 11px',
+        background: activo ? C.ambarBg : 'white', color: activo ? C.ambar : C.gris, fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+      }}>
+      <span style={{ width: 30, height: 16, borderRadius: 10, background: activo ? C.ambar : '#cbd5e1', position: 'relative', transition: 'background .15s', display: 'inline-block' }}>
+        <span style={{ position: 'absolute', top: 2, left: activo ? 16 : 2, width: 12, height: 12, borderRadius: '50%', background: 'white', transition: 'left .15s' }} />
+      </span>
+      🧪 Modo prueba
+    </button>
+  )
 }
 
 // ── Buscador universal ⌘K ────────────────────────────────────────────────────

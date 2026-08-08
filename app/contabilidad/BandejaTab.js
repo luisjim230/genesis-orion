@@ -159,7 +159,10 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                       <span style={{ fontWeight: 600, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {a.proveedor_nombre || a.descripcion || 'Sin proveedor'}
                       </span>
-                      <OrigenChip origen={a.tipo_origen} />
+                      <span style={{ display: 'flex', gap: 4 }}>
+                        {a.es_prueba && <PruebaChip />}
+                        <OrigenChip origen={a.tipo_origen} />
+                      </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
                       <span style={{ fontSize: 11.5, color: C.gris }}>{fmtFecha(a.fecha)}</span>
@@ -282,6 +285,9 @@ function Fila({ k, v, bold }) {
   )
 }
 
+function PruebaChip() {
+  return <span style={{ fontSize: 9.5, fontWeight: 700, color: C.ambar, background: C.ambarBg, border: `1px solid ${C.ambar}55`, borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>PRUEBA</span>
+}
 function OrigenChip({ origen }) {
   const map = { xml: ['XML', C.petroleo], pdf: ['PDF', C.naranja], manual: ['Manual', C.gris], plantilla: ['Plantilla', C.vino] }
   const [txt, col] = map[origen] || ['—', C.gris]

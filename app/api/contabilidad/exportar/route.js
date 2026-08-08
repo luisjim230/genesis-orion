@@ -4,9 +4,9 @@ import { getDb, bad } from '../_lib'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const ENVIADOS = ['aprobado', 'enviando', 'sincronizado', 'conciliado', 'error']
+const ENVIADOS = ['aprobado', 'enviando', 'sincronizado', 'conciliado', 'rechazado', 'error']
 
-// GET /api/contabilidad/exportar?estado=&desde=&hasta=&proveedor=
+// GET /api/contabilidad/exportar?estado=&desde=&hasta=&proveedor=&incluir_prueba=
 // Devuelve un .xlsx con los asientos enviados.
 export async function GET(request) {
   try {
@@ -16,6 +16,7 @@ export async function GET(request) {
     const desde = u.searchParams.get('desde')
     const hasta = u.searchParams.get('hasta')
     const proveedor = u.searchParams.get('proveedor')
+    const incluirPrueba = u.searchParams.get('incluir_prueba') !== 'false'
 
     let q = db.from('conta_asientos')
       .select('*, factura:conta_facturas(nombre_emisor,cedula_emisor)')
@@ -24,6 +25,7 @@ export async function GET(request) {
     else q = q.in('estado', ENVIADOS)
     if (desde) q = q.gte('fecha', desde)
     if (hasta) q = q.lte('fecha', hasta)
+    if (!incluirPrueba) q = q.eq('es_prueba', false)
     const { data, error } = await q
     if (error) return bad(error.message, 500)
 
@@ -47,6 +49,7 @@ export async function GET(request) {
       { header: 'Aprobado por', key: 'aprob', width: 26 },
       { header: 'Aprobado en', key: 'aproben', width: 20 },
       { header: 'Intentos', key: 'intentos', width: 9 },
+      { header: 'Prueba', key: 'prueba', width: 8 },
       { header: 'Error', key: 'err', width: 40 },
     ]
     ws.getRow(1).font = { bold: true }
@@ -59,7 +62,7 @@ export async function GET(request) {
         moneda: r.moneda, total: Number(r.total_debe) || 0,
         estado: r.estado, neo: r.asiento_neo || '',
         aprob: r.aprobado_por || '', aproben: r.aprobado_en ? new Date(r.aprobado_en).toLocaleString('es-CR') : '',
-        intentos: r.intentos || 0, err: r.detalle_error || '',
+        intentos: r.intentos || 0, prueba: r.es_prueba ? 'SÍ' : '', err: r.detalle_error || '',
       })
     }
     ws.getColumn('total').numFmt = '#,##0.00'

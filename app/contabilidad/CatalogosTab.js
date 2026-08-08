@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import Combobox from './Combobox'
 import {
   C, api, norm, buildItemsCuentas, buildItemsCentros,
@@ -8,7 +8,10 @@ import {
 export default function CatalogosTab({ cat, email, recargarCat }) {
   const [sub, setSub] = useState('proveedores')
   const esAdmin = cat?.yo?.rol === 'admin'
-  const SUBS = [['proveedores', 'Proveedores'], ['cuentas', 'Cuentas'], ['centros', 'Centros de costo'], ['plantillas', 'Plantillas']]
+  const SUBS = [
+    ['proveedores', 'Proveedores'], ['cuentas', 'Cuentas'], ['centros', 'Centros de costo'], ['plantillas', 'Plantillas'],
+    ...(esAdmin ? [['aprobadores', 'Aprobadores']] : []),
+  ]
 
   return (
     <div>
@@ -31,6 +34,84 @@ export default function CatalogosTab({ cat, email, recargarCat }) {
       {sub === 'cuentas' && <Cuentas cat={cat} email={email} esAdmin={esAdmin} recargarCat={recargarCat} />}
       {sub === 'centros' && <Centros cat={cat} email={email} esAdmin={esAdmin} recargarCat={recargarCat} />}
       {sub === 'plantillas' && <Plantillas cat={cat} email={email} esAdmin={esAdmin} recargarCat={recargarCat} />}
+      {sub === 'aprobadores' && esAdmin && <Aprobadores email={email} />}
+    </div>
+  )
+}
+
+// ── APROBADORES (solo admin) ─────────────────────────────────────────────────
+function Aprobadores({ email }) {
+  const [lista, setLista] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [edit, setEdit] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const ROLES = ['capturador', 'aprobador', 'admin']
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    try { setLista(await api(`/aprobadores?actor=${encodeURIComponent(email)}`)) }
+    catch (e) { setMsg({ ok: false, t: e.message }) }
+    finally { setLoading(false) }
+  }, [email])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function enviar(payload) {
+    try {
+      await api('/aprobadores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actor: email, ...payload }) })
+      setMsg({ ok: true, t: 'Guardado.' }); setEdit(null); await cargar()
+    } catch (e) { setMsg({ ok: false, t: e.message }) }
+  }
+
+  return (
+    <div>
+      <Barra>
+        <button style={btn(C.naranja)} onClick={() => setEdit({ nuevo: true, email: '', nombre: '', rol: 'capturador', monto_maximo: '', activo: true })}>+ Agregar aprobador</button>
+      </Barra>
+      <Msg msg={msg} />
+      {loading ? <div style={{ color: C.gris, fontSize: 13, padding: 10 }}>Cargando…</div> : (
+        <Tabla>
+          <thead><tr style={trh}><th style={th}>Nombre</th><th style={th}>Email</th><th style={th}>Rol</th><th style={th}>Monto máx.</th><th style={th}>Activo</th><th style={th}></th></tr></thead>
+          <tbody>
+            {lista.map((a) => (
+              <tr key={a.id} style={tr}>
+                <td style={td}>{a.nombre}</td>
+                <td style={td}>{a.email}</td>
+                <td style={td}><Chip v={a.rol} /></td>
+                <td style={td}>{a.monto_maximo != null ? '₡' + Number(a.monto_maximo).toLocaleString('es-CR') : '—'}</td>
+                <td style={td}>{a.activo ? '✅' : '⏸️'}</td>
+                <td style={td}>
+                  <button style={btnSm} onClick={() => setEdit({ ...a, monto_maximo: a.monto_maximo ?? '' })}>Editar</button>{' '}
+                  <button style={btnSm} onClick={() => enviar({ accion: 'toggle', id: a.id, activo: !a.activo })}>{a.activo ? 'Desactivar' : 'Activar'}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      )}
+
+      {edit && (
+        <Modal onClose={() => setEdit(null)} titulo={edit.nuevo ? 'Nuevo aprobador' : `Editar: ${edit.nombre}`}>
+          <Campo label="Nombre"><input value={edit.nombre} onChange={(e) => setEdit({ ...edit, nombre: e.target.value })} style={inp} /></Campo>
+          <Campo label="Email"><input value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} style={inp} /></Campo>
+          <Campo label="Rol">
+            <select value={edit.rol} onChange={(e) => setEdit({ ...edit, rol: e.target.value })} style={inp}>
+              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Campo>
+          <Campo label="Monto máximo (opcional, en colones)">
+            <input type="number" value={edit.monto_maximo} onChange={(e) => setEdit({ ...edit, monto_maximo: e.target.value })} style={inp} placeholder="Sin límite" />
+          </Campo>
+          <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 13, margin: '6px 0' }}>
+            <input type="checkbox" checked={!!edit.activo} onChange={(e) => setEdit({ ...edit, activo: e.target.checked })} /> Activo
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button style={btn(C.naranja)} onClick={() => enviar(edit.nuevo
+              ? { accion: 'crear', email: edit.email, nombre: edit.nombre, rol: edit.rol, monto_maximo: edit.monto_maximo, activo: edit.activo }
+              : { accion: 'editar', id: edit.id, email: edit.email, nombre: edit.nombre, rol: edit.rol, monto_maximo: edit.monto_maximo, activo: edit.activo })}>Guardar</button>
+            <button style={btn(C.gris)} onClick={() => setEdit(null)}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

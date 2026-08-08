@@ -1,7 +1,7 @@
 import {
   getDb, ok, bad, handle, BUCKET, RECEPTOR_EMPRESA,
   parseFacturaXML, cargarContexto, buscarProveedor, clasificar,
-  armarLineasGasto, guardarFactura, crearAsientoConLineas, HttpError,
+  armarLineasGasto, guardarFactura, crearAsientoConLineas, modoPruebaActivo, HttpError,
 } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +19,7 @@ export async function POST(request) {
     if (!files.length) return bad('No llegó ningún archivo.')
 
     const ctx = await cargarContexto()
+    const esPrueba = await modoPruebaActivo()
     const creados = [], ignorados = [], rechazados = []
 
     for (const file of files) {
@@ -30,7 +31,7 @@ export async function POST(request) {
           : await extraerDesdePdf(file)
         factura._origen = esXml ? 'xml' : 'pdf'
 
-        const res = await procesarFactura(factura, file, ctx, creadoPor)
+        const res = await procesarFactura(factura, file, ctx, creadoPor, esPrueba)
         if (res.tipo === 'creado') creados.push(res)
         else if (res.tipo === 'ignorado') ignorados.push(res)
         else rechazados.push(res)
@@ -43,7 +44,7 @@ export async function POST(request) {
   })
 }
 
-async function procesarFactura(factura, file, ctx, creadoPor) {
+async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {
   const db = getDb()
   const nombre = file.name || 'archivo'
 
@@ -102,6 +103,7 @@ async function procesarFactura(factura, file, ctx, creadoPor) {
     deducible: proveedor?.deducible_default !== false,
     creado_por: creadoPor,
     pdf_url: storagePath.pdf_path || null,
+    es_prueba: esPrueba,
   }, lineas)
 
   const avisos = []
