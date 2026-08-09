@@ -1,6 +1,8 @@
 import {
   getDb, ok, bad, handle, BUCKET, RECEPTOR_EMPRESA,
-  parseFacturaXML, cargarContexto, buscarProveedor, clasificar,
+  parseFacturaXML, raizXML, parseAcuseXML, guardarEstadoHacienda,
+  RAICES_COMPROBANTE, RAICES_ACUSE,
+  cargarContexto, buscarProveedor, clasificar,
   armarLineasGasto, guardarFactura, crearAsientoConLineas, modoPruebaActivo, HttpError,
 } from '../_lib'
 
@@ -9,8 +11,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 // POST /api/contabilidad/procesar  (multipart: files[] = XML y/o PDF)
-// Por cada archivo: parsea/extrae, clasifica, arma el asiento y lo guarda
-// como borrador. Devuelve { creados, ignorados, rechazados }.
+// Cada archivo va en su PROPIO try/catch: si uno falla, los demás igual se
+// procesan y el que falló aparece en rechazados. Devuelve
+// { creados, ignorados, rechazados, acuses }.
 export async function POST(request) {
   return handle(async () => {
     const form = await request.formData()
@@ -20,28 +23,55 @@ export async function POST(request) {
 
     const ctx = await cargarContexto()
     const esPrueba = await modoPruebaActivo()
-    const creados = [], ignorados = [], rechazados = []
+    const creados = [], ignorados = [], rechazados = [], acuses = []
 
     for (const file of files) {
       const nombre = file.name || 'archivo'
       try {
-        const esXml = /\.xml$/i.test(nombre) || /xml/i.test(file.type || '')
-        const factura = esXml
-          ? parseFacturaXML(new TextDecoder('utf-8').decode(await file.arrayBuffer()))
-          : await extraerDesdePdf(file)
-        factura._origen = esXml ? 'xml' : 'pdf'
+        const esPdf = /\.pdf$/i.test(nombre) || /pdf/i.test(file.type || '')
 
-        const res = await procesarFactura(factura, file, ctx, creadoPor, esPrueba)
-        if (res.tipo === 'creado') creados.push(res)
-        else if (res.tipo === 'ignorado') ignorados.push(res)
-        else rechazados.push(res)
+        // ── PDF: no tiene raíz XML, se extrae con Anthropic ─────────────────
+        if (esPdf) {
+          const factura = await extraerDesdePdf(file)
+          factura._origen = 'pdf'
+          empujar(await procesarFactura(factura, file, ctx, creadoPor, esPrueba), { creados, ignorados, rechazados })
+          continue
+        }
+
+        // ── XML: decidir por la RAÍZ, no por el nombre del archivo ──────────
+        const texto = new TextDecoder('utf-8').decode(await file.arrayBuffer())
+        const raiz = raizXML(texto)
+
+        if (RAICES_ACUSE.includes(raiz)) {
+          // Acuse de Hacienda: NO es factura. Se ignora, pero se aprovecha.
+          const ac = parseAcuseXML(texto)
+          let aplicado = false
+          if (ac.clave && ac.estado) aplicado = await guardarEstadoHacienda(ac.clave, ac.estado)
+          acuses.push({ archivo: nombre, clave: ac.clave || null, estado: ac.estado || 'desconocido', aplicado })
+          continue
+        }
+
+        if (!RAICES_COMPROBANTE.includes(raiz)) {
+          rechazados.push({ tipo: 'rechazado', archivo: nombre, motivo: `No es un comprobante ni un acuse (raíz <${raiz || 'desconocida'}>).` })
+          continue
+        }
+
+        const factura = parseFacturaXML(texto)
+        factura._origen = 'xml'
+        empujar(await procesarFactura(factura, file, ctx, creadoPor, esPrueba), { creados, ignorados, rechazados })
       } catch (e) {
         rechazados.push({ tipo: 'rechazado', archivo: nombre, motivo: e?.message || String(e) })
       }
     }
 
-    return ok({ creados, ignorados, rechazados })
+    return ok({ creados, ignorados, rechazados, acuses })
   })
+}
+
+function empujar(res, { creados, ignorados, rechazados }) {
+  if (res.tipo === 'creado') creados.push(res)
+  else if (res.tipo === 'ignorado') ignorados.push(res)
+  else rechazados.push(res)
 }
 
 async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {

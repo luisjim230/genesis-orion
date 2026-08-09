@@ -17,7 +17,7 @@ export async function GET(request) {
     const hasta = u.searchParams.get('hasta')
 
     let q = db.from('conta_asientos').select(
-      '*, factura:conta_facturas(clave,nombre_emisor,cedula_emisor,total_comprobante), lineas:conta_asiento_lineas(id)'
+      '*, factura:conta_facturas(clave,nombre_emisor,cedula_emisor,total_comprobante,estado_hacienda), lineas:conta_asiento_lineas(id)'
     )
 
     if (vista === 'bandeja') {
