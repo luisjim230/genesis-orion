@@ -10,7 +10,7 @@ import {
 // props:
 //   asiento (con lineas), cat (catálogos), email, onSaved, onApproved,
 //   avisos [], emisorCedula (para gasto inusual), compact
-export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, onDescartar, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar', avisarDuplicados = false }) {
+export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved, onCreated, onDescartar, avisos = [], emisorCedula, autoFocusPrimera, mode = 'editar', avisarDuplicados = false, bloqueoExtra = null }) {
   const esCrear = mode === 'crear' || !asiento.id
   const puedeAprobar = ['aprobador', 'admin'].includes(cat?.yo?.rol)
   const montoMax = cat?.yo?.monto_maximo != null ? Number(cat.yo.monto_maximo) : null
@@ -82,6 +82,7 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
   }, [lineas, porCodigo])
 
   const razonBloqueo = useMemo(() => {
+    if (bloqueoExtra) return bloqueoExtra
     if (lineas.filter((l) => Number(l.debe) || Number(l.haber)).length < 2) return 'Necesita al menos dos líneas con monto.'
     if (diferencia !== 0) return `No cuadra: diferencia de ${fmtCRC(Math.abs(diferencia), moneda)}.`
     if (lineas.some((l) => !l.cuenta)) return 'Hay líneas sin cuenta.'
@@ -89,7 +90,7 @@ export default function AsientoEditor({ asiento, cat, email, onSaved, onApproved
     if (!puedeAprobar) return 'Tu rol no puede aprobar (solo aprobador o admin).'
     if (montoMax != null && totalDebe > montoMax) return `Supera tu monto máximo (${fmtCRC(montoMax, moneda)}).`
     return null
-  }, [lineas, diferencia, cuentaInvalida, puedeAprobar, montoMax, totalDebe, moneda])
+  }, [bloqueoExtra, lineas, diferencia, cuentaInvalida, puedeAprobar, montoMax, totalDebe, moneda])
 
   // ── Manipulación de líneas ──────────────────────────────────────────────────
   const setLinea = useCallback((idx, patch) => {

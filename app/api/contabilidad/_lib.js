@@ -82,6 +82,46 @@ function rootName(xml) {
   return m ? m[1] : 'FacturaElectronica'
 }
 
+// Raíces válidas de comprobante electrónico (se procesan como factura).
+export const RAICES_COMPROBANTE = [
+  'FacturaElectronica', 'TiqueteElectronico', 'NotaCreditoElectronica',
+  'NotaDebitoElectronica', 'FacturaElectronicaCompra', 'FacturaElectronicaExportacion',
+]
+// Raíces de acuse de Hacienda (NO son facturas: se ignoran, pero se aprovechan).
+export const RAICES_ACUSE = ['MensajeHacienda', 'MensajeReceptor']
+
+// Nombre del elemento raíz del XML (ignora la declaración <?xml?>, comentarios
+// y DOCTYPE). Detecta el tipo por CONTENIDO, no por nombre de archivo.
+export function raizXML(xmlRaw) {
+  const s = String(xmlRaw || '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+  const m = s.match(/<(?:[\w.-]+:)?([A-Za-z_][\w.-]*)[\s>/]/)
+  return m ? m[1] : null
+}
+
+// Acuse de Hacienda: trae Clave y el estado (Aceptado / Rechazado).
+export function parseAcuseXML(xmlRaw) {
+  const xml = String(xmlRaw || '')
+  const clave = (val(xml, 'Clave') || '').replace(/\s/g, '')
+  let estado = val(xml, 'EstadoMensaje')
+  if (!estado) {
+    // Algunos acuses traen <Mensaje> con código: 1=Aceptado, 2=Parcial, 3=Rechazado
+    const cod = (val(xml, 'Mensaje') || '').trim()
+    estado = cod === '1' ? 'Aceptado' : cod === '3' ? 'Rechazado' : cod === '2' ? 'Aceptado parcial' : null
+  }
+  return { clave, estado, detalle: val(xml, 'DetalleMensaje') }
+}
+
+// Guarda el estado de Hacienda en la factura, si la clave ya existe.
+export async function guardarEstadoHacienda(clave, estado) {
+  if (!clave || !estado) return false
+  const { data } = await getDb().from('conta_facturas')
+    .update({ estado_hacienda: estado }).eq('clave', clave).select('clave')
+  return (data || []).length > 0
+}
+
 // Devuelve un objeto factura normalizado o lanza HttpError si no aplica.
 export function parseFacturaXML(xmlRaw) {
   const xml = String(xmlRaw || '')

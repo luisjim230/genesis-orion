@@ -200,6 +200,9 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                             {a.proveedor_nombre || a.descripcion || 'Sin proveedor'}
                           </span>
                           <span style={{ display: 'flex', gap: 4 }}>
+                            {/rechaz/i.test(a.factura?.estado_hacienda || '') && (
+                              <span style={{ fontSize: 9, fontWeight: 700, color: 'white', background: C.rojo, borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>HACIENDA ✕</span>
+                            )}
                             {a.es_prueba && <PruebaChip />}
                             <OrigenChip origen={a.tipo_origen} />
                           </span>
@@ -245,6 +248,7 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                     asiento={detalle} cat={cat} email={email}
                     emisorCedula={detalle.factura?.cedula_emisor}
                     avisos={avisosDe(detalle)}
+                    bloqueoExtra={rechazadaHacienda(detalle) ? 'Hacienda rechazó este comprobante.' : null}
                     onSaved={cargar}
                     onApproved={() => { cargar() }}
                     onDescartar={(id) => setDescartar({ id })}
@@ -267,10 +271,14 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
 function avisosDe(detalle) {
   const a = []
   const f = detalle.factura
+  if (f?.estado_hacienda && /rechaz/i.test(f.estado_hacienda)) a.push('⛔ Hacienda RECHAZÓ este comprobante. No debería contabilizarse.')
   if (detalle.tipo_origen === 'pdf') a.push('Se leyó de un PDF. Revisá que los montos estén bien antes de aprobar.')
   if (f?.clasificacion === 'preguntar') a.push('Este proveedor a veces vende mercadería. Confirmá que esto es un gasto.')
   if (f?.clasificacion === 'por_clasificar') a.push('Este proveedor es nuevo. Amarralo a uno existente o elegí sus cuentas.')
   return a
+}
+function rechazadaHacienda(detalle) {
+  return /rechaz/i.test(detalle?.factura?.estado_hacienda || '')
 }
 
 // ── Visor: PDF embebido o resumen legible del XML ────────────────────────────
@@ -365,7 +373,7 @@ function ResultadoCarga({ r, onClose }) {
       ⚠️ {r.error} <button onClick={onClose} style={xBtn}>✕</button>
     </div>
   )
-  const { creados = [], ignorados = [], rechazados = [] } = r
+  const { creados = [], ignorados = [], rechazados = [], acuses = [] } = r
   return (
     <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, fontSize: 13 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -375,8 +383,14 @@ function ResultadoCarga({ r, onClose }) {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ color: C.verde }}>✅ {creados.length} borrador(es)</span>
         <span style={{ color: C.ambar }}>⏭️ {ignorados.length} ignorado(s)</span>
+        {acuses.length > 0 && <span style={{ color: C.petroleo }}>📩 {acuses.length} acuse(s) de Hacienda (ignorados)</span>}
         <span style={{ color: C.rojo }}>⛔ {rechazados.length} rechazado(s)</span>
       </div>
+      {acuses.some((a) => /rechaz/i.test(a.estado || '')) && (
+        <div style={{ marginTop: 8, color: C.rojo, fontSize: 12.5 }}>
+          ⚠️ Hacienda RECHAZÓ {acuses.filter((a) => /rechaz/i.test(a.estado || '')).length} comprobante(s). Revisá esas facturas: no deberían contabilizarse.
+        </div>
+      )}
       {[...ignorados, ...rechazados].length > 0 && (
         <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: C.gris }}>
           {ignorados.map((x, i) => <li key={'i' + i}>{x.archivo}: {x.motivo}</li>)}
