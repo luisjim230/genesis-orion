@@ -128,6 +128,7 @@ def main():
     ap = argparse.ArgumentParser(description="Sube a Contabilidad las facturas que llegan al correo.")
     ap.add_argument("--dry-run", action="store_true", help="Muestra qué haría, sin subir ni etiquetar.")
     ap.add_argument("--limit", type=int, default=50, help="Máximo de correos por corrida (default 50).")
+    ap.add_argument("--desde", help="Fecha YYYY-MM-DD para forzar el corte (solo pruebas; ignora conta_config).")
     args = ap.parse_args()
 
     if _faltan:
@@ -139,7 +140,7 @@ def main():
     except BlockingIOError:
         log.info("Ya hay otra corrida de gmail-sync en curso. Salgo."); return
 
-    corte = fecha_corte()
+    corte = args.desde or fecha_corte()
     since_imap = datetime.strptime(corte, "%Y-%m-%d").strftime("%d-%b-%Y")  # IMAP: 11-Aug-2026
     log.info("=" * 60)
     log.info(f"Gmail → Contabilidad  [{datetime.now():%Y-%m-%d %H:%M}]"
