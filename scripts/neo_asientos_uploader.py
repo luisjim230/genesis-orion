@@ -229,7 +229,13 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
         cuenta = IF().get_by_role("textbox", name="Lista de las cuentas")
         await cuenta.click(click_count=3)
         await cuenta.press_sequentially(l["cuenta"], delay=45)
-        await page.wait_for_timeout(1000)  # dar tiempo a que NEO resuelva la cuenta
+        await page.wait_for_timeout(1200)   # que aparezca el autocompletar
+        # No alcanza con escribir el código: hay que ELEGIR la sugerencia del
+        # autocompletar (flecha abajo resalta la primera, Enter la selecciona).
+        await cuenta.press("ArrowDown")
+        await page.wait_for_timeout(400)
+        await cuenta.press("Enter")
+        await page.wait_for_timeout(600)
 
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
         campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
@@ -255,8 +261,11 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
             campo = IF().get_by_role("textbox", name="Centro de costo del")
             await campo.click(click_count=3)
             await campo.press_sequentially(centro, delay=40)
-            await page.wait_for_timeout(800)
-            await IF().get_by_role("cell", name=centro).first.click()
+            await page.wait_for_timeout(1000)  # autocompletar del centro
+            await campo.press("ArrowDown")
+            await page.wait_for_timeout(400)
+            await campo.press("Enter")
+            await page.wait_for_timeout(500)
             log.info(f"  Centro de costo: {centro}")
         except Exception as e:
             log.warning(f"  No pude asignar el centro '{centro}': {e}")

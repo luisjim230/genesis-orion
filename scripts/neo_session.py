@@ -14,11 +14,44 @@ el botón "Usar aquí" cuando NEO lo ofrece) hasta 3 veces.
 import re
 
 
+async def cerrar_alerta_neo(page, log=None):
+    """Cierra la alerta de la llave criptográfica de Hacienda (u otra) que NEO
+    muestra de vez en cuando después del login. El botón puede decir 'Aceptar'
+    o 'Continuar' y aparece dentro del iframe principal o en la página. Si no
+    hay ninguna alerta no pasa nada: se ignora en silencio.
+
+    Se llama solo desde relogin_si_hace_falta, así que TODOS los scripts que ya
+    usan ese helper quedan cubiertos sin tocar cada uno."""
+    try:
+        frame = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+    except Exception:
+        frame = None
+    scopes = [s for s in (frame, page) if s is not None]
+    for scope in scopes:
+        for name in ("Aceptar", "Continuar", " Continuar", "OK"):
+            for rol in ("button", "link"):
+                try:
+                    loc = scope.get_by_role(rol, name=name)
+                    if await loc.count() > 0 and await loc.first.is_visible():
+                        await loc.first.click()
+                        await page.wait_for_timeout(1200)
+                        if log:
+                            log.info(f"  Alerta NEO cerrada con '{name.strip()}'")
+                        return True
+                except Exception:
+                    continue
+    return False
+
+
 async def relogin_si_hace_falta(page, usuario, clave, log, intentos=3):
     """
     Si `page.url` contiene Login.aspx, reautentica hasta `intentos` veces.
     Devuelve True si al salir no estamos en Login, False si siguió fallando.
     """
+    # Antes de nada, cerrar la alerta de la llave criptográfica si salió: si
+    # queda abierta bloquea el iframe y cualquier navegación posterior falla.
+    await cerrar_alerta_neo(page, log)
+
     for i in range(intentos):
         if "Login.aspx" not in page.url:
             return True
