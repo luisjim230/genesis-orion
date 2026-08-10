@@ -95,6 +95,16 @@ export default function EnviadosTab({ email, rol }) {
     finally { setBusy(null) }
   }, [email, cargar])
 
+  const reenviar = useCallback(async (id) => {
+    if (!confirm('¿Reenviar este asiento a NEO?\n\nIMPORTANTE: primero anulá el asiento viejo en NEO. Si no lo anulaste, se va a duplicar.\n\nEl robot lo va a registrar de nuevo en la próxima corrida.')) return
+    setBusy(id)
+    try {
+      await api(`/asientos/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'reenviar', actor: email }) })
+      await cargar()
+    } catch (e) { alert(e.message) }
+    finally { setBusy(null) }
+  }, [email, cargar])
+
   async function vaciarDescartados() {
     if (prompt('Esto elimina definitivamente los descartados con más de 90 días. Escribí VACIAR para confirmar:') !== 'VACIAR') return
     setBusy('vaciar')
@@ -208,6 +218,8 @@ export default function EnviadosTab({ email, rol }) {
                       <td style={td}>
                         {r.estado === 'error' && <button disabled={busy === r.id} onClick={() => reintentar(r.id)} style={btnSm(C.naranja)}>{busy === r.id ? '…' : 'Reintentar'}</button>}
                         {r.estado === 'descartado' && puedeRecuperar && <button disabled={busy === r.id} onClick={() => recuperar(r.id)} style={btnSm(C.petroleo)}>{busy === r.id ? '…' : 'Recuperar'}</button>}
+                        {['sincronizado', 'conciliado', 'rechazado'].includes(r.estado) && <button disabled={busy === r.id} onClick={() => reenviar(r.id)} style={btnSm(C.vino)} title="Volver a registrar en NEO (anulá el viejo primero)">{busy === r.id ? '…' : '↻ Reenviar'}</button>}
+                        {r.diagnostico === 'anulado_en_neo' && r.estado !== 'rechazado' && <button disabled={busy === r.id} onClick={() => reenviar(r.id)} style={btnSm(C.vino)} title="Anulado en NEO: volver a registrarlo">{busy === r.id ? '…' : '↻ Reenviar'}</button>}
                       </td>
                     </tr>
                   )

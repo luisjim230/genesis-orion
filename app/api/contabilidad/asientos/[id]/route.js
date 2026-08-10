@@ -66,6 +66,24 @@ export async function PATCH(request, { params }) {
       return ok({ ok: true })
     }
 
+    // Reenviar a NEO: para un asiento que YA se mandó (sincronizado/conciliado)
+    // pero se anuló en NEO y hay que volver a registrarlo. Lo devuelve a la cola
+    // del robot (estado=aprobado) y limpia el número de NEO viejo.
+    // IMPORTANTE: primero hay que ANULAR el asiento en NEO, si no se duplica.
+    if (b.accion === 'reenviar') {
+      const reenviables = ['sincronizado', 'conciliado', 'error', 'enviando']
+      if (!reenviables.includes(a.estado)) {
+        return bad('Solo se puede reenviar un asiento que ya se envió a NEO (o quedó en error).')
+      }
+      const { error } = await db.from('conta_asientos').update({
+        estado: 'aprobado', asiento_neo: null, enviado_en: null,
+        detalle_error: null, procesando: false, intentos: (a.intentos || 0) + 1,
+      }).eq('id', id)
+      if (error) throw error
+      await bitacora(id, 'reenviar', actor, { estado_anterior: a.estado, asiento_neo_anterior: a.asiento_neo })
+      return ok({ ok: true })
+    }
+
     // Edición normal: solo permitido en borrador
     if (a.estado !== 'borrador') return bad('Solo se pueden editar asientos en borrador.')
 
