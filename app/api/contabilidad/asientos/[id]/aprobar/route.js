@@ -74,6 +74,22 @@ export async function POST(request, { params }) {
       lineas: lineas.map((l) => ({ cuenta: l.cuenta, debe: l.debe, haber: l.haber, centro: l.centro_costo_id })),
     })
 
+    // Disparar al robot de la M1: encolar una corrida del uploader (si no es
+    // prueba y no hay ya una en curso). El daemon la levanta y registra en NEO.
+    try {
+      if (!a.es_prueba) {
+        // Dedup solo contra 'pending' (no 'running'): si una corrida ya está en
+        // curso y no incluyó este asiento, igual queremos encolar una nueva que
+        // lo agarre al terminar la actual.
+        const { data: prev } = await db.from('sync_requests')
+          .select('id').eq('script', 'asientos_upload')
+          .eq('status', 'pending').limit(1).maybeSingle()
+        if (!prev) {
+          await db.from('sync_requests').insert({ script: 'asientos_upload', status: 'pending' })
+        }
+      }
+    } catch { /* encolar es best-effort; si falla, la corrida programada lo agarra */ }
+
     return ok({ ok: true, estado: 'aprobado' })
   })
 }

@@ -25,7 +25,7 @@ Cómo correr en la M1:
   .venv/bin/python scripts/neo_asientos_uploader.py --limit 20
 """
 
-import os, sys, re, asyncio, logging, json, argparse, urllib.request, urllib.error
+import os, sys, re, fcntl, asyncio, logging, json, argparse, urllib.request, urllib.error
 from pathlib import Path
 from datetime import datetime
 
@@ -55,6 +55,7 @@ if _faltan:
 PROFILE_DIR = BASE / ".pw-profile-uploader"
 LOG_FILE    = BASE / "neo-asientos-uploader.log"
 SHOTS_DIR   = BASE / "capturas-uploader"
+LOCK_FILE   = BASE / ".uploader.lock"
 
 
 async def captura(page, nombre):
@@ -368,6 +369,16 @@ async def main():
     ap.add_argument("--dry-run", action="store_true", help="Hace todo menos el clic final 'Registrar'")
     ap.add_argument("--headless", action="store_true", help="Sin ventana (por defecto se ve el navegador)")
     args = ap.parse_args()
+
+    # Candado: una sola corrida a la vez. Si el daemon dispara dos veces seguidas
+    # (varias aprobaciones juntas), la segunda sale sin hacer nada y evita
+    # registrar el mismo asiento dos veces en NEO.
+    lock_fp = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log.info("Ya hay otra corrida del uploader en curso. Salgo sin hacer nada.")
+        return
 
     log.info("=" * 60)
     log.info(f"NEO ← Subir asientos aprobados  [{datetime.now():%Y-%m-%d %H:%M}]"
