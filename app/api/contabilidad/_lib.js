@@ -356,12 +356,28 @@ export function armarLineasGasto(factura, proveedor, ctx, destino = 'gasto') {
     })
   }
 
-  // 3) Contrapartida al haber = suma de los débitos (garantiza cuadre exacto)
+  // 3) Cuadre EXACTO contra el total real de la factura.
+  // Sumar las piezas redondeadas (gasto + cada IVA) puede dar 1 céntimo de
+  // diferencia contra el total del comprobante (el propio XML de Hacienda
+  // arrastra ese redondeo). Para que el asiento calce clavado con la factura,
+  // se absorbe esa diferencia en la línea de gasto más grande y la
+  // contrapartida se fija al total del comprobante.
   const totalDebe = r2(lineas.reduce((s, l) => s + l.debe, 0))
+  const totalFactura = r2(factura.total_comprobante || 0)
+  const delta = r2(totalFactura - totalDebe)
+  const gastoLineas = lineas.filter((l) => l.observacion === 'Gasto')
+  // Solo absorber redondeos chicos (≤ ₡1). Una diferencia grande indica otra
+  // cosa (descuentos, etc.): en ese caso se cuadra con la suma de débitos.
+  if (totalFactura > 0 && gastoLineas.length && Math.abs(delta) <= 1 && delta !== 0) {
+    let mayor = gastoLineas[0]
+    for (const g of gastoLineas) if (g.debe > mayor.debe) mayor = g
+    mayor.debe = r2(mayor.debe + delta)
+  }
+  const totalHaber = r2(lineas.reduce((s, l) => s + l.debe, 0))
   const contrapartida = (proveedor && proveedor.cuenta_contrapartida) || CONTRAPARTIDA_DEFAULT
   lineas.push({
     orden: orden++, cuenta: contrapartida, centro_costo_id: null,
-    debe: 0, haber: totalDebe, observacion: 'Contrapartida',
+    debe: 0, haber: totalHaber, observacion: 'Contrapartida',
   })
 
   return { lineas }
