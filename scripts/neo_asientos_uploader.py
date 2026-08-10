@@ -25,7 +25,7 @@ Cómo correr en la M1:
   .venv/bin/python scripts/neo_asientos_uploader.py --limit 20
 """
 
-import os, sys, asyncio, logging, json, argparse, urllib.request, urllib.error
+import os, sys, re, asyncio, logging, json, argparse, urllib.request, urllib.error
 from pathlib import Path
 from datetime import datetime
 
@@ -98,6 +98,43 @@ async def cerrar_alerta(page, iframe):
 
 MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+# Filas típicas de un desplegable/autocompletar en NEO (ASP.NET)
+FILAS_DROPDOWN = "li, tr, td, a, div[role='option'], .ui-menu-item, .dropdown-item"
+
+
+async def elegir_cuenta(page, IF, codigo, nombre):
+    """Escribe el código de cuenta y ELIGE la fila EXACTA del desplegable.
+    Importante: el código puede ser substring de otra cuenta (p.ej. 10-10-10-01
+    está dentro de 20-10-10-10-01 'CXP proveedores'). Por eso NO se usa
+    'flecha abajo + Enter' (agarra la fila resaltada, que puede ser la que no es).
+    Se clickea la fila cuyo texto EMPIEZA con el código exacto, o la que tiene el
+    nombre exacto de la cuenta."""
+    campo = IF().get_by_role("textbox", name="Lista de las cuentas")
+    await campo.click(click_count=3)
+    await campo.press_sequentially(codigo, delay=45)
+    await page.wait_for_timeout(1300)
+
+    nombre = (nombre or "").strip()
+    # fila que EMPIEZA con el código exacto (seguido de algo que no sea dígito)
+    rx = re.compile(r"^\s*" + re.escape(codigo) + r"(\D|$)")
+    estrategias = [IF().locator(FILAS_DROPDOWN).filter(has_text=rx)]
+    if nombre:
+        estrategias.append(IF().locator(FILAS_DROPDOWN).filter(has_text=nombre))
+    for loc in estrategias:
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                await loc.first.click()
+                await page.wait_for_timeout(400)
+                log.info(f"    cuenta {codigo} elegida del desplegable")
+                return True
+        except Exception:
+            continue
+    # Último recurso: Enter (mejor que ArrowDown, que movía a la fila equivocada)
+    await campo.press("Enter")
+    await page.wait_for_timeout(400)
+    log.warning(f"    cuenta {codigo}: no encontré la fila exacta, usé Enter (revisá la captura)")
+    return False
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S",
@@ -222,21 +259,12 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     # ── Líneas ──────────────────────────────────────────────────────────────
     lineas = sorted(asiento.get("lineas") or [], key=lambda l: l.get("orden") or 0)
     for i, l in enumerate(lineas, 1):
-        # Los campos de NEO (cuenta con autocompletar, montos enmascarados) NO
-        # reaccionan a fill() de golpe: hay que TECLEAR carácter por carácter
-        # (press_sequentially) para que se disparen los eventos y se resuelva la
-        # cuenta / se acepte el monto. triple-click selecciona lo que haya antes.
-        cuenta = IF().get_by_role("textbox", name="Lista de las cuentas")
-        await cuenta.click(click_count=3)
-        await cuenta.press_sequentially(l["cuenta"], delay=45)
-        await page.wait_for_timeout(1200)   # que aparezca el autocompletar
-        # No alcanza con escribir el código: hay que ELEGIR la sugerencia del
-        # autocompletar (flecha abajo resalta la primera, Enter la selecciona).
-        await cuenta.press("ArrowDown")
-        await page.wait_for_timeout(400)
-        await cuenta.press("Enter")
-        await page.wait_for_timeout(600)
+        # 1) Cuenta: elegir la fila EXACTA del desplegable (ojo con códigos que
+        #    son substring de otros, p.ej. 10-10-10-01 ⊂ 20-10-10-10-01).
+        await elegir_cuenta(page, IF, l["cuenta"], (l.get("cta") or {}).get("nombre"))
 
+        # 2) Monto: los campos enmascarados NO aceptan fill() de golpe; hay que
+        #    teclear carácter por carácter (triple-click limpia lo previo).
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
         campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
         campo = IF().get_by_role("textbox", name=campo_nom)
