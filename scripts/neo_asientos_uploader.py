@@ -54,6 +54,20 @@ if _faltan:
 
 PROFILE_DIR = BASE / ".pw-profile-uploader"
 LOG_FILE    = BASE / "neo-asientos-uploader.log"
+SHOTS_DIR   = BASE / "capturas-uploader"
+
+
+async def captura(page, nombre):
+    """Guarda un screenshot del formulario para revisar sin ver la pantalla."""
+    try:
+        SHOTS_DIR.mkdir(exist_ok=True)
+        ruta = SHOTS_DIR / f"{nombre}.png"
+        await page.screenshot(path=str(ruta), full_page=True)
+        log.info(f"  📸 Captura guardada: {ruta}")
+        return ruta
+    except Exception as e:
+        log.warning(f"  No pude sacar la captura: {e}")
+        return None
 
 MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -196,6 +210,7 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     # ── Registrar ────────────────────────────────────────────────────────────
     if dry_run:
         log.info("  🧪 DRY-RUN: NO hago clic en 'Registrar'. El asiento quedó armado en pantalla para revisar.")
+        await captura(page, f"asiento-{a['id']}-dryrun")
         return None
 
     await IF().get_by_role("button", name="Registrar").click()
