@@ -107,9 +107,10 @@ async def elegir_cuenta(page, IF, codigo, nombre):
     20-10-10-10-01 'CXP proveedores'). Como respaldo, se clickea la celda con el
     nombre exacto de la cuenta (así lo hizo la grabación con 'viaticos')."""
     campo = IF().get_by_role("textbox", name="Lista de las cuentas")
-    await campo.click()
-    await campo.fill(codigo)            # igual que grabacion_cuenta.py
-    await page.wait_for_timeout(500)
+    await campo.click(click_count=3)
+    # OJO: fill() NO dispara el desplegable de NEO; hay que teclear de verdad.
+    await campo.press_sequentially(codigo, delay=60)
+    await page.wait_for_timeout(900)
 
     nombre = (nombre or "").strip()
     # Elegir la sugerencia del desplegable. Se prueba, en orden:
