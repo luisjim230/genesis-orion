@@ -276,35 +276,77 @@ export function normProv(s) {
   return x.replace(/[^a-z0-9]/g, '')
 }
 
+// Distancia de edición (Levenshtein): cuántas letras hay que cambiar para
+// pasar de un texto al otro. Sirve para reconocer el mismo proveedor con un
+// typo, sin confundir dos distintos (que difieren en muchas letras).
+export function levenshtein(a, b) {
+  a = a || ''; b = b || ''
+  if (a === b) return 0
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    const cur = [i]
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+    }
+    prev = cur
+  }
+  return prev[n]
+}
+
+async function aprenderCedula(db, prov, cedula) {
+  if (!cedula || prov.cedula) return
+  try {
+    await db.from('conta_proveedores').update({ cedula }).eq('id', prov.id)
+    prov.cedula = cedula
+  } catch { /* cédula ya tomada por otro registro: se ignora */ }
+}
+
 export async function buscarProveedor(cedula, nombre) {
   const db = getDb()
-  // 1) Match fuerte por cédula (campo limpio y estructurado del XML).
+  // 1) Match fuerte por CÉDULA (campo limpio y estructurado del XML). Certeza total.
   if (cedula) {
     const { data } = await db.from('conta_proveedores').select('*').eq('cedula', cedula).maybeSingle()
     if (data) return data
   }
-  // 2) Match por nombre SOLO exacto (ya normalizado: sin tildes, espacios,
-  //    puntuación ni sufijos de sociedad). NO se hace match parcial/aproximado:
-  //    en contabilidad es preferible marcar "nuevo" y que un humano confirme,
-  //    antes que confundir dos proveedores parecidos y mandar plata a la cuenta
-  //    equivocada. Con el auto-aprendizaje de cédula, en cuanto se confirma una
-  //    vez queda enganchado por cédula para siempre.
-  if (nombre) {
-    const n = normProv(nombre)
-    const { data } = await db.from('conta_proveedores').select('*')
-    const lista = data || []
-    const hit = n ? lista.find((p) => normProv(p.nombre) === n) : null
-    if (hit) {
-      // Auto-aprender la cédula: si el proveedor histórico no la tenía, se la
-      // guardamos ahora. La próxima factura de este proveedor matchea al toque
-      // por cédula, sin depender del nombre nunca más.
-      if (cedula && !hit.cedula) {
-        try {
-          await db.from('conta_proveedores').update({ cedula }).eq('id', hit.id)
-          hit.cedula = cedula
-        } catch { /* cédula ya tomada por otro registro: se ignora */ }
-      }
-      return hit
+  if (!nombre) return null
+
+  const n = normProv(nombre)
+  if (!n) return null
+  const { data } = await db.from('conta_proveedores').select('*')
+  const lista = data || []
+
+  // 2) Nombre EXACTO ya normalizado (ignora espacios, puntuación, tildes y
+  //    sufijos de sociedad). "INVERSIONES A M P M S.A." == "Inversiones AMPM".
+  //    Es un match seguro: aprende la cédula para que la próxima sea instantánea.
+  const exacto = lista.find((p) => normProv(p.nombre) === n)
+  if (exacto) {
+    await aprenderCedula(db, exacto, cedula)
+    return exacto
+  }
+
+  // 3) Nombre APROXIMADO por distancia de edición (typos, letra cambiada, una
+  //    palabra mal escrita en NEO). Reglas para NO confundir proveedores:
+  //    - Solo nombres largos (≥ 8 caracteres normalizados).
+  //    - Umbral chico y proporcional al largo (~12%, mínimo 1 letra).
+  //    - El candidato debe ser ÚNICO más cercano (sin empates): si hay dos casi
+  //      iguales, es ambiguo y se marca "nuevo" para que un humano decida.
+  //    Un match aproximado NO aprende la cédula solo: se avisa en pantalla y se
+  //      confirma primero (así un acierto dudoso no "contamina" el catálogo).
+  if (n.length >= 8) {
+    const cand = lista
+      .map((p) => ({ p, pn: normProv(p.nombre), d: levenshtein(n, normProv(p.nombre)) }))
+      .filter((x) => x.pn.length >= 8)
+      .sort((a, b) => a.d - b.d)
+    const permitido = Math.max(1, Math.round(n.length * 0.15))
+    const best = cand[0]
+    const second = cand[1]
+    if (best && best.d <= permitido && (!second || second.d > best.d)) {
+      best.p._aprox = { visto: nombre, distancia: best.d }
+      return best.p
     }
   }
   return null
@@ -316,6 +358,13 @@ export async function buscarProveedor(cedula, nombre) {
 // Devuelve { decision, motivo, aviso, proveedor } donde decision ∈
 //   'ignorar' (mercadería), 'preguntar', 'gasto', 'nuevo'
 export function clasificar(factura, proveedor) {
+  // Si el proveedor se reconoció por parecido (no exacto), avisar para que un
+  // humano confirme que es el mismo antes de dar por buena la cuenta.
+  const avisoAprox = proveedor?._aprox
+    ? `Reconocido como “${proveedor.nombre}” con una diferencia leve de escritura (en la factura vino como “${proveedor._aprox.visto}”). Confirmá que es el mismo proveedor.`
+    : null
+  const conAprox = (aviso) => [avisoAprox, aviso].filter(Boolean).join(' ') || undefined
+
   // 1) Orden de compra presente -> mercadería (se ignora en silencio)
   if (factura.num_oc) {
     return { decision: 'ignorar', motivo: `Trae orden de compra ${factura.num_oc}: es mercadería.`, proveedor }
@@ -331,12 +380,12 @@ export function clasificar(factura, proveedor) {
   if (proveedor && proveedor.clasificacion === 'preguntar') {
     return {
       decision: 'preguntar', proveedor,
-      aviso: 'Este proveedor a veces vende mercadería. Confirmá que esto es gasto.',
+      aviso: conAprox('Este proveedor a veces vende mercadería. Confirmá que esto es gasto.'),
     }
   }
   // 4) Proveedor gasto (con cuenta sugerida)
   if (proveedor && proveedor.clasificacion === 'gasto') {
-    return { decision: 'gasto', proveedor }
+    return { decision: 'gasto', proveedor, aviso: conAprox(null) }
   }
   // 5) Desconocido / por_clasificar
   return {
