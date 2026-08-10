@@ -413,7 +413,7 @@ async def preparar_neo(page):
 async def main():
     ap = argparse.ArgumentParser(description="Sube asientos aprobados del panel a NEO.")
     ap.add_argument("--solo", help="Procesar solo este ID de asiento")
-    ap.add_argument("--limit", type=int, default=6, help="Máximo de asientos por corrida (default 6; si quedan más, se auto-encola otra)")
+    ap.add_argument("--limit", type=int, default=1, help="Asientos por corrida (default 1: login fresco por asiento = más confiable; si quedan más, se auto-encola otra)")
     ap.add_argument("--dry-run", action="store_true", help="Hace todo menos el clic final 'Registrar'")
     ap.add_argument("--headless", action="store_true", help="Sin ventana (por defecto se ve el navegador)")
     args = ap.parse_args()
