@@ -114,18 +114,23 @@ async def elegir_cuenta(page, IF, codigo, nombre):
     await page.wait_for_timeout(900)
 
     nombre = (nombre or "").strip()
-    # Elegir la sugerencia del desplegable. Se prueba, en orden:
-    #  1) el texto EXACTO del código (desambigua el substring 10-10-10-01),
-    #  2) la celda con el nombre exacto de la cuenta,
-    #  3) el texto exacto del nombre.
-    # wait_for(visible) da tiempo a que aparezca la lista sin quedarse pegado.
-    opciones = [("código", IF().get_by_text(codigo, exact=True))]
+    # Regex: el texto de la fila EMPIEZA con el código exacto (seguido de espacio
+    # o fin). Sirve cuando la fila trae código+nombre juntos ("90-20-01-01
+    # Comisiones BN") y a la vez NO confunde substrings (20-10-10-10-01 no
+    # empieza con 10-10-10-01).
+    rx_ini = re.compile(r"^\s*" + re.escape(codigo) + r"(\s|$)")
+    # Elegir la sugerencia del desplegable, probando varias formas en orden.
+    opciones = [
+        ("código exacto", IF().get_by_text(codigo, exact=True)),
+        ("código al inicio", IF().get_by_text(rx_ini)),
+    ]
     if nombre:
         opciones.append(("celda nombre", IF().get_by_role("cell", name=nombre, exact=True)))
+        opciones.append(("celda nombre~", IF().get_by_role("cell", name=nombre)))  # no exacto (may/min, espacios)
         opciones.append(("texto nombre", IF().get_by_text(nombre, exact=True)))
     for etiqueta, op in opciones:
         try:
-            await op.first.wait_for(state="visible", timeout=6000)
+            await op.first.wait_for(state="visible", timeout=4000)
             await op.first.click()
             await page.wait_for_timeout(400)
             log.info(f"    cuenta {codigo} elegida ({etiqueta})")
