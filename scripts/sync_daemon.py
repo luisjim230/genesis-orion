@@ -67,6 +67,7 @@ SCRIPT_MAP = {
     "proformas_cabecera":      "neo_proformas_downloader.py",
     "proformas_items":         "neo_items_proformados_downloader.py",
     "asientos_upload":         "neo_asientos_uploader.py",
+    "gmail_facturas":          "gmail_facturas_sync.py",
 }
 
 # Args extra por script. El uploader corre SIN ventana (headless) cuando lo
@@ -238,6 +239,7 @@ SCHEDULE = {
     "movimientos_contables":   [(8,15),(16,15)],               # se deja (2x/día)
     "antiguedad_clientes":     [(8,25),(16,25)],               # se deja (2x/día)
     "antiguedad_proveedores":  [(8,40),(16,40)],               # se deja (2x/día)
+    "gmail_facturas":          _cada(2, 45, 7, 19),            # facturas por correo: cada 2h 7am-7pm
 }
 SCHEDULE_WEEKDAYS = {0, 1, 2, 3, 4, 5}   # 0=Lun ... 5=Sáb (sin domingo)
 
