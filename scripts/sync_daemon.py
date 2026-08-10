@@ -184,6 +184,11 @@ def procesar_solicitud(req):
         "completed_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
 
+    # Tras bajar los estados de asientos de NEO, rellenar el número de asiento
+    # (asiento_neo) en los asientos ya sincronizados, cruzando por descripción.
+    if script_key == "asientos_estado" and status == "completed":
+        refrescar_mv("conta_backfill_asiento_neo")
+
     # Disparar procesar-match después de bajar ítems comprados
     if script_key == "items_comprados" and status == "completed":
         try:
