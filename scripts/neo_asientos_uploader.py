@@ -343,25 +343,48 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
         await reg.click(force=True, timeout=8000)
     await page.wait_for_timeout(3000)
 
-    # ¿NEO rechazó por un campo obligatorio? Lo dice su propia validación.
-    try:
-        aviso = IF().get_by_text("Debe completar los campos requeridos")
-        if await aviso.count() > 0:
-            await captura(page, f"asiento-{aid}-VALIDACION")
-            raise RuntimeError("NEO pide completar un campo obligatorio (marcado con * rojo). "
-                               "Mirá la captura -VALIDACION para ver cuál falta.")
-    except RuntimeError:
-        raise
-    except Exception:
-        pass
+    # ── CONFIRMAR que NEO realmente aceptó el asiento ─────────────────────────
+    # 1) Rechazo explícito por campo obligatorio (validación de NEO).
+    for scope in (IF(), page):
+        try:
+            m = scope.get_by_text(re.compile(r"campos?\s+requeridos|marcados con un|complet\w* los campos", re.I))
+            if await m.count() > 0 and await m.first.is_visible():
+                await captura(page, f"asiento-{aid}-VALIDACION")
+                raise RuntimeError("NEO rechazó el asiento: falta un campo obligatorio (marcado con * rojo). "
+                                   "Ver captura -VALIDACION para saber cuál.")
+        except RuntimeError:
+            raise
+        except Exception:
+            continue
 
-    # Leer el número de asiento asignado por NEO
+    # 2) Número asignado por NEO (confirmación positiva).
     numero = None
-    try:
-        val = await IF().get_by_role("textbox", name="Número").first.input_value()
-        numero = (val or "").strip() or None
-    except Exception:
-        pass
+    for intento in (
+        lambda: IF().get_by_role("textbox", name="Número").first,
+        lambda: IF().locator('input[id*="umero"], input[name*="umero"], input[id*="siento"]').first,
+    ):
+        try:
+            val = ((await intento().input_value()) or "").strip()
+            if val and val not in ("0", "0.00", "0.0"):
+                numero = val; break
+        except Exception:
+            continue
+
+    # 3) Prueba clave: NEO, al registrar OK, DESHABILITA el botón 'Registrar'
+    #    (onclick: this.disabled=true). Si sigue habilitado, NO se registró.
+    #    Sin número + botón activo => no cantar 'En NEO' en falso: marcar error.
+    if not numero:
+        try:
+            reg2 = IF().get_by_role("button", name="Registrar").first
+            if await reg2.count() > 0 and await reg2.is_visible() and await reg2.is_enabled():
+                await captura(page, f"asiento-{aid}-SIN-CONFIRMAR")
+                raise RuntimeError("No pude confirmar el registro en NEO (sin número y el formulario sigue abierto). "
+                                   "Se deja en error para revisar/reintentar en vez de marcarlo 'En NEO' en falso.")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+
     await captura(page, f"asiento-{aid}-registrado")
     log.info(f"  ✅ Registrado en NEO (asiento_neo={numero})")
     return numero
