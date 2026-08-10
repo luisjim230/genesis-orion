@@ -89,12 +89,18 @@ export async function POST(request) {
     }
     const { lineas } = armarLineasGasto(factura, proveedor, ctx, 'gasto')
 
+    // Si vino en otra moneda, las líneas ya se convirtieron a CRC; se anota.
+    const enMonedaExtranjera = factura.moneda && factura.moneda !== 'CRC' && Number(factura.tipo_cambio) > 1
+    const notaMoneda = enMonedaExtranjera
+      ? ` (${factura.moneda} ${Number(f.total_comprobante || 0).toLocaleString('es-CR')} @ ${factura.tipo_cambio})`
+      : ''
+
     const asiento = await crearAsientoConLineas({
       fecha: (f.fecha_emision || new Date().toISOString()).slice(0, 10),
-      descripcion: `${proveedor?.nombre || f.nombre_emisor || 'Proveedor'}${f.consecutivo ? ' · ' + f.consecutivo : ''}`,
+      descripcion: `${proveedor?.nombre || f.nombre_emisor || 'Proveedor'}${f.consecutivo ? ' · ' + f.consecutivo : ''}${notaMoneda}`,
       tipo_origen: f.xml_path ? 'xml' : (f.pdf_path ? 'pdf' : 'manual'),
       clave_factura: f.clave,
-      moneda: f.moneda || 'CRC', tipo_cambio: f.tipo_cambio || null,
+      moneda: 'CRC', tipo_cambio: f.tipo_cambio || null,
       deducible: proveedor?.deducible_default !== false,
       creado_por: b.creado_por || null,
       pdf_url: f.pdf_path || null,

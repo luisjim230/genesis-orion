@@ -117,18 +117,25 @@ async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {
 
   const { lineas } = armarLineasGasto(factura, proveedor, ctx, 'gasto')
 
+  // Si la factura vino en otra moneda, las líneas ya están convertidas a CRC.
+  // Se deja constancia en la descripción y el asiento queda en CRC.
+  const enMonedaExtranjera = factura.moneda && factura.moneda !== 'CRC' && Number(factura.tipo_cambio) > 1
+  const notaMoneda = enMonedaExtranjera
+    ? ` (${factura.moneda} ${Number(factura.total_comprobante || 0).toLocaleString('es-CR')} @ ${factura.tipo_cambio})`
+    : ''
+
   // Descripción legible
   const desc = [
     proveedor?.nombre || factura.nombre_emisor || 'Proveedor',
     factura.consecutivo ? `· ${factura.consecutivo}` : '',
-  ].join(' ').trim()
+  ].join(' ').trim() + notaMoneda
 
   const asiento = await crearAsientoConLineas({
     fecha: (factura.fecha_emision || new Date().toISOString()).slice(0, 10),
     descripcion: desc,
     tipo_origen: factura._origen,
     clave_factura: factura.clave || null,
-    moneda: factura.moneda || 'CRC',
+    moneda: 'CRC',
     tipo_cambio: factura.tipo_cambio || null,
     deducible: proveedor?.deducible_default !== false,
     creado_por: creadoPor,

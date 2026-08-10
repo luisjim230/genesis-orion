@@ -450,6 +450,18 @@ export function armarLineasGasto(factura, proveedor, ctx, destino = 'gasto') {
     for (const g of gastoLineas) if (g.debe > mayor.debe) mayor = g
     mayor.debe = r2(mayor.debe + delta)
   }
+
+  // 3.5) Conversión a COLONES si la factura vino en otra moneda (ej. dólares).
+  // NEO registra en la moneda de contabilidad (CRC): hay que convertir con el
+  // tipo de cambio del XML. Se convierten los débitos; la contrapartida se
+  // calcula abajo como la suma de los débitos convertidos → asiento balanceado
+  // en CRC. Con CRC (tc=1) no cambia nada.
+  const tc = (factura.moneda && factura.moneda !== 'CRC' && Number(factura.tipo_cambio) > 1)
+    ? Number(factura.tipo_cambio) : 1
+  if (tc !== 1) {
+    for (const l of lineas) l.debe = r2(l.debe * tc)
+  }
+
   const totalHaber = r2(lineas.reduce((s, l) => s + l.debe, 0))
   const contrapartida = (proveedor && proveedor.cuenta_contrapartida) || CONTRAPARTIDA_DEFAULT
   lineas.push({
