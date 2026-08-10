@@ -69,6 +69,33 @@ async def captura(page, nombre):
         log.warning(f"  No pude sacar la captura: {e}")
         return None
 
+
+async def cerrar_alerta(page, iframe):
+    """Cierra la alerta de la llave criptográfica (u otra) que a veces sale.
+    El botón puede decir 'Aceptar' o 'Continuar', y aparecer en el iframe o en
+    la página. No pasa nada si no hay ninguna: se ignora."""
+    scopes = []
+    try:
+        fr = iframe()
+        if fr:
+            scopes.append(fr)
+    except Exception:
+        pass
+    scopes.append(page)
+    for scope in scopes:
+        for name in ("Aceptar", "Continuar", " Continuar", "OK"):
+            for rol in ("button", "link"):
+                try:
+                    loc = scope.get_by_role(rol, name=name)
+                    if await loc.count() > 0 and await loc.first.is_visible():
+                        await loc.first.click()
+                        await page.wait_for_timeout(1200)
+                        log.info(f"  Alerta cerrada con '{name.strip()}'")
+                        return True
+                except Exception:
+                    continue
+    return False
+
 MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
@@ -132,15 +159,28 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     Devuelve el número de asiento de NEO (o None) si se registró."""
     IF = iframe_getter
 
-    # Nuevo asiento
-    await IF().get_by_role("button", name="Nuevo").click()
-    await page.wait_for_timeout(1500)
+    # Nuevo asiento (esperá a que el botón esté visible; NEO a veces tarda)
+    nuevo = IF().get_by_role("button", name="Nuevo")
+    try:
+        await nuevo.wait_for(state="visible", timeout=30000)
+    except Exception:
+        nuevo = IF().get_by_role("link", name="Nuevo")  # fallback: puede ser link
+    await nuevo.first.click()
+
+    # Por si sale la alerta de la llave criptográfica al abrir el asiento
+    await page.wait_for_timeout(1200)
+    await cerrar_alerta(page, IF)
+
+    # Esperar a que el formulario REALMENTE cargue: el campo Observaciones es la
+    # señal de que la pantalla "Registrar asiento contable" ya está lista.
+    obs = IF().get_by_role("textbox", name="Observaciones del asiento")
+    await obs.wait_for(state="visible", timeout=45000)
 
     # ── Fecha (calendario con desplegables de mes/año) ──────────────────────
     y, m, d = str(asiento["fecha"]).split("-")
     dia, mes_nom, anio = str(int(d)), MESES[int(m)], y
     await IF().get_by_role("button", name="Submit").first.click()  # abre el calendario (icono)
-    await page.wait_for_timeout(800)
+    await page.wait_for_timeout(1200)
     # Mes
     await IF().locator("#monthSelect").get_by_role("img").click()
     await IF().get_by_text(mes_nom, exact=True).click()
@@ -238,32 +278,32 @@ async def preparar_neo(page):
 
     iframe = lambda: page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
 
-    # Alerta post-login de la llave criptográfica (a veces): se pasa con "Continuar"
-    try:
-        cont = iframe().get_by_role("link", name=" Continuar")
-        if await cont.count() > 0:
-            await cont.first.click()
-            await page.wait_for_timeout(1500)
-            log.info("  Alerta post-login: 'Continuar' OK")
-    except Exception:
-        pass
+    # Alerta post-login de la llave criptográfica (a veces): 'Aceptar' o 'Continuar'
+    await page.wait_for_timeout(1500)
+    await cerrar_alerta(page, iframe)
 
     # EMPRESA: verificar/cambiar a Corporación Rojimo (984) — CRÍTICO
     await page.get_by_title("Perfil").click()
     await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
     await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1500)
     log.info(f"  Empresa OK ({EMPRESA_ID} = Rojimo)")
 
+    # Cambiar de empresa suele reiniciar la sesión (por eso el 'login doble').
     if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
         raise RuntimeError(f"NEO sigue en Login.aspx. URL: {page.url}")
+    await cerrar_alerta(page, iframe)
 
     # Contabilidad → Asientos contables
     await page.locator("#mostrar_barra_izquierda").click()
     await page.get_by_role("link", name="Contabilidad").click()
-    await page.wait_for_timeout(2000)
+    await page.wait_for_timeout(2500)
     # id 108007 (por nombre matchea 2 links). Empieza con dígito → selector de atributo.
-    await iframe().locator('a[id="108007"]').click()
+    enlace = iframe().locator('a[id="108007"]')
+    await enlace.wait_for(state="visible", timeout=30000)
+    await enlace.click()
     await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1500)
     log.info("✅ Asientos contables cargado")
     return iframe
 
@@ -294,7 +334,19 @@ async def main():
     async with async_playwright() as p:
         ctx = await p.chromium.launch_persistent_context(str(PROFILE_DIR), headless=args.headless)
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-        iframe = await preparar_neo(page)
+        # NEO es lento: dar margen a cada acción antes de rendirse.
+        page.set_default_timeout(45000)
+        # Auto-aceptar diálogos nativos del navegador (alert/confirm), por si la
+        # alerta de la llave criptográfica es un popup del navegador.
+        page.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
+        try:
+            iframe = await preparar_neo(page)
+        except Exception as e:
+            log.error(f"No pude preparar NEO: {e}", exc_info=True)
+            await captura(page, "ERROR-preparar-neo")
+            if args.dry_run:
+                await page.wait_for_timeout(600000)
+            return
 
         for a in asientos:
             aid = a["id"]
@@ -316,14 +368,17 @@ async def main():
                     log.info(f"✅ #{aid} sincronizado (NEO {numero}).")
             except Exception as e:
                 log.error(f"❌ #{aid} falló: {e}", exc_info=True)
+                await captura(page, f"asiento-{aid}-ERROR")
+                log.error(f"   URL al fallar: {page.url}")
                 if not args.dry_run:
                     marcar(aid, {"estado": "error", "detalle_error": str(e)[:500],
                                  "intentos": (a.get("intentos") or 0) + 1, "procesando": False})
-                # Volver a la lista para el siguiente (recargar pantalla)
-                try:
-                    iframe = await preparar_neo(page)
-                except Exception:
-                    break
+                # Si hay más asientos, volver a la lista; si no, no recargar.
+                if a is not asientos[-1]:
+                    try:
+                        iframe = await preparar_neo(page)
+                    except Exception:
+                        break
 
         if args.dry_run:
             log.info("DRY-RUN terminado. Revisá la ventana; cerrala cuando quieras.")
