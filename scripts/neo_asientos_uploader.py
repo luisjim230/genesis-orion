@@ -100,47 +100,55 @@ async def cerrar_alerta(page, iframe):
 MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
-async def elegir_cuenta(page, IF, codigo, nombre):
-    """Escribe el código de cuenta y ELIGE la fila EXACTA del desplegable.
-    Descubierto con codegen (grabacion_cuenta.py):
-      fill(codigo)  ->  get_by_text(codigo, exact=True).click()
-    El exact=True es CLAVE: desambigua el substring (10-10-10-01 NO matchea
-    20-10-10-10-01 'CXP proveedores'). Como respaldo, se clickea la celda con el
-    nombre exacto de la cuenta (así lo hizo la grabación con 'viaticos')."""
+async def _tipear_y_elegir(page, IF, texto_busqueda, codigo, nombre):
+    """Escribe `texto_busqueda` en el campo de cuentas y trata de elegir la
+    cuenta `codigo`/`nombre` del desplegable. Devuelve True si la eligió."""
     campo = IF().get_by_role("textbox", name="Lista de las cuentas")
     await campo.click(click_count=3)
     # OJO: fill() NO dispara el desplegable de NEO; hay que teclear de verdad.
-    await campo.press_sequentially(codigo, delay=60)
+    await campo.press_sequentially(texto_busqueda, delay=55)
     await page.wait_for_timeout(900)
 
-    nombre = (nombre or "").strip()
-    # Regex: el texto de la fila EMPIEZA con el código exacto (seguido de espacio
-    # o fin). Sirve cuando la fila trae código+nombre juntos ("90-20-01-01
-    # Comisiones BN") y a la vez NO confunde substrings (20-10-10-10-01 no
-    # empieza con 10-10-10-01).
+    # Regex: la fila EMPIEZA con el código exacto (código+nombre juntos), sin
+    # confundir substrings (20-10-10-10-01 no empieza con 10-10-10-01).
     rx_ini = re.compile(r"^\s*" + re.escape(codigo) + r"(\s|$)")
-    # Elegir la sugerencia del desplegable, probando varias formas en orden.
     opciones = [
         ("código exacto", IF().get_by_text(codigo, exact=True)),
         ("código al inicio", IF().get_by_text(rx_ini)),
     ]
     if nombre:
         opciones.append(("celda nombre", IF().get_by_role("cell", name=nombre, exact=True)))
-        opciones.append(("celda nombre~", IF().get_by_role("cell", name=nombre)))  # no exacto (may/min, espacios)
+        opciones.append(("celda nombre~", IF().get_by_role("cell", name=nombre)))  # no exacto
         opciones.append(("texto nombre", IF().get_by_text(nombre, exact=True)))
     for etiqueta, op in opciones:
         try:
-            await op.first.wait_for(state="visible", timeout=4000)
+            await op.first.wait_for(state="visible", timeout=3500)
             await op.first.click()
             await page.wait_for_timeout(400)
-            log.info(f"    cuenta {codigo} elegida ({etiqueta})")
+            log.info(f"    cuenta {codigo} elegida ({etiqueta}, buscando '{texto_busqueda}')")
             return True
         except Exception:
             continue
-    # Último recurso: Enter.
+    return False
+
+
+async def elegir_cuenta(page, IF, codigo, nombre):
+    """Elige la cuenta del desplegable de NEO. Busca primero por CÓDIGO; si no
+    aparece (pasa con las cuentas de comisiones 90-xx), reintenta buscando por
+    NOMBRE (NEO también busca por nombre, como en grabacion_comisiones.py)."""
+    nombre = (nombre or "").strip()
+    if await _tipear_y_elegir(page, IF, codigo, codigo, nombre):
+        return True
+    if nombre and await _tipear_y_elegir(page, IF, nombre, codigo, nombre):
+        return True
+    # Último recurso: dejar tipeado el código y Enter.
+    campo = IF().get_by_role("textbox", name="Lista de las cuentas")
+    await campo.click(click_count=3)
+    await campo.press_sequentially(codigo, delay=55)
+    await page.wait_for_timeout(600)
     await campo.press("Enter")
     await page.wait_for_timeout(400)
-    log.warning(f"    cuenta {codigo}: no encontré la sugerencia; usé Enter (revisá la captura)")
+    log.warning(f"    cuenta {codigo}: no la encontré por código ni por nombre; usé Enter")
     return False
 
 logging.basicConfig(
