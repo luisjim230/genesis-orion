@@ -152,8 +152,12 @@ def main():
     imap.select("INBOX")
 
     # SINCE (IMAP, inclusive del día) + Gmail: con adjunto y sin etiqueta procesada.
+    # OJO: el valor de X-GM-RAW lleva espacios, así que hay que mandarlo ENTRE
+    # COMILLAS; imaplib no las agrega solo y el servidor responde
+    # "Could not parse command" si se manda crudo.
+    raw = f'has:attachment -label:{ETIQUETA}'.replace('"', '')
     typ, data = imap.uid("search", None, "SINCE", since_imap,
-                         "X-GM-RAW", f'has:attachment -label:{ETIQUETA}')
+                         "X-GM-RAW", f'"{raw}"')
     uids = (data[0].split() if data and data[0] else [])
     log.info(f"{len(uids)} correo(s) nuevos con adjunto desde {corte}.")
 
