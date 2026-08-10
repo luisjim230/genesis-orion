@@ -283,19 +283,17 @@ export async function buscarProveedor(cedula, nombre) {
     const { data } = await db.from('conta_proveedores').select('*').eq('cedula', cedula).maybeSingle()
     if (data) return data
   }
-  // 2) Match por nombre tolerante a variantes (espacios, S.A., tildes, etc.).
+  // 2) Match por nombre SOLO exacto (ya normalizado: sin tildes, espacios,
+  //    puntuación ni sufijos de sociedad). NO se hace match parcial/aproximado:
+  //    en contabilidad es preferible marcar "nuevo" y que un humano confirme,
+  //    antes que confundir dos proveedores parecidos y mandar plata a la cuenta
+  //    equivocada. Con el auto-aprendizaje de cédula, en cuanto se confirma una
+  //    vez queda enganchado por cédula para siempre.
   if (nombre) {
     const n = normProv(nombre)
     const { data } = await db.from('conta_proveedores').select('*')
     const lista = data || []
-    let hit = n ? lista.find((p) => normProv(p.nombre) === n) : null
-    // parcial defensivo: uno contiene al otro y el más corto tiene ≥ 6 chars
-    if (!hit && n) {
-      hit = lista.find((p) => {
-        const pn = normProv(p.nombre)
-        return pn && (pn.includes(n) || n.includes(pn)) && Math.min(pn.length, n.length) >= 6
-      })
-    }
+    const hit = n ? lista.find((p) => normProv(p.nombre) === n) : null
     if (hit) {
       // Auto-aprender la cédula: si el proveedor histórico no la tenía, se la
       // guardamos ahora. La próxima factura de este proveedor matchea al toque
