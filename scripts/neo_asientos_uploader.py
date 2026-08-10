@@ -301,20 +301,48 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
             log.warning(f"  No pude asignar el centro '{centro}': {e}")
 
     # ── Registrar ────────────────────────────────────────────────────────────
+    aid = asiento["id"]
     if dry_run:
         log.info("  🧪 DRY-RUN: NO hago clic en 'Registrar'. El asiento quedó armado en pantalla para revisar.")
-        await captura(page, f"asiento-{a['id']}-dryrun")
+        await captura(page, f"asiento-{aid}-dryrun")
         return None
 
-    await IF().get_by_role("button", name="Registrar").click()
-    await page.wait_for_timeout(2500)
-    # Intentar leer el número de asiento asignado por NEO
+    # Foto del formulario armado ANTES de registrar (para diagnóstico: fecha,
+    # líneas, montos… todo lo que NEO va a validar).
+    await captura(page, f"asiento-{aid}-antes-registrar")
+
+    reg = IF().get_by_role("button", name="Registrar")
+    try:
+        await reg.scroll_into_view_if_needed(timeout=8000)
+    except Exception:
+        pass
+    try:
+        await reg.click(timeout=15000)
+    except Exception:
+        # el botón puede quedar tapado por la barra de progreso u otro overlay
+        await reg.click(force=True, timeout=8000)
+    await page.wait_for_timeout(3000)
+
+    # ¿NEO rechazó por un campo obligatorio? Lo dice su propia validación.
+    try:
+        aviso = IF().get_by_text("Debe completar los campos requeridos")
+        if await aviso.count() > 0:
+            await captura(page, f"asiento-{aid}-VALIDACION")
+            raise RuntimeError("NEO pide completar un campo obligatorio (marcado con * rojo). "
+                               "Mirá la captura -VALIDACION para ver cuál falta.")
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+
+    # Leer el número de asiento asignado por NEO
     numero = None
     try:
         val = await IF().get_by_role("textbox", name="Número").first.input_value()
         numero = (val or "").strip() or None
     except Exception:
         pass
+    await captura(page, f"asiento-{aid}-registrado")
     log.info(f"  ✅ Registrado en NEO (asiento_neo={numero})")
     return numero
 
