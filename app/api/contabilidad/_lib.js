@@ -264,20 +264,50 @@ export function reglaCabys(cabys, codigo) {
 }
 
 // ── Buscar proveedor por cédula o, si no, por nombre normalizado ─────────────
+// Normaliza el nombre de un proveedor para matchear variantes de escritura:
+// minúsculas, sin tildes, sin sufijos de sociedad (S.A., SRL, LTDA…) y sin
+// espacios ni puntuación. Así "INVERSIONES A M P M S.A." == "Inversiones AMPM".
+export function normProv(s) {
+  let x = norm(s).replace(/[.,()]/g, ' ')
+  x = ' ' + x.replace(/\s+/g, ' ').trim() + ' '
+  // quita sufijos legales (dos pasadas por si vienen encadenados)
+  const suf = / (sociedad anonima|s a|s r l|s de r l|srl|ltda|limitada|sa|sral) /g
+  x = x.replace(suf, ' ').replace(suf, ' ')
+  return x.replace(/[^a-z0-9]/g, '')
+}
+
 export async function buscarProveedor(cedula, nombre) {
   const db = getDb()
+  // 1) Match fuerte por cédula (campo limpio y estructurado del XML).
   if (cedula) {
     const { data } = await db.from('conta_proveedores').select('*').eq('cedula', cedula).maybeSingle()
     if (data) return data
   }
+  // 2) Match por nombre tolerante a variantes (espacios, S.A., tildes, etc.).
   if (nombre) {
-    const n = norm(nombre)
+    const n = normProv(nombre)
     const { data } = await db.from('conta_proveedores').select('*')
-    const hit = (data || []).find((p) => norm(p.nombre) === n)
-    if (hit) return hit
-    // match parcial defensivo
-    const parcial = (data || []).find((p) => n && (norm(p.nombre).includes(n) || n.includes(norm(p.nombre))))
-    if (parcial) return parcial
+    const lista = data || []
+    let hit = n ? lista.find((p) => normProv(p.nombre) === n) : null
+    // parcial defensivo: uno contiene al otro y el más corto tiene ≥ 6 chars
+    if (!hit && n) {
+      hit = lista.find((p) => {
+        const pn = normProv(p.nombre)
+        return pn && (pn.includes(n) || n.includes(pn)) && Math.min(pn.length, n.length) >= 6
+      })
+    }
+    if (hit) {
+      // Auto-aprender la cédula: si el proveedor histórico no la tenía, se la
+      // guardamos ahora. La próxima factura de este proveedor matchea al toque
+      // por cédula, sin depender del nombre nunca más.
+      if (cedula && !hit.cedula) {
+        try {
+          await db.from('conta_proveedores').update({ cedula }).eq('id', hit.id)
+          hit.cedula = cedula
+        } catch { /* cédula ya tomada por otro registro: se ignora */ }
+      }
+      return hit
+    }
   }
   return null
 }
