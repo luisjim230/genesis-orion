@@ -177,21 +177,42 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     await obs.wait_for(state="visible", timeout=45000)
 
     # ── Fecha (calendario con desplegables de mes/año) ──────────────────────
+    # Reproduce EXACTO la grabación (grabacion_fecha.py):
+    #   Submit(icono) → #monthSelect img → texto del mes → img.nth(3) → texto del año → celda del día
     y, m, d = str(asiento["fecha"]).split("-")
     dia, mes_nom, anio = str(int(d)), MESES[int(m)], y
-    await IF().get_by_role("button", name="Submit").first.click()  # abre el calendario (icono)
-    await page.wait_for_timeout(1200)
+
+    async def elegir_texto(texto):
+        # Click de una opción del calendario probando exact y no-exact, con
+        # timeouts cortos para NO quedarse pegado 45s si un selector no calza.
+        for exact in (True, False):
+            try:
+                loc = IF().get_by_text(texto, exact=exact).first
+                await loc.wait_for(state="visible", timeout=6000)
+                await loc.click()
+                return
+            except Exception:
+                continue
+        raise RuntimeError(f"No encontré la opción '{texto}' en el calendario")
+
+    cal = IF().get_by_role("button", name="Submit").first  # icono que abre el calendario
+    await cal.wait_for(state="visible", timeout=15000)
+    await cal.click()
+    await page.wait_for_timeout(1000)
     # Mes
     await IF().locator("#monthSelect").get_by_role("img").click()
-    await IF().get_by_text(mes_nom, exact=True).click()
-    # Año (probar #yearSelect; si no, el 4º img del datepicker)
-    try:
-        await IF().locator("#yearSelect").get_by_role("img").click()
-    except Exception:
-        await IF().get_by_role("img").nth(3).click()
-    await IF().get_by_text(anio, exact=True).click()
+    await page.wait_for_timeout(500)
+    await elegir_texto(mes_nom)
+    await page.wait_for_timeout(500)
+    # Año: el desplegable del año es el 4º img del datepicker (como en la grabación)
+    await IF().get_by_role("img").nth(3).click()
+    await page.wait_for_timeout(500)
+    await elegir_texto(anio)
+    await page.wait_for_timeout(500)
     # Día
-    await IF().get_by_role("cell", name=dia, exact=True).first.click()
+    diaC = IF().get_by_role("cell", name=dia, exact=True).first
+    await diaC.wait_for(state="visible", timeout=8000)
+    await diaC.click()
     log.info(f"  Fecha seteada: {dia}/{m}/{anio}")
 
     # ── Observaciones (descripción) ─────────────────────────────────────────
@@ -201,32 +222,19 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     # ── Líneas ──────────────────────────────────────────────────────────────
     lineas = sorted(asiento.get("lineas") or [], key=lambda l: l.get("orden") or 0)
     for i, l in enumerate(lineas, 1):
+        # NEO resuelve la cuenta directo del código exacto (así en la grabación):
+        # se escribe el código y se pasa al monto, sin clickear ningún desplegable.
         cuenta = IF().get_by_role("textbox", name="Lista de las cuentas")
         await cuenta.click(); await cuenta.fill(l["cuenta"])
         await page.wait_for_timeout(700)
-        # Elegir la cuenta del desplegable por su nombre (NEO colapsa espacios)
-        nombre = " ".join(((l.get("cta") or {}).get("nombre") or "").split())
-        elegido = False
-        for intento in (dict(name=nombre, exact=True), dict(name=nombre), dict(name=l["cuenta"])):
-            try:
-                loc = IF().get_by_role("cell", **intento).first
-                if await loc.count() > 0:
-                    await loc.click(); elegido = True; break
-            except Exception:
-                continue
-        if not elegido:
-            raise RuntimeError(f"No pude elegir la cuenta {l['cuenta']} ({nombre}) del desplegable")
 
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
-        if debe > 0:
-            campo = IF().get_by_role("textbox", name="Debe del movimiento del")
-            await campo.click(); await campo.fill(fmt_monto(debe))
-        else:
-            campo = IF().get_by_role("textbox", name="Haber del movimiento del")
-            await campo.click(); await campo.fill(fmt_monto(haber))
+        campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
+        campo = IF().get_by_role("textbox", name=campo_nom)
+        await campo.click(); await campo.fill(fmt_monto(debe if debe > 0 else haber))
 
         await IF().get_by_role("button", name="Agregar").click()
-        await page.wait_for_timeout(600)
+        await page.wait_for_timeout(700)
         log.info(f"  Línea {i}/{len(lineas)}: {l['cuenta']} {'D' if debe>0 else 'H'} {fmt_monto(debe or haber)}")
 
     # ── Centros de costo (por línea que tenga) ──────────────────────────────
