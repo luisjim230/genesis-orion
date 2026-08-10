@@ -1,0 +1,320 @@
+"""
+neo_asientos_uploader.py — Robot que sube a NEO los asientos APROBADOS desde el
+panel de Contabilidad (Génesis Orión). Es la otra punta del circuito: el panel
+deja el asiento en estado 'aprobado' y este robot lo registra en NEO.
+
+Flujo (descubierto con Playwright codegen sobre la pantalla real):
+  login → (alerta "Continuar" si aparece) → EMPRESA Corporación Rojimo (984)
+  → Contabilidad → Asientos contables → Nuevo → fecha (calendario con
+  desplegables de mes/año) → Observaciones → por cada línea: cuenta + debe/haber
+  + Agregar → centro de costo por línea → Registrar.
+
+SEGURIDAD:
+  - Solo procesa estado='aprobado' y es_prueba=false. Los de PRUEBA NUNCA suben.
+  - Verifica SIEMPRE que la empresa sea Rojimo (984) antes de registrar.
+  - --dry-run hace TODO menos el clic final "Registrar" (para probar sin crear
+    nada real en NEO). ¡Usalo en la primera corrida!
+
+Cómo correr en la M1:
+  cd ~/genesis-orion
+  # Probar UN asiento, viendo el navegador, SIN registrarlo de verdad:
+  .venv/bin/python scripts/neo_asientos_uploader.py --solo <ID> --dry-run
+  # Cuando todo llene bien, sacale --dry-run para que lo registre:
+  .venv/bin/python scripts/neo_asientos_uploader.py --solo <ID>
+  # Procesar toda la cola de aprobados (hasta 20):
+  .venv/bin/python scripts/neo_asientos_uploader.py --limit 20
+"""
+
+import os, sys, asyncio, logging, json, argparse, urllib.request, urllib.error
+from pathlib import Path
+from datetime import datetime
+
+BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+from neo_session import relogin_si_hace_falta
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE / ".env")
+except ImportError:
+    pass
+
+NEO_URL     = "https://neo.neotecnologias.com/NEOBusiness/"
+EMPRESA_ID  = "984"  # Corporación Rojimo S.A.
+NEO_USUARIO = os.getenv("NEO_USUARIO_2") or os.getenv("NEO_USUARIO")
+NEO_CLAVE   = os.getenv("NEO_CLAVE_2")   or os.getenv("NEO_CLAVE")
+_FALLBACK   = not (os.getenv("NEO_USUARIO_2") and os.getenv("NEO_CLAVE_2"))
+
+SUPA_URL    = os.getenv("SUPABASE_URL")
+SUPA_KEY    = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+
+_faltan = [n for n, v in (("NEO_USUARIO", NEO_USUARIO), ("NEO_CLAVE", NEO_CLAVE), ("SUPABASE_URL", SUPA_URL), ("SUPABASE_SERVICE_ROLE_KEY/ANON_KEY", SUPA_KEY)) if not v]
+if _faltan:
+    raise SystemExit("ERROR: faltan variables en scripts/.env: " + ", ".join(_faltan))
+
+PROFILE_DIR = BASE / ".pw-profile-uploader"
+LOG_FILE    = BASE / "neo-asientos-uploader.log"
+
+MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
+         "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S",
+    handlers=[logging.FileHandler(str(LOG_FILE)), logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
+
+
+# ─── SUPABASE REST ────────────────────────────────────────────────────────────
+def supa(method, path, data=None, prefer=None):
+    url = f"{SUPA_URL}/rest/v1/{path}"
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("apikey", SUPA_KEY)
+    req.add_header("Authorization", f"Bearer {SUPA_KEY}")
+    req.add_header("Content-Type", "application/json")
+    if prefer:
+        req.add_header("Prefer", prefer)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            txt = r.read().decode()
+            return json.loads(txt) if txt else None
+    except urllib.error.HTTPError as e:
+        log.error(f"Supabase {method} {path}: {e.code} {e.read().decode()[:300]}")
+        return None
+
+
+def cargar_aprobados(solo_id=None, limit=20):
+    sel = ("id,fecha,descripcion,moneda,estado,es_prueba,intentos,"
+           "lineas:conta_asiento_lineas(orden,cuenta,debe,haber,observacion,"
+           "cta:conta_cuentas(nombre),centro:conta_centros_costo(nombre_neo))")
+    q = f"conta_asientos?select={sel}&estado=eq.aprobado&es_prueba=eq.false&order=aprobado_en.asc&limit={limit}"
+    if solo_id:
+        q = f"conta_asientos?select={sel}&id=eq.{solo_id}"
+    data = supa("GET", q) or []
+    if solo_id and data:
+        a = data[0]
+        if a["estado"] != "aprobado":
+            log.warning(f"El asiento #{solo_id} está en estado '{a['estado']}', no 'aprobado'.")
+        if a.get("es_prueba"):
+            log.warning(f"El asiento #{solo_id} es de PRUEBA — no debería subirse a NEO real.")
+    return data
+
+
+def marcar(asiento_id, campos):
+    supa("PATCH", f"conta_asientos?id=eq.{asiento_id}", campos, prefer="return=minimal")
+
+
+def fmt_monto(x):
+    # NEO recibe "1614.9" / "16025" (punto decimal, sin separador de miles)
+    x = float(x or 0)
+    s = ("%f" % x).rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
+# ─── PLAYWRIGHT: registrar un asiento en NEO ──────────────────────────────────
+async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
+    """Reproduce el asiento en la pantalla REGISTRAR ASIENTO CONTABLE.
+    Devuelve el número de asiento de NEO (o None) si se registró."""
+    IF = iframe_getter
+
+    # Nuevo asiento
+    await IF().get_by_role("button", name="Nuevo").click()
+    await page.wait_for_timeout(1500)
+
+    # ── Fecha (calendario con desplegables de mes/año) ──────────────────────
+    y, m, d = str(asiento["fecha"]).split("-")
+    dia, mes_nom, anio = str(int(d)), MESES[int(m)], y
+    await IF().get_by_role("button", name="Submit").first.click()  # abre el calendario (icono)
+    await page.wait_for_timeout(800)
+    # Mes
+    await IF().locator("#monthSelect").get_by_role("img").click()
+    await IF().get_by_text(mes_nom, exact=True).click()
+    # Año (probar #yearSelect; si no, el 4º img del datepicker)
+    try:
+        await IF().locator("#yearSelect").get_by_role("img").click()
+    except Exception:
+        await IF().get_by_role("img").nth(3).click()
+    await IF().get_by_text(anio, exact=True).click()
+    # Día
+    await IF().get_by_role("cell", name=dia, exact=True).first.click()
+    log.info(f"  Fecha seteada: {dia}/{m}/{anio}")
+
+    # ── Observaciones (descripción) ─────────────────────────────────────────
+    obs = IF().get_by_role("textbox", name="Observaciones del asiento")
+    await obs.click(); await obs.fill(asiento.get("descripcion") or "")
+
+    # ── Líneas ──────────────────────────────────────────────────────────────
+    lineas = sorted(asiento.get("lineas") or [], key=lambda l: l.get("orden") or 0)
+    for i, l in enumerate(lineas, 1):
+        cuenta = IF().get_by_role("textbox", name="Lista de las cuentas")
+        await cuenta.click(); await cuenta.fill(l["cuenta"])
+        await page.wait_for_timeout(700)
+        # Elegir la cuenta del desplegable por su nombre (NEO colapsa espacios)
+        nombre = " ".join(((l.get("cta") or {}).get("nombre") or "").split())
+        elegido = False
+        for intento in (dict(name=nombre, exact=True), dict(name=nombre), dict(name=l["cuenta"])):
+            try:
+                loc = IF().get_by_role("cell", **intento).first
+                if await loc.count() > 0:
+                    await loc.click(); elegido = True; break
+            except Exception:
+                continue
+        if not elegido:
+            raise RuntimeError(f"No pude elegir la cuenta {l['cuenta']} ({nombre}) del desplegable")
+
+        debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
+        if debe > 0:
+            campo = IF().get_by_role("textbox", name="Debe del movimiento del")
+            await campo.click(); await campo.fill(fmt_monto(debe))
+        else:
+            campo = IF().get_by_role("textbox", name="Haber del movimiento del")
+            await campo.click(); await campo.fill(fmt_monto(haber))
+
+        await IF().get_by_role("button", name="Agregar").click()
+        await page.wait_for_timeout(600)
+        log.info(f"  Línea {i}/{len(lineas)}: {l['cuenta']} {'D' if debe>0 else 'H'} {fmt_monto(debe or haber)}")
+
+    # ── Centros de costo (por línea que tenga) ──────────────────────────────
+    # Cada línea sin centro muestra el link "Sin centro de costo". Se asignan en
+    # el orden en que aparecen. Recorremos las líneas que traen centro.
+    for l in lineas:
+        centro = (l.get("centro") or {}).get("nombre_neo")
+        if not centro:
+            continue
+        try:
+            enlace = IF().get_by_role("cell", name="Sin centro de costo", exact=True).locator("a").first
+            await enlace.click()
+            campo = IF().get_by_role("textbox", name="Centro de costo del")
+            await campo.click(); await campo.fill(centro)
+            await page.wait_for_timeout(700)
+            await IF().get_by_role("cell", name=centro).first.click()
+            log.info(f"  Centro de costo: {centro}")
+        except Exception as e:
+            log.warning(f"  No pude asignar el centro '{centro}': {e}")
+
+    # ── Registrar ────────────────────────────────────────────────────────────
+    if dry_run:
+        log.info("  🧪 DRY-RUN: NO hago clic en 'Registrar'. El asiento quedó armado en pantalla para revisar.")
+        return None
+
+    await IF().get_by_role("button", name="Registrar").click()
+    await page.wait_for_timeout(2500)
+    # Intentar leer el número de asiento asignado por NEO
+    numero = None
+    try:
+        val = await IF().get_by_role("textbox", name="Número").first.input_value()
+        numero = (val or "").strip() or None
+    except Exception:
+        pass
+    log.info(f"  ✅ Registrado en NEO (asiento_neo={numero})")
+    return numero
+
+
+# ─── LOGIN + EMPRESA + NAVEGACIÓN ─────────────────────────────────────────────
+async def preparar_neo(page):
+    log.info("Abriendo NEO...")
+    await page.goto(NEO_URL, wait_until="domcontentloaded", timeout=60000)
+    await page.get_by_role("textbox", name="Usuario o correo electrónico").fill(NEO_USUARIO)
+    await page.get_by_role("textbox", name="Contraseña").fill(NEO_CLAVE)
+    await page.get_by_role("button", name="Ingresar").click()
+    await page.wait_for_load_state("networkidle")
+    log.info("Login OK")
+
+    iframe = lambda: page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+
+    # Alerta post-login de la llave criptográfica (a veces): se pasa con "Continuar"
+    try:
+        cont = iframe().get_by_role("link", name=" Continuar")
+        if await cont.count() > 0:
+            await cont.first.click()
+            await page.wait_for_timeout(1500)
+            log.info("  Alerta post-login: 'Continuar' OK")
+    except Exception:
+        pass
+
+    # EMPRESA: verificar/cambiar a Corporación Rojimo (984) — CRÍTICO
+    await page.get_by_title("Perfil").click()
+    await page.locator("#cboEmpresa").select_option(EMPRESA_ID)
+    await page.wait_for_load_state("networkidle")
+    log.info(f"  Empresa OK ({EMPRESA_ID} = Rojimo)")
+
+    if not await relogin_si_hace_falta(page, NEO_USUARIO, NEO_CLAVE, log):
+        raise RuntimeError(f"NEO sigue en Login.aspx. URL: {page.url}")
+
+    # Contabilidad → Asientos contables
+    await page.locator("#mostrar_barra_izquierda").click()
+    await page.get_by_role("link", name="Contabilidad").click()
+    await page.wait_for_timeout(2000)
+    # id 108007 (por nombre matchea 2 links). Empieza con dígito → selector de atributo.
+    await iframe().locator('a[id="108007"]').click()
+    await page.wait_for_load_state("networkidle")
+    log.info("✅ Asientos contables cargado")
+    return iframe
+
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+async def main():
+    ap = argparse.ArgumentParser(description="Sube asientos aprobados del panel a NEO.")
+    ap.add_argument("--solo", help="Procesar solo este ID de asiento")
+    ap.add_argument("--limit", type=int, default=20, help="Máximo de asientos a procesar (default 20)")
+    ap.add_argument("--dry-run", action="store_true", help="Hace todo menos el clic final 'Registrar'")
+    ap.add_argument("--headless", action="store_true", help="Sin ventana (por defecto se ve el navegador)")
+    args = ap.parse_args()
+
+    log.info("=" * 60)
+    log.info(f"NEO ← Subir asientos aprobados  [{datetime.now():%Y-%m-%d %H:%M}]"
+             + ("  (DRY-RUN)" if args.dry_run else ""))
+    if _FALLBACK:
+        log.warning("NEO_USUARIO_2/NEO_CLAVE_2 no definidos: usando el usuario principal.")
+    log.info("=" * 60)
+
+    asientos = cargar_aprobados(args.solo, args.limit)
+    if not asientos:
+        log.info("No hay asientos aprobados para subir. Nada que hacer.")
+        return
+    log.info(f"{len(asientos)} asiento(s) a procesar.")
+
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        ctx = await p.chromium.launch_persistent_context(str(PROFILE_DIR), headless=args.headless)
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        iframe = await preparar_neo(page)
+
+        for a in asientos:
+            aid = a["id"]
+            # Saltar prueba por seguridad (doble candado)
+            if a.get("es_prueba"):
+                log.warning(f"#{aid} es de prueba — se salta."); continue
+            if not args.dry_run and a["estado"] != "aprobado":
+                log.warning(f"#{aid} no está aprobado ({a['estado']}) — se salta."); continue
+
+            log.info(f"── Asiento #{aid}: {a.get('descripcion')}")
+            if not args.dry_run:
+                marcar(aid, {"estado": "enviando", "procesando": True})
+            try:
+                numero = await registrar_en_neo(page, iframe, a, args.dry_run)
+                if not args.dry_run:
+                    marcar(aid, {"estado": "sincronizado", "asiento_neo": numero,
+                                 "enviado_en": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 "procesando": False, "detalle_error": None})
+                    log.info(f"✅ #{aid} sincronizado (NEO {numero}).")
+            except Exception as e:
+                log.error(f"❌ #{aid} falló: {e}", exc_info=True)
+                if not args.dry_run:
+                    marcar(aid, {"estado": "error", "detalle_error": str(e)[:500],
+                                 "intentos": (a.get("intentos") or 0) + 1, "procesando": False})
+                # Volver a la lista para el siguiente (recargar pantalla)
+                try:
+                    iframe = await preparar_neo(page)
+                except Exception:
+                    break
+
+        if args.dry_run:
+            log.info("DRY-RUN terminado. Revisá la ventana; cerrala cuando quieras.")
+            await page.wait_for_timeout(600000)  # 10 min para inspeccionar a mano
+        await ctx.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
