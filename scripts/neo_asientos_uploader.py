@@ -269,34 +269,48 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     await obs.click(); await obs.fill(asiento.get("descripcion") or "")
 
     # ── Líneas ──────────────────────────────────────────────────────────────
+    # Cada línea: elegir cuenta → monto → Agregar, y VERIFICAR que entró a la
+    # grilla (que el código aparezca). Si no entró, se reintenta hasta 3 veces;
+    # si aun así no entra, se aborta el asiento (mejor error claro que registrar
+    # un asiento incompleto/desbalanceado).
     lineas = sorted(asiento.get("lineas") or [], key=lambda l: l.get("orden") or 0)
     for i, l in enumerate(lineas, 1):
-        # 1) Cuenta: elegir la fila EXACTA del desplegable (ojo con códigos que
-        #    son substring de otros, p.ej. 10-10-10-01 ⊂ 20-10-10-10-01).
-        await elegir_cuenta(page, IF, l["cuenta"], (l.get("cta") or {}).get("nombre"))
-
-        # 2) Monto: los campos enmascarados NO aceptan fill() de golpe; hay que
-        #    teclear carácter por carácter (triple-click limpia lo previo).
+        codigo = l["cuenta"]
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
         campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
-        campo = IF().get_by_role("textbox", name=campo_nom)
-        # El campo del monto puede quedar tapado por la barra de progreso de NEO
-        # justo después de elegir la cuenta: si el clic normal no entra, se
-        # fuerza (la fila y el campo ya existen, así que es seguro).
-        try:
-            await campo.click(click_count=3, timeout=8000)
-        except Exception:
+        monto = fmt_monto(debe if debe > 0 else haber)
+
+        agregada = False
+        for intento in range(1, 4):
+            # 1) Cuenta (elegir del desplegable; ojo códigos substring de otros).
+            await elegir_cuenta(page, IF, codigo, (l.get("cta") or {}).get("nombre"))
+            # 2) Monto (campo enmascarado: teclear; forzar clic si está tapado).
+            campo = IF().get_by_role("textbox", name=campo_nom)
             try:
-                await campo.scroll_into_view_if_needed(timeout=4000)
+                await campo.click(click_count=3, timeout=8000)
+            except Exception:
+                try:
+                    await campo.scroll_into_view_if_needed(timeout=4000)
+                except Exception:
+                    pass
+                await campo.click(click_count=3, force=True, timeout=6000)
+            await campo.press_sequentially(monto, delay=45)
+            await page.wait_for_timeout(300)
+            # 3) Agregar a la grilla.
+            await IF().get_by_role("button", name="Agregar").click()
+            await page.wait_for_timeout(1000)
+            # 4) Verificar que la línea REALMENTE entró (el código en la grilla).
+            try:
+                if await IF().get_by_text(codigo, exact=False).count() > 0:
+                    agregada = True
+                    break
             except Exception:
                 pass
-            await campo.click(click_count=3, force=True, timeout=6000)
-        await campo.press_sequentially(fmt_monto(debe if debe > 0 else haber), delay=45)
-        await page.wait_for_timeout(300)
-
-        await IF().get_by_role("button", name="Agregar").click()
-        await page.wait_for_timeout(800)
-        log.info(f"  Línea {i}/{len(lineas)}: {l['cuenta']} {'D' if debe>0 else 'H'} {fmt_monto(debe or haber)}")
+            log.warning(f"  Línea {codigo}: no entró a la grilla (intento {intento}/3), reintento…")
+        if not agregada:
+            raise RuntimeError(f"No pude agregar la línea de la cuenta {codigo} tras 3 intentos "
+                               f"(el asiento quedaría desbalanceado). Se aborta.")
+        log.info(f"  Línea {i}/{len(lineas)}: {codigo} {'D' if debe>0 else 'H'} {monto}")
 
     # ── Centros de costo (por línea que tenga) ──────────────────────────────
     # Cada línea sin centro muestra el link "Sin centro de costo". Se asignan en
