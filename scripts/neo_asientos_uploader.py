@@ -270,7 +270,17 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
         campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
         campo = IF().get_by_role("textbox", name=campo_nom)
-        await campo.click(click_count=3)
+        # El campo del monto puede quedar tapado por la barra de progreso de NEO
+        # justo después de elegir la cuenta: si el clic normal no entra, se
+        # fuerza (la fila y el campo ya existen, así que es seguro).
+        try:
+            await campo.click(click_count=3, timeout=8000)
+        except Exception:
+            try:
+                await campo.scroll_into_view_if_needed(timeout=4000)
+            except Exception:
+                pass
+            await campo.click(click_count=3, force=True, timeout=6000)
         await campo.press_sequentially(fmt_monto(debe if debe > 0 else haber), delay=45)
         await page.wait_for_timeout(300)
 
