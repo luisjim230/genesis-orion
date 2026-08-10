@@ -223,6 +223,29 @@ async def login(page):
     except Exception:
         pass
 
+    # Cerrar la alerta de la llave criptográfica de Hacienda si apareció
+    # (botón 'Aceptar' o 'Continuar', dentro del iframe o en la página).
+    try:
+        frame = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+    except Exception:
+        frame = None
+    for scope in [s for s in (frame, page) if s is not None]:
+        cerrada = False
+        for nombre in ("Aceptar", "Continuar", " Continuar", "OK"):
+            for rol in ("button", "link"):
+                try:
+                    loc = scope.get_by_role(rol, name=nombre)
+                    if await loc.count() > 0 and await loc.first.is_visible():
+                        await loc.first.click()
+                        await page.wait_for_timeout(1200)
+                        log.info(f"Alerta NEO cerrada con '{nombre.strip()}'")
+                        cerrada = True
+                        break
+                except Exception:
+                    continue
+            if cerrada:
+                break
+
     log.info("Login OK")
 
 async def verificar_empresa(page):
