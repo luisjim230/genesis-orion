@@ -99,41 +99,44 @@ async def cerrar_alerta(page, iframe):
 MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
          "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
-# Filas típicas de un desplegable/autocompletar en NEO (ASP.NET)
-FILAS_DROPDOWN = "li, tr, td, a, div[role='option'], .ui-menu-item, .dropdown-item"
-
-
 async def elegir_cuenta(page, IF, codigo, nombre):
     """Escribe el código de cuenta y ELIGE la fila EXACTA del desplegable.
-    Importante: el código puede ser substring de otra cuenta (p.ej. 10-10-10-01
-    está dentro de 20-10-10-10-01 'CXP proveedores'). Por eso NO se usa
-    'flecha abajo + Enter' (agarra la fila resaltada, que puede ser la que no es).
-    Se clickea la fila cuyo texto EMPIEZA con el código exacto, o la que tiene el
-    nombre exacto de la cuenta."""
+    Descubierto con codegen (grabacion_cuenta.py):
+      fill(codigo)  ->  get_by_text(codigo, exact=True).click()
+    El exact=True es CLAVE: desambigua el substring (10-10-10-01 NO matchea
+    20-10-10-10-01 'CXP proveedores'). Como respaldo, se clickea la celda con el
+    nombre exacto de la cuenta (así lo hizo la grabación con 'viaticos')."""
     campo = IF().get_by_role("textbox", name="Lista de las cuentas")
     await campo.click(click_count=3)
     await campo.press_sequentially(codigo, delay=45)
-    await page.wait_for_timeout(1300)
+    await page.wait_for_timeout(1200)   # que aparezca el desplegable
 
     nombre = (nombre or "").strip()
-    # fila que EMPIEZA con el código exacto (seguido de algo que no sea dígito)
-    rx = re.compile(r"^\s*" + re.escape(codigo) + r"(\D|$)")
-    estrategias = [IF().locator(FILAS_DROPDOWN).filter(has_text=rx)]
+    # 1) Texto EXACTO del código en el desplegable (desambigua el substring).
+    try:
+        opt = IF().get_by_text(codigo, exact=True)
+        if await opt.count() > 0:
+            await opt.first.click()
+            await page.wait_for_timeout(400)
+            log.info(f"    cuenta {codigo} elegida (código)")
+            return True
+    except Exception:
+        pass
+    # 2) Respaldo: celda con el nombre exacto de la cuenta.
     if nombre:
-        estrategias.append(IF().locator(FILAS_DROPDOWN).filter(has_text=nombre))
-    for loc in estrategias:
         try:
-            if await loc.count() > 0 and await loc.first.is_visible():
-                await loc.first.click()
+            cel = IF().get_by_role("cell", name=nombre, exact=True)
+            if await cel.count() > 0:
+                await cel.first.click()
                 await page.wait_for_timeout(400)
-                log.info(f"    cuenta {codigo} elegida del desplegable")
+                log.info(f"    cuenta {codigo} elegida (nombre '{nombre}')")
                 return True
         except Exception:
-            continue
-    # Último recurso: Enter (mejor que ArrowDown, que movía a la fila equivocada)
+            pass
+    # 3) Último recurso: Enter.
     await campo.press("Enter")
     await page.wait_for_timeout(400)
-    log.warning(f"    cuenta {codigo}: no encontré la fila exacta, usé Enter (revisá la captura)")
+    log.warning(f"    cuenta {codigo}: no encontré la fila; usé Enter (revisá la captura)")
     return False
 
 logging.basicConfig(
