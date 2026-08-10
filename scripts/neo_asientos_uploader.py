@@ -198,13 +198,23 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     Devuelve el número de asiento de NEO (o None) si se registró."""
     IF = iframe_getter
 
-    # Nuevo asiento (esperá a que el botón esté visible; NEO a veces tarda)
-    nuevo = IF().get_by_role("button", name="Nuevo")
+    # Nuevo asiento. "Nuevo" puede ser button o link; NEO a veces tarda o lo tapa
+    # la barra de progreso. Se cierra cualquier alerta, se prueba button y luego
+    # link (el que aparezca visible) y si el clic no entra, se fuerza.
+    await cerrar_alerta(page, IF)
+    nuevo = IF().get_by_role("button", name="Nuevo").first
     try:
-        await nuevo.wait_for(state="visible", timeout=30000)
+        await nuevo.wait_for(state="visible", timeout=20000)
     except Exception:
-        nuevo = IF().get_by_role("link", name="Nuevo")  # fallback: puede ser link
-    await nuevo.first.click()
+        nuevo = IF().get_by_role("link", name="Nuevo").first
+        try:
+            await nuevo.wait_for(state="visible", timeout=20000)
+        except Exception:
+            pass
+    try:
+        await nuevo.click(timeout=10000)
+    except Exception:
+        await nuevo.click(force=True, timeout=6000)
 
     # Por si sale la alerta de la llave criptográfica al abrir el asiento
     await page.wait_for_timeout(1200)
