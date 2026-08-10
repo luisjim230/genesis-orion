@@ -107,36 +107,33 @@ async def elegir_cuenta(page, IF, codigo, nombre):
     20-10-10-10-01 'CXP proveedores'). Como respaldo, se clickea la celda con el
     nombre exacto de la cuenta (así lo hizo la grabación con 'viaticos')."""
     campo = IF().get_by_role("textbox", name="Lista de las cuentas")
-    await campo.click(click_count=3)
-    await campo.press_sequentially(codigo, delay=45)
-    await page.wait_for_timeout(1200)   # que aparezca el desplegable
+    await campo.click()
+    await campo.fill(codigo)            # igual que grabacion_cuenta.py
+    await page.wait_for_timeout(500)
 
     nombre = (nombre or "").strip()
-    # 1) Texto EXACTO del código en el desplegable (desambigua el substring).
-    try:
-        opt = IF().get_by_text(codigo, exact=True)
-        if await opt.count() > 0:
-            await opt.first.click()
-            await page.wait_for_timeout(400)
-            log.info(f"    cuenta {codigo} elegida (código)")
-            return True
-    except Exception:
-        pass
-    # 2) Respaldo: celda con el nombre exacto de la cuenta.
+    # Elegir la sugerencia del desplegable. Se prueba, en orden:
+    #  1) el texto EXACTO del código (desambigua el substring 10-10-10-01),
+    #  2) la celda con el nombre exacto de la cuenta,
+    #  3) el texto exacto del nombre.
+    # wait_for(visible) da tiempo a que aparezca la lista sin quedarse pegado.
+    opciones = [("código", IF().get_by_text(codigo, exact=True))]
     if nombre:
+        opciones.append(("celda nombre", IF().get_by_role("cell", name=nombre, exact=True)))
+        opciones.append(("texto nombre", IF().get_by_text(nombre, exact=True)))
+    for etiqueta, op in opciones:
         try:
-            cel = IF().get_by_role("cell", name=nombre, exact=True)
-            if await cel.count() > 0:
-                await cel.first.click()
-                await page.wait_for_timeout(400)
-                log.info(f"    cuenta {codigo} elegida (nombre '{nombre}')")
-                return True
+            await op.first.wait_for(state="visible", timeout=6000)
+            await op.first.click()
+            await page.wait_for_timeout(400)
+            log.info(f"    cuenta {codigo} elegida ({etiqueta})")
+            return True
         except Exception:
-            pass
-    # 3) Último recurso: Enter.
+            continue
+    # Último recurso: Enter.
     await campo.press("Enter")
     await page.wait_for_timeout(400)
-    log.warning(f"    cuenta {codigo}: no encontré la fila; usé Enter (revisá la captura)")
+    log.warning(f"    cuenta {codigo}: no encontré la sugerencia; usé Enter (revisá la captura)")
     return False
 
 logging.basicConfig(
