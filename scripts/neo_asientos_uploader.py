@@ -222,19 +222,24 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
     # ── Líneas ──────────────────────────────────────────────────────────────
     lineas = sorted(asiento.get("lineas") or [], key=lambda l: l.get("orden") or 0)
     for i, l in enumerate(lineas, 1):
-        # NEO resuelve la cuenta directo del código exacto (así en la grabación):
-        # se escribe el código y se pasa al monto, sin clickear ningún desplegable.
+        # Los campos de NEO (cuenta con autocompletar, montos enmascarados) NO
+        # reaccionan a fill() de golpe: hay que TECLEAR carácter por carácter
+        # (press_sequentially) para que se disparen los eventos y se resuelva la
+        # cuenta / se acepte el monto. triple-click selecciona lo que haya antes.
         cuenta = IF().get_by_role("textbox", name="Lista de las cuentas")
-        await cuenta.click(); await cuenta.fill(l["cuenta"])
-        await page.wait_for_timeout(700)
+        await cuenta.click(click_count=3)
+        await cuenta.press_sequentially(l["cuenta"], delay=45)
+        await page.wait_for_timeout(1000)  # dar tiempo a que NEO resuelva la cuenta
 
         debe = float(l.get("debe") or 0); haber = float(l.get("haber") or 0)
         campo_nom = "Debe del movimiento del" if debe > 0 else "Haber del movimiento del"
         campo = IF().get_by_role("textbox", name=campo_nom)
-        await campo.click(); await campo.fill(fmt_monto(debe if debe > 0 else haber))
+        await campo.click(click_count=3)
+        await campo.press_sequentially(fmt_monto(debe if debe > 0 else haber), delay=45)
+        await page.wait_for_timeout(300)
 
         await IF().get_by_role("button", name="Agregar").click()
-        await page.wait_for_timeout(700)
+        await page.wait_for_timeout(800)
         log.info(f"  Línea {i}/{len(lineas)}: {l['cuenta']} {'D' if debe>0 else 'H'} {fmt_monto(debe or haber)}")
 
     # ── Centros de costo (por línea que tenga) ──────────────────────────────
@@ -248,8 +253,9 @@ async def registrar_en_neo(page, iframe_getter, asiento, dry_run):
             enlace = IF().get_by_role("cell", name="Sin centro de costo", exact=True).locator("a").first
             await enlace.click()
             campo = IF().get_by_role("textbox", name="Centro de costo del")
-            await campo.click(); await campo.fill(centro)
-            await page.wait_for_timeout(700)
+            await campo.click(click_count=3)
+            await campo.press_sequentially(centro, delay=40)
+            await page.wait_for_timeout(800)
             await IF().get_by_role("cell", name=centro).first.click()
             log.info(f"  Centro de costo: {centro}")
         except Exception as e:
@@ -342,8 +348,9 @@ async def main():
     async with async_playwright() as p:
         ctx = await p.chromium.launch_persistent_context(str(PROFILE_DIR), headless=args.headless)
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-        # NEO es lento: dar margen a cada acción antes de rendirse.
-        page.set_default_timeout(45000)
+        # NEO es lento pero no tanto: 25s da margen y a la vez hace que un
+        # campo que no aparece falle rápido (con captura) en vez de colgar 45s.
+        page.set_default_timeout(25000)
         # Auto-aceptar diálogos nativos del navegador (alert/confirm), por si la
         # alerta de la llave criptográfica es un popup del navegador.
         page.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
