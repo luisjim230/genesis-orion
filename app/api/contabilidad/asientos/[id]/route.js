@@ -2,6 +2,17 @@ import { getDb, ok, bad, handle, bitacora, sanearLineas, aprobadorDe, HttpError 
 
 export const dynamic = 'force-dynamic'
 
+// Encola una corrida del robot uploader en la M1 (si no hay una pendiente ya).
+// Se llama cada vez que un asiento pasa a 'aprobado' (aprobar, reintentar,
+// reenviar), para que el daemon lo levante y lo registre en NEO.
+async function encolarUpload(db) {
+  try {
+    const { data: prev } = await db.from('sync_requests')
+      .select('id').eq('script', 'asientos_upload').eq('status', 'pending').limit(1).maybeSingle()
+    if (!prev) await db.from('sync_requests').insert({ script: 'asientos_upload', status: 'pending' })
+  } catch { /* best-effort */ }
+}
+
 // GET /api/contabilidad/asientos/:id  -> asiento + líneas + factura
 export async function GET(_request, { params }) {
   return handle(async () => {
@@ -63,6 +74,7 @@ export async function PATCH(request, { params }) {
       }).eq('id', id)
       if (error) throw error
       await bitacora(id, 'reintentar', actor, { intentos: (a.intentos || 0) + 1 })
+      await encolarUpload(db)
       return ok({ ok: true })
     }
 
@@ -81,6 +93,7 @@ export async function PATCH(request, { params }) {
       }).eq('id', id)
       if (error) throw error
       await bitacora(id, 'reenviar', actor, { estado_anterior: a.estado, asiento_neo_anterior: a.asiento_neo })
+      await encolarUpload(db)
       return ok({ ok: true })
     }
 

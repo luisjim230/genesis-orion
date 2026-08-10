@@ -23,8 +23,11 @@ export async function GET(request) {
     const excluir = u.searchParams.get('excluir')
     if (!fecha || !(total > 0)) return ok([])
 
-    const desde = new Date(fecha); desde.setDate(desde.getDate() - 7)
-    const hasta = new Date(fecha); hasta.setDate(hasta.getDate() + 7)
+    // Ventana amplia (±45 días): un tiquete físico (ej. gasolina) puede
+    // registrarse a mano bastante después de que su versión electrónica ya
+    // entró. Como es solo un aviso, conviene pecar de precavido.
+    const desde = new Date(fecha); desde.setDate(desde.getDate() - 45)
+    const hasta = new Date(fecha); hasta.setDate(hasta.getDate() + 45)
 
     let q = db.from('conta_asientos')
       .select('id, fecha, descripcion, estado, total_debe, moneda, lineas:conta_asiento_lineas(cuenta, centro_costo_id, debe)')
