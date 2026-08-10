@@ -611,6 +611,18 @@ def main():
         _gabriel_enviado.add(arranque.date().isoformat())
     if (arranque.hour, arranque.minute) >= LATIDO:
         _latido_enviado.add(arranque.date().isoformat())
+    # Recuperar pedidos huérfanos: si al arrancar hay algo en 'running', es de un
+    # daemon anterior que murió (reinicio/kill). Los downloaders son idempotentes
+    # → 'pending' para reintentarlos. El uploader NO se auto-reintenta (evitar
+    # doble registro en NEO) → 'error' para revisar/reintentar a mano.
+    try:
+        supa_patch("sync_requests?status=eq.running&script=neq.asientos_upload", {"status": "pending"})
+        supa_patch("sync_requests?status=eq.running&script=eq.asientos_upload",
+                   {"status": "error", "completed_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")})
+        log.info("Pedidos 'running' huérfanos recuperados en el arranque.")
+    except Exception as e:
+        log.warning(f"No pude recuperar huérfanos: {e}")
+
     log.info("=" * 50)
     log.info("SOL Sync Daemon iniciado")
     log.info("Revisando solicitudes cada 60 segundos")
