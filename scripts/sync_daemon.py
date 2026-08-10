@@ -66,6 +66,13 @@ SCRIPT_MAP = {
     "lista_items":             "neo_lista_items_downloader.py",
     "proformas_cabecera":      "neo_proformas_downloader.py",
     "proformas_items":         "neo_items_proformados_downloader.py",
+    "asientos_upload":         "neo_asientos_uploader.py",
+}
+
+# Args extra por script. El uploader corre SIN ventana (headless) cuando lo
+# dispara el daemon en segundo plano.
+SCRIPT_EXTRA_ARGS = {
+    "asientos_upload": ["--headless"],
 }
 
 
@@ -153,7 +160,7 @@ def procesar_solicitud(req):
     script_timeout = 900 if script_key == "antiguedad_proveedores" else 600
     try:
         result = subprocess.run(
-            [PYTHON, str(script_path)],
+            [PYTHON, str(script_path)] + SCRIPT_EXTRA_ARGS.get(script_key, []),
             cwd=str(SCRIPTS),
             capture_output=True,
             text=True,
@@ -272,7 +279,7 @@ def ejecutar_script(script_key):
     log.info(f"  ▶ {script_key}")
     try:
         result = subprocess.run(
-            [PYTHON, str(script_path)],
+            [PYTHON, str(script_path)] + SCRIPT_EXTRA_ARGS.get(script_key, []),
             cwd=str(SCRIPTS),
             capture_output=True,
             text=True,
