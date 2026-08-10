@@ -413,7 +413,7 @@ async def preparar_neo(page):
 async def main():
     ap = argparse.ArgumentParser(description="Sube asientos aprobados del panel a NEO.")
     ap.add_argument("--solo", help="Procesar solo este ID de asiento")
-    ap.add_argument("--limit", type=int, default=20, help="Máximo de asientos a procesar (default 20)")
+    ap.add_argument("--limit", type=int, default=6, help="Máximo de asientos por corrida (default 6; si quedan más, se auto-encola otra)")
     ap.add_argument("--dry-run", action="store_true", help="Hace todo menos el clic final 'Registrar'")
     ap.add_argument("--headless", action="store_true", help="Sin ventana (por defecto se ve el navegador)")
     args = ap.parse_args()
@@ -496,6 +496,20 @@ async def main():
             log.info("DRY-RUN terminado. Revisá la ventana; cerrala cuando quieras.")
             await page.wait_for_timeout(600000)  # 10 min para inspeccionar a mano
         await ctx.close()
+
+    # Auto-drenaje: si quedan aprobados sin procesar (lote más grande que el
+    # límite, o alguno quedó para reintento), encolar otra corrida para que el
+    # daemon la levante y siga. Así lotes grandes se van solos, de a poco, sin
+    # pasarse del timeout del daemon.
+    if not args.dry_run and not args.solo:
+        try:
+            restantes = supa("GET", "conta_asientos?select=id&estado=eq.aprobado&es_prueba=eq.false&limit=1") or []
+            pend = supa("GET", "sync_requests?select=id&script=eq.asientos_upload&status=eq.pending&limit=1") or []
+            if restantes and not pend:
+                supa("POST", "sync_requests", {"script": "asientos_upload", "status": "pending"}, prefer="return=minimal")
+                log.info("Quedan asientos aprobados: encolé otra corrida para seguir.")
+        except Exception as e:
+            log.warning(f"No pude auto-encolar la siguiente corrida: {e}")
 
 
 if __name__ == "__main__":
