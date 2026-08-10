@@ -5,32 +5,68 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-// GET /api/contabilidad/facturas?vista=ignoradas
-// Facturas leídas pero NO contabilizadas (mercadería / OC), procesada=false.
-// Nunca se borran: acá se pueden revisar y convertir en gasto.
+const COLS = 'clave,consecutivo,nombre_emisor,cedula_emisor,fecha_emision,total_comprobante,moneda,num_oc,clasificacion,creado_en,revisada_en,revisada_por'
+
+// GET /api/contabilidad/facturas?vista=ignoradas|revisadas
+//  - ignoradas: leídas pero NO contabilizadas (mercadería), pendientes de revisar.
+//  - revisadas: las que alguien marcó como "no requiere asiento" (con deshacer).
+// Nunca se borran: acá se revisan, se convierten en gasto o se marcan revisadas.
 export async function GET(request) {
   return handle(async () => {
     const db = getDb()
     const vista = new URL(request.url).searchParams.get('vista') || 'ignoradas'
-    if (vista !== 'ignoradas') return ok([])
+
+    if (vista === 'revisadas') {
+      const { data, error } = await db.from('conta_facturas')
+        .select(COLS)
+        .not('revisada_en', 'is', null)
+        .order('revisada_en', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      return ok(data || [])
+    }
+
+    // Pendientes de revisar: mercadería, sin procesar y sin marca de revisión.
     const { data, error } = await db.from('conta_facturas')
-      .select('clave,consecutivo,nombre_emisor,cedula_emisor,fecha_emision,total_comprobante,moneda,num_oc,clasificacion,creado_en')
-      .eq('clasificacion', 'mercaderia').eq('procesada', false)
+      .select(COLS)
+      .eq('clasificacion', 'mercaderia').eq('procesada', false).is('revisada_en', null)
       .order('creado_en', { ascending: false })
     if (error) throw error
     return ok(data || [])
   })
 }
 
-// POST /api/contabilidad/facturas  { accion: 'convertir', clave, creado_por }
-// Crea un borrador de gasto a partir de una factura ignorada y la marca
-// procesada = true (deja de aparecer en "Ignoradas").
+// POST /api/contabilidad/facturas
+//   { accion: 'convertir', clave, creado_por }   -> crea borrador de gasto
+//   { accion: 'no_requiere', clave, creado_por }  -> marca "revisada, sin asiento"
+//   { accion: 'recuperar', clave }                -> deshace la revisión
 export async function POST(request) {
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))
-    if (b.accion !== 'convertir') return bad('Acción no reconocida.')
     if (!b.clave) return bad('Falta la clave de la factura.')
+
+    // Marcar como revisada (no requiere asiento): sale de pendientes sin crear nada.
+    if (b.accion === 'no_requiere') {
+      const { data: f } = await db.from('conta_facturas').select('clave').eq('clave', b.clave).maybeSingle()
+      if (!f) throw new HttpError(404, 'Factura no encontrada.')
+      const { error } = await db.from('conta_facturas')
+        .update({ revisada_en: new Date().toISOString(), revisada_por: b.creado_por || null })
+        .eq('clave', b.clave)
+      if (error) throw error
+      return ok({ ok: true })
+    }
+
+    // Deshacer la revisión: vuelve a pendientes.
+    if (b.accion === 'recuperar') {
+      const { error } = await db.from('conta_facturas')
+        .update({ revisada_en: null, revisada_por: null })
+        .eq('clave', b.clave)
+      if (error) throw error
+      return ok({ ok: true })
+    }
+
+    if (b.accion !== 'convertir') return bad('Acción no reconocida.')
 
     const { data: f } = await db.from('conta_facturas').select('*').eq('clave', b.clave).maybeSingle()
     if (!f) throw new HttpError(404, 'Factura no encontrada.')

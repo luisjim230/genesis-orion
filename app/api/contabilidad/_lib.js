@@ -481,12 +481,22 @@ export async function bitacoraCatalogo(accion, actor, detalle) {
 export async function aprobadorDe(email) {
   if (!email) return null
   const { data } = await getDb().from('conta_aprobadores')
-    .select('*').eq('email', email).eq('activo', true).maybeSingle()
+    .select('*').ilike('email', email).eq('activo', true).maybeSingle()
   return data || null
+}
+// ¿El usuario es admin general de SOL? (usuarios_sol.rol = 'admin'). Sirve de
+// respaldo para que cualquier dueño/admin de SOL tenga el rol admin de
+// Contabilidad sin tener que estar cargado a mano en conta_aprobadores.
+export async function esAdminSol(email) {
+  if (!email) return false
+  const { data } = await getDb().from('usuarios_sol')
+    .select('rol').ilike('email', email).maybeSingle()
+  return data?.rol === 'admin'
 }
 export async function esAdmin(email) {
   const a = await aprobadorDe(email)
-  return a?.rol === 'admin'
+  if (a?.rol === 'admin') return true
+  return await esAdminSol(email)
 }
 
 // Flag global de modo prueba (guardado en la base, igual para todos).

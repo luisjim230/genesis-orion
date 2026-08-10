@@ -15,6 +15,9 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
   const [ignoradas, setIgnoradas] = useState([])
   const [verIgnoradas, setVerIgnoradas] = useState(false)
   const [convirtiendo, setConvirtiendo] = useState(null)
+  const [revisadas, setRevisadas] = useState([])
+  const [verRevisadas, setVerRevisadas] = useState(false)
+  const [marcando, setMarcando] = useState(null)
   const [descartar, setDescartar] = useState(null) // { id }
   const [resumenColapsado, setResumenColapsado] = useState(!!cat?.ui_prefs?.resumen_colapsado)
   const [listaColapsada, setListaColapsada] = useState(!!cat?.ui_prefs?.lista_colapsada)
@@ -29,6 +32,7 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
 
   const cargarIgnoradas = useCallback(async () => {
     try { setIgnoradas(await api('/facturas?vista=ignoradas')) } catch { /* */ }
+    try { setRevisadas(await api('/facturas?vista=revisadas')) } catch { /* */ }
   }, [])
 
   const cargar = useCallback(async () => {
@@ -92,6 +96,25 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
     } catch (e) { alert(e.message) }
     finally { setConvirtiendo(null) }
   }, [email, cargar, cargarIgnoradas])
+
+  const marcarNoRequiere = useCallback(async (clave) => {
+    setMarcando(clave)
+    try {
+      await api('/facturas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'no_requiere', clave, creado_por: email }) })
+      await cargarIgnoradas()
+    } catch (e) { alert(e.message) }
+    finally { setMarcando(null) }
+  }, [email, cargarIgnoradas])
+
+  const recuperarFactura = useCallback(async (clave) => {
+    setMarcando(clave)
+    try {
+      await api('/facturas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accion: 'recuperar', clave }) })
+      await cargarIgnoradas()
+      setVerIgnoradas(true)
+    } catch (e) { alert(e.message) }
+    finally { setMarcando(null) }
+  }, [cargarIgnoradas])
 
   const confirmarDescarte = useCallback(async (id, motivo) => {
     try {
@@ -158,8 +181,39 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                       {fmtFecha(f.fecha_emision)} · {fmtCRC(f.total_comprobante, f.moneda)}{f.num_oc ? ` · ${f.num_oc}` : ''}
                     </div>
                   </div>
-                  <button disabled={convirtiendo === f.clave} onClick={() => convertir(f.clave)} style={btn(C.petroleo)}>
+                  <button disabled={convirtiendo === f.clave || marcando === f.clave} onClick={() => convertir(f.clave)} style={btn(C.petroleo)}>
                     {convirtiendo === f.clave ? 'Convirtiendo…' : 'Convertir en gasto'}
+                  </button>
+                  <button disabled={convirtiendo === f.clave || marcando === f.clave} onClick={() => marcarNoRequiere(f.clave)} style={btn(C.gris)} title="Ya la revisé, no hay que hacerle asiento">
+                    {marcando === f.clave ? 'Guardando…' : 'No requiere asiento'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Revisadas (no requieren asiento) — plegable, con deshacer */}
+      {revisadas.length > 0 && (
+        <div style={{ border: `1px solid ${C.borde}`, background: 'white', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
+          <button onClick={() => setVerRevisadas((v) => !v)}
+            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 14px', fontSize: 13, fontWeight: 700, color: C.gris, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'inherit' }}>
+            <span>✅ Revisadas ({revisadas.length}) — marcadas como que no requieren asiento</span>
+            <span>{verRevisadas ? '▲' : '▼'}</span>
+          </button>
+          {verRevisadas && (
+            <div style={{ borderTop: `1px solid ${C.borde}`, maxHeight: 320, overflowY: 'auto' }}>
+              {revisadas.map((f) => (
+                <div key={f.clave} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${C.borde}`, fontSize: 12.5 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre_emisor || f.cedula_emisor || 'Proveedor'}</div>
+                    <div style={{ color: C.gris, fontSize: 11.5 }}>
+                      {fmtFecha(f.fecha_emision)} · {fmtCRC(f.total_comprobante, f.moneda)}{f.revisada_por ? ` · ${f.revisada_por}` : ''}
+                    </div>
+                  </div>
+                  <button disabled={marcando === f.clave} onClick={() => recuperarFactura(f.clave)} style={btn(C.ambar)} title="Traerla de nuevo a pendientes">
+                    {marcando === f.clave ? 'Guardando…' : '↩︎ Traer de nuevo'}
                   </button>
                 </div>
               ))}
