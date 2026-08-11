@@ -18,9 +18,14 @@ export async function GET(request) {
     const vista = new URL(request.url).searchParams.get('vista') || 'ignoradas'
 
     if (vista === 'revisadas') {
+      // Ventana de 7 días: las revisadas más viejas se "archivan" solas (siguen
+      // guardadas en la base, solo dejan de mostrarse) para que la lista no
+      // crezca infinito y quede una cola gigante.
+      const hace7 = new Date(); hace7.setDate(hace7.getDate() - 7)
       const { data, error } = await db.from('conta_facturas')
         .select(COLS)
         .not('revisada_en', 'is', null)
+        .gte('revisada_en', hace7.toISOString())
         .order('revisada_en', { ascending: false })
         .limit(50)
       if (error) throw error
