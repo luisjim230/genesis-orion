@@ -461,19 +461,29 @@ function NotaCreditoChip() {
   return <span style={{ fontSize: 9.5, fontWeight: 700, color: '#7c3aed', background: '#7c3aed18', border: '1px solid #7c3aed55', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }} title="Nota de crédito: rebaja una compra anterior">NC</span>
 }
 
-// Panel de nota de crédito: muestra qué factura original rebaja y si ya está
-// registrada, para que el revisor confirme antes de aprobar la reversa.
+// Panel de nota de crédito: muestra el proveedor, qué factura original rebaja y
+// si ya está registrada, para que el revisor confirme antes de aprobar la reversa.
 function NotaCreditoInfo({ detalle }) {
   const ref = detalle?.referencia
+  const f = detalle?.factura || {}
   const morado = '#7c3aed'
+  // El campo Razon del XML a veces trae basura interna del proveedor
+  // (ej. "Codigo Cliente:..."). Solo se muestra si parece un motivo real.
+  const razonUtil = ref?.razon && ref.razon.length <= 70 && !/codigo\s*cliente|transporte|^\s*$/i.test(ref.razon) ? ref.razon : null
   return (
     <div style={{ background: '#faf5ff', border: `1px solid ${morado}44`, borderRadius: 12, padding: '13px 16px', marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, color: morado, fontSize: 14 }}>🔁 Nota de crédito de proveedor</div>
-      <div style={{ fontSize: 12.5, color: C.gris, margin: '2px 0 8px' }}>
-        Este asiento <b>resta</b> un gasto anterior (el débito y el IVA van al haber). Revisá que la cuenta y el monto coincidan con la compra original.
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: morado, fontSize: 14, whiteSpace: 'nowrap' }}>🔁 Nota de crédito</span>
+        <span style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>{f.nombre_emisor || 'Proveedor'}</span>
+        {f.cedula_emisor && <span style={{ fontSize: 12, color: C.gris }}>· céd. {f.cedula_emisor}</span>}
+        {f.consecutivo && <span style={{ fontSize: 12, color: C.gris }}>· {f.consecutivo}</span>}
+        <span style={{ fontSize: 13, fontWeight: 700, color: morado, marginLeft: 'auto' }}>− {fmtCRC(f.total_comprobante ?? detalle.total_debe, f.moneda || detalle.moneda)}</span>
       </div>
-      {ref?.razon && (
-        <div style={{ fontSize: 12.5, color: '#111827', marginBottom: 6 }}>Motivo declarado: <b>{ref.razon}</b></div>
+      <div style={{ fontSize: 12.5, color: C.gris, margin: '4px 0 8px' }}>
+        <b>Resta</b> un gasto anterior de este proveedor (el débito y el IVA van al haber). Revisá la cuenta y aprobala igual que una factura, con el botón de abajo.
+      </div>
+      {razonUtil && (
+        <div style={{ fontSize: 12.5, color: '#111827', marginBottom: 6 }}>Motivo: <b>{razonUtil}</b></div>
       )}
       {!ref?.clave ? (
         <div style={{ fontSize: 12.5, color: C.ambar }}>La NC no declara a cuál factura corrige.</div>
