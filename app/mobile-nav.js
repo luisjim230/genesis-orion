@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../lib/useAuth';
@@ -27,6 +27,19 @@ export default function MobileNav() {
   const NAV = q ? NAV_PERMITIDOS.filter(i => norm(i.name).includes(q)) : NAV_PERMITIDOS;
 
   const current = NAV_PERMITIDOS.find(n => n.href === pathname || (n.href !== '/' && pathname?.startsWith(n.href)));
+
+  // Contador silencioso de uso por usuario (igual que el sidebar de desktop).
+  useEffect(() => {
+    const email = perfil?.email || user?.email;
+    if (!email || !pathname) return;
+    const item = ALL_NAV.find(i => pathname === i.href || (i.href !== '/' && pathname.startsWith(i.href)));
+    const modulo = item?.key || (pathname === '/' ? 'dashboard' : null);
+    if (!modulo) return;
+    const t = setTimeout(() => {
+      fetch('/api/nav-ping', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ email, modulo }) }).catch(()=>{});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [pathname, perfil, user]);
 
   // Cerrar drawer también limpia búsqueda
   const cerrarDrawer = () => { setOpen(false); setSearch(''); };

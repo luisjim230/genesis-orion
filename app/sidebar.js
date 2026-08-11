@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/useAuth';
 import { puedeVerBoveda } from '../lib/boveda';
-import { ALL_NAV } from './nav-modules';
+import { ALL_NAV, ALL_NAV_FLAT } from './nav-modules';
 
 const nunitoStyle = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;800;900&display=swap');`;
 const ROL_COLOR={admin:'#ED6E2E',bodega:'#63b3ed',ventas:'#68d391',finanzas:'#c8a84b',logistica:'#b794f4'};
@@ -56,6 +56,21 @@ export default function Sidebar(){
     const id=setInterval(cargar, 120000);
     return ()=>{ cancelado=true; clearInterval(id); };
   },[verProfecias]);
+
+  // Contador silencioso de uso por usuario: registra qué módulo se abre para,
+  // más adelante, poder ordenar el menú según lo que cada uno usa. Best-effort:
+  // si falla no pasa nada y no molesta la navegación.
+  useEffect(() => {
+    const email = perfil?.email || user?.email;
+    if (!email || !pathname) return;
+    const item = ALL_NAV_FLAT.find(i => pathname === i.href || (i.href !== '/' && pathname.startsWith(i.href)));
+    const modulo = item?.key || (pathname === '/' ? 'dashboard' : null);
+    if (!modulo) return;
+    const t = setTimeout(() => {
+      fetch('/api/nav-ping', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ email, modulo }) }).catch(()=>{});
+    }, 800); // pequeño debounce: solo cuenta si te quedás en el módulo
+    return () => clearTimeout(t);
+  }, [pathname, perfil, user]);
 
   const badgesPorKey={profecias:profeciasPendientes};
   const navAll=ALL_NAV
