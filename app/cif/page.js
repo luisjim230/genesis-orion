@@ -496,9 +496,9 @@ function TabCalculadora({ datosCargados, onDatosCargadosUsados }) {
                     <td style={S.td}>${parseFloat(r.FOB_unitario).toFixed(2)}</td>
                     <td style={S.td}>${r.FOB_total.toFixed(2)}</td>
                     <td style={S.td}>{r.margen_pct}%</td>
-                    <td style={{ ...S.td, color:'var(--orange)', fontWeight:600 }}>${r.costo_CIF_unitario_USD.toFixed(4)}</td>
+                    <td style={S.td} style={{ ...S.td, color:'var(--orange)', fontWeight:600 }}>${r.costo_CIF_unitario_USD.toFixed(4)}</td>
                     <td style={S.td}>₡{r.costo_CIF_unitario_CRC.toFixed(2)}</td>
-                    <td style={{ ...S.td, color:'#276749' }}>${r.precio_venta_USD.toFixed(4)}</td>
+                    <td style={S.td} style={{ ...S.td, color:'#276749' }}>${r.precio_venta_USD.toFixed(4)}</td>
                     <td style={S.td}>₡{r.precio_venta_CRC.toFixed(2)}</td>
                   </tr>
                 ))}
