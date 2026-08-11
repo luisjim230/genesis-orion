@@ -128,6 +128,7 @@ def main():
     ap = argparse.ArgumentParser(description="Sube a Contabilidad las facturas que llegan al correo.")
     ap.add_argument("--dry-run", action="store_true", help="Muestra qué haría, sin subir ni etiquetar.")
     ap.add_argument("--limit", type=int, default=50, help="Máximo de correos por corrida (default 50).")
+    ap.add_argument("--desde", help="Fecha YYYY-MM-DD para forzar el corte (solo pruebas; ignora conta_config).")
     args = ap.parse_args()
 
     if _faltan:
@@ -139,7 +140,7 @@ def main():
     except BlockingIOError:
         log.info("Ya hay otra corrida de gmail-sync en curso. Salgo."); return
 
-    corte = fecha_corte()
+    corte = args.desde or fecha_corte()
     since_imap = datetime.strptime(corte, "%Y-%m-%d").strftime("%d-%b-%Y")  # IMAP: 11-Aug-2026
     log.info("=" * 60)
     log.info(f"Gmail → Contabilidad  [{datetime.now():%Y-%m-%d %H:%M}]"
@@ -152,8 +153,12 @@ def main():
     imap.select("INBOX")
 
     # SINCE (IMAP, inclusive del día) + Gmail: con adjunto y sin etiqueta procesada.
+    # OJO: el valor de X-GM-RAW lleva espacios, así que hay que mandarlo ENTRE
+    # COMILLAS; imaplib no las agrega solo y el servidor responde
+    # "Could not parse command" si se manda crudo.
+    raw = f'has:attachment -label:{ETIQUETA}'.replace('"', '')
     typ, data = imap.uid("search", None, "SINCE", since_imap,
-                         "X-GM-RAW", f'has:attachment -label:{ETIQUETA}')
+                         "X-GM-RAW", f'"{raw}"')
     uids = (data[0].split() if data and data[0] else [])
     log.info(f"{len(uids)} correo(s) nuevos con adjunto desde {corte}.")
 

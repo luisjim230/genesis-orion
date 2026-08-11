@@ -190,6 +190,14 @@ export function parseFacturaXML(xmlRaw) {
   const ocMatch = otrosTexto.match(/OC[-\s]?\d{2,6}[-\s]?\d{2,6}/i) || xml.match(/OC[-\s]?\d{2,6}[-\s]?\d{2,6}/i)
   const numOc = ocMatch ? ocMatch[0].toUpperCase().replace(/\s/g, '-') : null
 
+  // Nota de crédito / débito: InformacionReferencia apunta al comprobante que
+  // corrige o anula. El <Numero> es la clave (50 díg.) del documento original.
+  const refBlock = firstBlock(xml, 'InformacionReferencia') || ''
+  const refNumero = (val(refBlock, 'Numero') || '').replace(/\s/g, '')
+  const referenciaClave = /^\d{48,50}$/.test(refNumero) ? refNumero : null
+  const referenciaRazon = val(refBlock, 'Razon') || null
+  const referenciaCodigo = val(refBlock, 'Codigo') || null
+
   const totalImpuesto = num(resumen, 'TotalImpuesto') || lineas.reduce((s, l) => s + l.impuesto_monto, 0)
   const totalComprobante = num(resumen, 'TotalComprobante') || lineas.reduce((s, l) => s + l.subtotal + l.impuesto_monto, 0)
   const totalDescuentos = num(resumen, 'TotalDescuentos') || lineas.reduce((s, l) => s + l.descuento, 0)
@@ -223,7 +231,15 @@ export function parseFacturaXML(xmlRaw) {
     num_oc: numOc,
     medio_pago: val(xml, 'MedioPago'),
     condicion_venta: val(xml, 'CondicionVenta'),
+    referencia_clave: referenciaClave,
+    referencia_razon: referenciaRazon,
+    referencia_codigo: referenciaCodigo,
   }
+}
+
+// ¿El comprobante es una nota de crédito? (rebaja/anula una compra anterior)
+export function esNotaCredito(tipoDocumento) {
+  return String(tipoDocumento || '') === 'NotaCreditoElectronica'
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -472,6 +488,29 @@ export function armarLineasGasto(factura, proveedor, ctx, destino = 'gasto') {
   return { lineas }
 }
 
+// Nota de crédito de proveedor = REVERSA de un gasto. Se arman las mismas líneas
+// que un gasto (gasto + IVA soportado + contrapartida) y se INVIERTE debe↔haber:
+// el gasto y el IVA se van al HABER (se reducen) y la contrapartida (caja / CxP)
+// al DEBE. Así la NC baja el gasto en lugar de inflarlo. El monto y la
+// conversión de moneda ya vienen resueltos por armarLineasGasto.
+export function armarLineasNotaCredito(factura, proveedor, ctx) {
+  const { lineas } = armarLineasGasto(factura, proveedor, ctx, 'gasto')
+  const reetiquetar = (obs) => {
+    if (obs === 'Gasto') return 'Reversa de gasto (NC)'
+    if (obs === 'Contrapartida') return 'Contrapartida (NC)'
+    if (/^IVA soportado/.test(obs || '')) return obs.replace('IVA soportado', 'Reversa IVA')
+    return obs
+  }
+  return {
+    lineas: lineas.map((l) => ({
+      ...l,
+      debe: l.haber,
+      haber: l.debe,
+      observacion: reetiquetar(l.observacion),
+    })),
+  }
+}
+
 // ── Persistir factura + asiento + líneas (borrador) ──────────────────────────
 export async function guardarFactura(factura, clasificacion, { xml_path = null, pdf_path = null, procesada = true } = {}) {
   const db = getDb()
@@ -498,6 +537,8 @@ export async function guardarFactura(factura, clasificacion, { xml_path = null, 
     num_oc: factura.num_oc || null,
     medio_pago: factura.medio_pago || null,
     condicion_venta: factura.condicion_venta || null,
+    clave_referencia: factura.referencia_clave || null,
+    referencia_razon: factura.referencia_razon || null,
     clasificacion: clasificacion || 'por_clasificar',
     xml_path, pdf_path,
     procesada,
@@ -515,6 +556,7 @@ export async function crearAsientoConLineas(asiento, lineas) {
     descripcion: asiento.descripcion,
     tipo_origen: asiento.tipo_origen || 'manual',
     clave_factura: asiento.clave_factura || null,
+    clave_referencia: asiento.clave_referencia || null,
     plantilla_id: asiento.plantilla_id || null,
     moneda: asiento.moneda || 'CRC',
     tipo_cambio: asiento.tipo_cambio || null,

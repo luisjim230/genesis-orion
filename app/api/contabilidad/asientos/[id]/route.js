@@ -24,7 +24,27 @@ export async function GET(_request, { params }) {
     if (!a) throw new HttpError(404, 'Asiento no encontrado.')
     const { data: lineas } = await db.from('conta_asiento_lineas')
       .select('*').eq('asiento_id', id).order('orden')
-    return ok({ ...a, lineas: lineas || [] })
+
+    // Si es nota de crédito, resolver el documento original que rebaja: la
+    // factura registrada (si la tenemos) y el asiento activo que la contabilizó.
+    let referencia = null
+    if (a.clave_referencia) {
+      const [{ data: fo }, { data: ao }] = await Promise.all([
+        db.from('conta_facturas')
+          .select('clave,consecutivo,nombre_emisor,fecha_emision,total_comprobante,moneda')
+          .eq('clave', a.clave_referencia).maybeSingle(),
+        db.from('conta_asientos')
+          .select('id,estado,asiento_neo,total_debe')
+          .eq('clave_factura', a.clave_referencia).neq('estado', 'descartado').maybeSingle(),
+      ])
+      referencia = {
+        clave: a.clave_referencia,
+        razon: a.factura?.referencia_razon || null,
+        factura: fo || null,
+        asiento: ao || null,
+      }
+    }
+    return ok({ ...a, lineas: lineas || [], referencia })
   })
 }
 

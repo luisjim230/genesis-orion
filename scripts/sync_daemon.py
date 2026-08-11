@@ -239,7 +239,8 @@ SCHEDULE = {
     "movimientos_contables":   [(8,15),(16,15)],               # se deja (2x/día)
     "antiguedad_clientes":     [(8,25),(16,25)],               # se deja (2x/día)
     "antiguedad_proveedores":  [(8,40),(16,40)],               # se deja (2x/día)
-    "gmail_facturas":          _cada(2, 45, 7, 19),            # facturas por correo: cada 2h 7am-7pm
+    "gmail_facturas":          _cada(2, 30, 6, 20) + [(21, 30)],  # correo: cada 2h 6:30am → 9:30pm
+    "asientos_estado":         _cada(3, 50, 7, 19) + [(21, 50)],  # estado NEO + match nº asiento: cada 3h 7am → 9pm
 }
 SCHEDULE_WEEKDAYS = {0, 1, 2, 3, 4, 5}   # 0=Lun ... 5=Sáb (sin domingo)
 
