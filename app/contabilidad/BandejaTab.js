@@ -278,15 +278,23 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
               : lista.length === 0 ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>No hay borradores. Soltá una factura arriba.</div>
               : (
                 <div style={{ maxHeight: 620, overflowY: 'auto' }}>
-                  {lista.map((a) => (
+                  {lista.map((a) => {
+                    const esNC = a.factura?.tipo_documento === 'NotaCreditoElectronica'
+                    const morado = '#7c3aed'
+                    return (
                     <div key={a.id} onClick={() => setSelId(a.id)}
                       style={{
                         padding: '9px 10px 9px 12px', borderBottom: `1px solid ${C.borde}`, cursor: 'pointer',
-                        background: a.id === selId ? C.naranja + '18' : 'white',
-                        borderLeft: `3px solid ${a.id === selId ? C.naranja : 'transparent'}`,
+                        background: a.id === selId ? (esNC ? morado + '22' : C.naranja + '18') : (esNC ? morado + '0d' : 'white'),
+                        borderLeft: `4px solid ${esNC ? morado : (a.id === selId ? C.naranja : 'transparent')}`,
                         display: 'flex', gap: 6, alignItems: 'flex-start',
                       }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
+                        {esNC && (
+                          <div style={{ fontSize: 10, fontWeight: 800, color: 'white', background: morado, borderRadius: 5, padding: '2px 7px', display: 'inline-block', letterSpacing: 0.4, marginBottom: 4 }}>
+                            🔁 NOTA DE CRÉDITO · RESTA
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {a.proveedor_nombre || a.descripcion || 'Sin proveedor'}
@@ -295,20 +303,20 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                             {/rechaz/i.test(a.factura?.estado_hacienda || '') && (
                               <span style={{ fontSize: 9, fontWeight: 700, color: 'white', background: C.rojo, borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>HACIENDA ✕</span>
                             )}
-                            {a.factura?.tipo_documento === 'NotaCreditoElectronica' && <NotaCreditoChip />}
                             {a.es_prueba && <PruebaChip />}
                             <OrigenChip origen={a.tipo_origen} />
                           </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
                           <span style={{ fontSize: 11.5, color: C.gris }}>{fmtFecha(a.fecha)}</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: C.vino, fontVariantNumeric: 'tabular-nums' }}>{fmtCRC(a.total_debe, a.moneda)}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: esNC ? morado : C.vino, fontVariantNumeric: 'tabular-nums' }}>{esNC ? '− ' : ''}{fmtCRC(a.total_debe, a.moneda)}</span>
                         </div>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setDescartar({ id: a.id }) }} title="Descartar este borrador"
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.grisClaro, fontSize: 14, padding: '0 2px' }} aria-label="Descartar borrador">✕</button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
           </div>
@@ -471,13 +479,16 @@ function NotaCreditoInfo({ detalle }) {
   // (ej. "Codigo Cliente:..."). Solo se muestra si parece un motivo real.
   const razonUtil = ref?.razon && ref.razon.length <= 70 && !/codigo\s*cliente|transporte|^\s*$/i.test(ref.razon) ? ref.razon : null
   return (
-    <div style={{ background: '#faf5ff', border: `1px solid ${morado}44`, borderRadius: 12, padding: '13px 16px', marginBottom: 14 }}>
+    <div style={{ background: '#faf5ff', border: `2px solid ${morado}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+      <div style={{ background: morado, color: 'white', padding: '8px 16px', fontWeight: 800, fontSize: 14, letterSpacing: 0.3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span>🔁 NOTA DE CRÉDITO — RESTA UN GASTO (tratamiento distinto a una factura)</span>
+        <span style={{ fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap' }}>− {fmtCRC(f.total_comprobante ?? detalle.total_debe, f.moneda || detalle.moneda)}</span>
+      </div>
+      <div style={{ padding: '11px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, color: morado, fontSize: 14, whiteSpace: 'nowrap' }}>🔁 Nota de crédito</span>
-        <span style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>{f.nombre_emisor || 'Proveedor'}</span>
+        <span style={{ fontWeight: 700, color: '#111827', fontSize: 15 }}>{f.nombre_emisor || 'Proveedor'}</span>
         {f.cedula_emisor && <span style={{ fontSize: 12, color: C.gris }}>· céd. {f.cedula_emisor}</span>}
         {f.consecutivo && <span style={{ fontSize: 12, color: C.gris }}>· {f.consecutivo}</span>}
-        <span style={{ fontSize: 13, fontWeight: 700, color: morado, marginLeft: 'auto' }}>− {fmtCRC(f.total_comprobante ?? detalle.total_debe, f.moneda || detalle.moneda)}</span>
       </div>
       <div style={{ fontSize: 12.5, color: C.gris, margin: '4px 0 8px' }}>
         <b>Resta</b> un gasto anterior de este proveedor (el débito y el IVA van al haber). Revisá la cuenta y aprobala igual que una factura, con el botón de abajo.
@@ -502,6 +513,7 @@ function NotaCreditoInfo({ detalle }) {
           ⚠️ No encontramos la factura original en el sistema (puede ser anterior al corte o cargada a mano). Confirmá manualmente que corresponde.
         </div>
       )}
+      </div>
     </div>
   )
 }
