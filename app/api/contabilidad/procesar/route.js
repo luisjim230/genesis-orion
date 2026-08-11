@@ -26,14 +26,36 @@ export async function POST(request) {
     const esPrueba = await modoPruebaActivo()
     const creados = [], ignorados = [], rechazados = [], acuses = []
 
-    for (const file of files) {
+    // Casi toda factura llega como XML + PDF gemelo (+ acuse). Se procesan los
+    // XML PRIMERO: así, cuando toca el PDF, su factura ya entró por el XML (que
+    // es el que manda) y el PDF se reconoce como duplicado en vez de intentar
+    // leerlo y ensuciar el resultado con un "rechazado" que asusta.
+    const orden = [...files].sort((a, b) =>
+      (/\.pdf$/i.test(a.name || '') ? 1 : 0) - (/\.pdf$/i.test(b.name || '') ? 1 : 0))
+    let huboComprobante = false // ¿ya entró alguna factura por su XML en este lote?
+
+    for (const file of orden) {
       const nombre = file.name || 'archivo'
       try {
         const esPdf = /\.pdf$/i.test(nombre) || /pdf/i.test(file.type || '')
 
-        // ── PDF: no tiene raíz XML, se extrae con Anthropic ─────────────────
+        // ── PDF: el XML manda. Si el XML gemelo ya está (por la clave en el
+        //    nombre, o porque entró en este mismo lote), no se lee el PDF. ────
         if (esPdf) {
-          const factura = await extraerDesdePdf(file)
+          const claveNom = (nombre.match(/\d{48,50}/) || [])[0]
+          if (claveNom) {
+            const { data: fex } = await getDb().from('conta_facturas').select('xml_path').eq('clave', claveNom).maybeSingle()
+            if (fex?.xml_path) { ignorados.push({ tipo: 'ignorado', archivo: nombre, motivo: 'PDF gemelo: ya está el XML (el XML manda).' }); continue }
+          }
+          let factura
+          try {
+            factura = await extraerDesdePdf(file)
+          } catch (e) {
+            // No se pudo leer el PDF: si la factura ya entró por su XML en este
+            // lote, es solo el PDF gemelo → se ignora en vez de rechazar.
+            if (huboComprobante) { ignorados.push({ tipo: 'ignorado', archivo: nombre, motivo: 'PDF gemelo: la factura ya entró por su XML.' }); continue }
+            throw e
+          }
           factura._origen = 'pdf'
           empujar(await procesarFactura(factura, file, ctx, creadoPor, esPrueba), { creados, ignorados, rechazados })
           continue
@@ -59,7 +81,9 @@ export async function POST(request) {
 
         const factura = parseFacturaXML(texto)
         factura._origen = 'xml'
-        empujar(await procesarFactura(factura, file, ctx, creadoPor, esPrueba), { creados, ignorados, rechazados })
+        const res = await procesarFactura(factura, file, ctx, creadoPor, esPrueba)
+        if (res.tipo === 'creado' || res.tipo === 'ignorado') huboComprobante = true
+        empujar(res, { creados, ignorados, rechazados })
       } catch (e) {
         rechazados.push({ tipo: 'rechazado', archivo: nombre, motivo: e?.message || String(e) })
       }

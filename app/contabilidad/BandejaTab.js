@@ -19,6 +19,8 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
   const [verRevisadas, setVerRevisadas] = useState(false)
   const [marcando, setMarcando] = useState(null)
   const [descartar, setDescartar] = useState(null) // { id }
+  const [sincronizando, setSincronizando] = useState(false)
+  const [syncMsg, setSyncMsg] = useState(null)
   const [resumenColapsado, setResumenColapsado] = useState(!!cat?.ui_prefs?.resumen_colapsado)
   const [listaColapsada, setListaColapsada] = useState(!!cat?.ui_prefs?.lista_colapsada)
   const fileRef = useRef(null)
@@ -129,6 +131,34 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
     if (selId) { try { setDetalle(await api(`/asientos/${selId}`)) } catch { /* */ } }
   }, [selId])
 
+  // Forzar la lectura del correo ahora (encola una corrida del robot en la M1).
+  // El daemon la levanta en ~1 min; se hace polling y se refresca la bandeja.
+  const sincronizarCorreo = useCallback(async () => {
+    setSincronizando(true); setSyncMsg('📧 Buscando facturas en el correo… (puede tardar ~1 min)')
+    try {
+      const r = await api('/sync-correo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actor: email }) })
+      const solId = r.solicitud?.id
+      let listo = false
+      for (let i = 0; i < 30 && !listo; i++) {          // hasta ~2.5 min
+        await new Promise((res) => setTimeout(res, 5000))
+        try {
+          const est = await api('/sync-correo')
+          const done = est.solicitud && (!solId || est.solicitud.id === solId) &&
+            ['completed', 'error', 'timeout', 'no_disponible'].includes(est.solicitud.status)
+          if (done || !est.en_curso) listo = true
+        } catch { /* reintenta */ }
+      }
+      await cargar(); await cargarIgnoradas(); recargarCat?.()
+      setSyncMsg(listo ? '✅ Correo sincronizado. Revisá los borradores nuevos.'
+        : '⏳ Sigue en cola; la lista se actualiza sola en un rato.')
+    } catch (e) {
+      setSyncMsg('⚠️ ' + e.message)
+    } finally {
+      setSincronizando(false)
+      setTimeout(() => setSyncMsg(null), 8000)
+    }
+  }, [email, cargar, cargarIgnoradas, recargarCat])
+
   // ¿El emisor de la factura abierta está amarrado a un proveedor por cédula?
   const proveedorAmarrado = useMemo(() => {
     const ced = detalle?.factura?.cedula_emisor
@@ -158,8 +188,16 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
         <button onClick={() => fileRef.current?.click()} disabled={subiendo} style={btn(C.petroleo)}>
           {subiendo ? 'Procesando…' : 'Elegir archivos'}
         </button>
+        <button onClick={sincronizarCorreo} disabled={sincronizando} style={btn(C.naranja)}
+          title="Leer el correo de facturación ahora mismo, sin esperar al horario automático">
+          {sincronizando ? 'Sincronizando…' : '📧 Sincronizar correo ahora'}
+        </button>
         <button onClick={onMontarManual} style={btn(C.vino)}>Montar manual</button>
       </div>
+
+      {syncMsg && (
+        <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 10, padding: '9px 14px', marginBottom: 12, fontSize: 13, color: C.vino }}>{syncMsg}</div>
+      )}
 
       {resultado && <ResultadoCarga r={resultado} onClose={() => setResultado(null)} />}
 
