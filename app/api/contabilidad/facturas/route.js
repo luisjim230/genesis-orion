@@ -1,6 +1,7 @@
 import {
   getDb, ok, bad, handle, cargarContexto, buscarProveedor,
-  armarLineasGasto, crearAsientoConLineas, modoPruebaActivo, HttpError,
+  armarLineasGasto, armarLineasNotaCredito, esNotaCredito,
+  crearAsientoConLineas, modoPruebaActivo, HttpError,
 } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -87,7 +88,11 @@ export async function POST(request) {
       lineas: Array.isArray(f.lineas) ? f.lineas : [],
       fecha_emision: f.fecha_emision,
     }
-    const { lineas } = armarLineasGasto(factura, proveedor, ctx, 'gasto')
+    // Una nota de crédito se contabiliza invertida (reversa del gasto).
+    const esNC = esNotaCredito(f.tipo_documento)
+    const { lineas } = esNC
+      ? armarLineasNotaCredito(factura, proveedor, ctx)
+      : armarLineasGasto(factura, proveedor, ctx, 'gasto')
 
     // Si vino en otra moneda, las líneas ya se convirtieron a CRC; se anota.
     const enMonedaExtranjera = factura.moneda && factura.moneda !== 'CRC' && Number(factura.tipo_cambio) > 1
@@ -97,9 +102,10 @@ export async function POST(request) {
 
     const asiento = await crearAsientoConLineas({
       fecha: (f.fecha_emision || new Date().toISOString()).slice(0, 10),
-      descripcion: `${proveedor?.nombre || f.nombre_emisor || 'Proveedor'}${f.consecutivo ? ' · ' + f.consecutivo : ''}${notaMoneda}`,
+      descripcion: `${esNC ? 'NC · ' : ''}${proveedor?.nombre || f.nombre_emisor || 'Proveedor'}${f.consecutivo ? ' · ' + f.consecutivo : ''}${notaMoneda}`,
       tipo_origen: f.xml_path ? 'xml' : (f.pdf_path ? 'pdf' : 'manual'),
       clave_factura: f.clave,
+      clave_referencia: f.clave_referencia || null,
       moneda: 'CRC', tipo_cambio: f.tipo_cambio || null,
       deducible: proveedor?.deducible_default !== false,
       creado_por: b.creado_por || null,

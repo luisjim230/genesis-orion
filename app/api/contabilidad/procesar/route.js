@@ -3,7 +3,8 @@ import {
   parseFacturaXML, raizXML, parseAcuseXML, guardarEstadoHacienda,
   RAICES_COMPROBANTE, RAICES_ACUSE,
   cargarContexto, buscarProveedor, clasificar,
-  armarLineasGasto, guardarFactura, crearAsientoConLineas, modoPruebaActivo, HttpError,
+  armarLineasGasto, armarLineasNotaCredito, esNotaCredito,
+  guardarFactura, crearAsientoConLineas, modoPruebaActivo, HttpError,
 } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -115,7 +116,12 @@ async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {
   const clasifFactura = cls.decision === 'nuevo' ? 'por_clasificar' : (cls.decision === 'preguntar' ? 'preguntar' : 'gasto')
   await guardarFactura(factura, clasifFactura, storagePath)
 
-  const { lineas } = armarLineasGasto(factura, proveedor, ctx, 'gasto')
+  // Nota de crédito de proveedor: es la reversa de una compra (baja el gasto),
+  // no un gasto nuevo. Se arman las líneas invertidas.
+  const esNC = esNotaCredito(factura.tipo_documento)
+  const { lineas } = esNC
+    ? armarLineasNotaCredito(factura, proveedor, ctx)
+    : armarLineasGasto(factura, proveedor, ctx, 'gasto')
 
   // Si la factura vino en otra moneda, las líneas ya están convertidas a CRC.
   // Se deja constancia en la descripción y el asiento queda en CRC.
@@ -124,8 +130,8 @@ async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {
     ? ` (${factura.moneda} ${Number(factura.total_comprobante || 0).toLocaleString('es-CR')} @ ${factura.tipo_cambio})`
     : ''
 
-  // Descripción legible
-  const desc = [
+  // Descripción legible (las NC se prefijan para que se distingan de un golpe)
+  const desc = (esNC ? 'NC · ' : '') + [
     proveedor?.nombre || factura.nombre_emisor || 'Proveedor',
     factura.consecutivo ? `· ${factura.consecutivo}` : '',
   ].join(' ').trim() + notaMoneda
@@ -135,6 +141,7 @@ async function procesarFactura(factura, file, ctx, creadoPor, esPrueba) {
     descripcion: desc,
     tipo_origen: factura._origen,
     clave_factura: factura.clave || null,
+    clave_referencia: factura.referencia_clave || null,
     moneda: 'CRC',
     tipo_cambio: factura.tipo_cambio || null,
     deducible: proveedor?.deducible_default !== false,

@@ -257,6 +257,7 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                             {/rechaz/i.test(a.factura?.estado_hacienda || '') && (
                               <span style={{ fontSize: 9, fontWeight: 700, color: 'white', background: C.rojo, borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>HACIENDA ✕</span>
                             )}
+                            {a.factura?.tipo_documento === 'NotaCreditoElectronica' && <NotaCreditoChip />}
                             {a.es_prueba && <PruebaChip />}
                             <OrigenChip origen={a.tipo_origen} />
                           </span>
@@ -286,6 +287,9 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
               {!proveedorAmarrado && (
                 <AmarrePanel detalle={detalle} cat={cat} email={email}
                   onListo={async () => { await cargar(); await recargarDetalle(); recargarCat?.() }} />
+              )}
+              {detalle.factura?.tipo_documento === 'NotaCreditoElectronica' && (
+                <NotaCreditoInfo detalle={detalle} />
               )}
               <div style={{ display: 'grid', gridTemplateColumns: resumenColapsado ? '1fr' : 'minmax(0,0.85fr) minmax(0,1.15fr)', gap: 14, alignItems: 'start' }}>
                 {!resumenColapsado && (
@@ -414,6 +418,44 @@ function Fila({ k, v, bold }) {
 
 function PruebaChip() {
   return <span style={{ fontSize: 9.5, fontWeight: 700, color: C.ambar, background: C.ambarBg, border: `1px solid ${C.ambar}55`, borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>PRUEBA</span>
+}
+function NotaCreditoChip() {
+  return <span style={{ fontSize: 9.5, fontWeight: 700, color: '#7c3aed', background: '#7c3aed18', border: '1px solid #7c3aed55', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }} title="Nota de crédito: rebaja una compra anterior">NC</span>
+}
+
+// Panel de nota de crédito: muestra qué factura original rebaja y si ya está
+// registrada, para que el revisor confirme antes de aprobar la reversa.
+function NotaCreditoInfo({ detalle }) {
+  const ref = detalle?.referencia
+  const morado = '#7c3aed'
+  return (
+    <div style={{ background: '#faf5ff', border: `1px solid ${morado}44`, borderRadius: 12, padding: '13px 16px', marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, color: morado, fontSize: 14 }}>🔁 Nota de crédito de proveedor</div>
+      <div style={{ fontSize: 12.5, color: C.gris, margin: '2px 0 8px' }}>
+        Este asiento <b>resta</b> un gasto anterior (el débito y el IVA van al haber). Revisá que la cuenta y el monto coincidan con la compra original.
+      </div>
+      {ref?.razon && (
+        <div style={{ fontSize: 12.5, color: '#111827', marginBottom: 6 }}>Motivo declarado: <b>{ref.razon}</b></div>
+      )}
+      {!ref?.clave ? (
+        <div style={{ fontSize: 12.5, color: C.ambar }}>La NC no declara a cuál factura corrige.</div>
+      ) : ref.asiento ? (
+        <div style={{ fontSize: 12.5, color: C.verde }}>
+          ✅ La factura original ya está registrada — asiento <b>#{ref.asiento.id}</b> ({ref.asiento.estado}
+          {ref.asiento.asiento_neo ? `, NEO ${ref.asiento.asiento_neo}` : ''}).
+          {ref.factura ? <span style={{ color: C.gris }}> {`· ${ref.factura.nombre_emisor || ''}${ref.factura.consecutivo ? ' · ' + ref.factura.consecutivo : ''} · ${fmtCRC(ref.factura.total_comprobante, ref.factura.moneda)}`}</span> : null}
+        </div>
+      ) : ref.factura ? (
+        <div style={{ fontSize: 12.5, color: C.ambar }}>
+          ⚠️ La factura original está leída pero <b>sin asiento activo</b> ({ref.factura.nombre_emisor || ''}{ref.factura.consecutivo ? ' · ' + ref.factura.consecutivo : ''} · {fmtCRC(ref.factura.total_comprobante, ref.factura.moneda)}). Verificá antes de restar.
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: C.ambar }}>
+          ⚠️ No encontramos la factura original en el sistema (puede ser anterior al corte o cargada a mano). Confirmá manualmente que corresponde.
+        </div>
+      )}
+    </div>
+  )
 }
 function OrigenChip({ origen }) {
   const map = { xml: ['XML', C.petroleo], pdf: ['PDF', C.naranja], manual: ['Manual', C.gris], plantilla: ['Plantilla', C.vino] }
