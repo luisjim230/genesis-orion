@@ -101,11 +101,12 @@ function useItems(modo, periodoSel, fechaDesde, fechaHasta) {
         if (modo === 'carga') {
           q = q.eq('periodo_reporte', periodoSel);
         } else {
-          // Convertir fechas a serial Excel para comparar, o usar fecha como string ISO
-          // Los ítems guardados tienen fecha como string o serial — buscar por rango de fecha_carga no ayuda
-          // Usamos periodo_reporte pattern para acumular múltiples períodos dentro del rango
-          // Mejor: cargar todo y filtrar en cliente por fecha del ítem convertida
-          // (los ítems tienen fecha serial de Excel)
+          // Filtrar por fecha EN LA BASE usando la columna de fecha real (date,
+          // indexada, poblada al 100%). Antes este modo traía la tabla ENTERA
+          // (~783k filas) y filtraba en el navegador: barría todo en cada carga
+          // y disparaba el consumo de Disk IO. Ahora la base devuelve solo el
+          // rango pedido usando el índice de cobertura.
+          q = q.gte('fecha_real', fechaDesde).lte('fecha_real', fechaHasta);
         }
 
         const { data, error } = await q;
@@ -113,20 +114,6 @@ function useItems(modo, periodoSel, fechaDesde, fechaHasta) {
         todos = [...todos, ...data];
         if (data.length < 1000) break;
         off += 1000;
-      }
-
-      // Si modo rango: filtrar por fecha real de factura
-      if (modo === 'rango') {
-        const desde = new Date(fechaDesde).getTime();
-        const hasta = new Date(fechaHasta + 'T23:59:59').getTime();
-        // fecha en Excel serial: 1 = 1/1/1900, 44927 = 1/1/2023
-        // convertir: (serial - 25569) * 86400 * 1000
-        todos = todos.filter(r => {
-          const f = parseFloat(r.fecha);
-          if (!f) return true; // si no hay fecha incluir
-          const ms = (f - 25569) * 86400 * 1000;
-          return ms >= desde && ms <= hasta;
-        });
       }
 
       setItems(todos);
