@@ -165,7 +165,10 @@ def main():
     tot_creados = tot_ignorados = tot_rechazados = tot_acuses = 0
     for uid in uids[: args.limit]:
         try:
-            typ, msgdata = imap.uid("fetch", uid, "(RFC822)")
+            # BODY.PEEK[] lee el correo SIN marcarlo como leído (a diferencia de
+            # RFC822, que sí pone el flag \Seen). Así el robot no deja huella y el
+            # estado no-leído/leído lo maneja la persona en su flujo normal.
+            typ, msgdata = imap.uid("fetch", uid, "(BODY.PEEK[])")
             msg = email.message_from_bytes(msgdata[0][1])
             asunto = _dec(msg.get("Subject"))[:70]
             archivos = adjuntos_factura(msg)
