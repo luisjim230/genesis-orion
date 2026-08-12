@@ -15,7 +15,7 @@ Alertas:
   Telegram (requiere TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en .env).
 """
 
-import os, sys, asyncio, logging, json, urllib.request, urllib.error
+import os, sys, asyncio, logging, json, time, urllib.request, urllib.error
 from pathlib import Path
 from datetime import datetime, date
 from playwright.async_api import async_playwright
@@ -48,6 +48,11 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 LOG_FILE = BASE / "neo-proformas.log"
 
 UMBRAL_MIN = 3  # menos de esto es sospechoso para un mes
+
+# NEO a veces responde lento: subir el timeout por defecto de Playwright
+# (30s) evita que un click/navegación se caiga por un pico transitorio.
+DEFAULT_TIMEOUT_MS = 60_000
+MAX_REINTENTOS_DESCARGA = 3  # reintenta toda la descarga ante timeouts transitorios
 
 logging.basicConfig(
     level=logging.INFO,
@@ -180,6 +185,9 @@ async def descargar():
         browser = await p.chromium.launch(headless=True)
         ctx     = await browser.new_context(accept_downloads=True)
         page    = await ctx.new_page()
+        # Todos los clicks/fills/navegaciones heredan este timeout (antes 30s).
+        page.set_default_timeout(DEFAULT_TIMEOUT_MS)
+        page.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
 
         log.info("Abriendo NEO...")
         await page.goto(NEO_URL, wait_until="domcontentloaded", timeout=60000)
@@ -371,12 +379,31 @@ def parse_y_subir(excel_path):
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
+def descargar_con_reintentos():
+    """Corre descargar() reintentando ante timeouts/errores transitorios de NEO.
+    Cada intento levanta un browser limpio. Backoff exponencial entre intentos."""
+    ultimo_error = None
+    for intento in range(1, MAX_REINTENTOS_DESCARGA + 1):
+        try:
+            return asyncio.run(descargar())
+        except Exception as e:
+            ultimo_error = e
+            if intento < MAX_REINTENTOS_DESCARGA:
+                espera = 5 * (2 ** (intento - 1))  # 5s, 10s, 20s...
+                log.warning(f"Descarga falló (intento {intento}/{MAX_REINTENTOS_DESCARGA}): "
+                            f"{str(e)[:150]} — reintentando en {espera}s")
+                time.sleep(espera)
+            else:
+                log.error(f"Descarga falló tras {MAX_REINTENTOS_DESCARGA} intentos")
+    raise ultimo_error
+
+
 def main():
     log.info("=" * 60)
     log.info("PROFORMAS (cabecera) DOWNLOADER")
     log.info("=" * 60)
     try:
-        excel = asyncio.run(descargar())
+        excel = descargar_con_reintentos()
         ok = parse_y_subir(excel)
         supa_upsert_sync_status("proformas_cabecera", exitoso=ok)
         sys.exit(0 if ok else 1)
