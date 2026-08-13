@@ -90,6 +90,7 @@ export default function KronosTab({ calc, transitoMap }) {
   const [preciosMap, setPreciosMap] = useState({});
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
   const [periodos, setPeriodos] = useState([]);
+  const [ventanaMeses, setVentanaMeses] = useState(6);
   const [tabActivo, setTabActivo] = useState('proveedor');
   const [sortPlana, setSortPlana] = useState({ col: '_urgencia_orden', dir: 'asc' });
   const [paginaPlana, setPaginaPlana] = useState(1);
@@ -99,9 +100,15 @@ export default function KronosTab({ calc, transitoMap }) {
 
   useEffect(() => {
     cargarLeadTimes();
-    cargarConsumoHistorico();
     cargarUltimasCompras();
   }, []);
+
+  // El consumo histórico se recalcula cada vez que el usuario cambia la
+  // ventana de meses en el selector. La primera corrida (ventanaMeses=6)
+  // se dispara sola al montar el componente.
+  useEffect(() => {
+    cargarConsumoHistorico(ventanaMeses);
+  }, [ventanaMeses]);
 
   // Última fecha de entrada de stock por código, leída del reporte oficial
   // "Lista de ítems" (tabla neo_lista_items). Se usa como piso de 30 días
@@ -148,14 +155,15 @@ export default function KronosTab({ calc, transitoMap }) {
     } catch (e) { console.error(e); }
   }
 
-  async function cargarConsumoHistorico() {
+  async function cargarConsumoHistorico(ventana = 6) {
     setCargandoHistorial(true);
     try {
-      // Ventana fija de 6 meses, igual que mv_consumo_mensual.
+      // Ventana configurable (default 6 meses). Filtra en la base por fecha,
+      // así solo trae las facturas de la ventana elegida (no toda la tabla).
       // El bug viejo dividía las unidades totales entre los meses CON ventas
       // (ej: 60 unidades vendidas en 2 de 6 meses → 30/mes en vez de 10/mes),
       // inflando el consumo y disparando falsos rojos.
-      const VENTANA_MESES = 6;
+      const VENTANA_MESES = ventana;
       const desde = new Date();
       desde.setMonth(desde.getMonth() - VENTANA_MESES);
       const cutoff = desde.toISOString().slice(0, 10);
@@ -980,9 +988,21 @@ export default function KronosTab({ calc, transitoMap }) {
         ))}
       </div>
 
-      {/* Info historial */}
+      {/* Info historial + selector de ventana de proyección */}
       <div style={{ background: '#f7f9fc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 14px', marginBottom: 14, fontSize: '0.77rem', color: '#555', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {cargandoHistorial ? <span>⏳ Calculando consumo histórico...</span> : (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#2a3a50', whiteSpace: 'nowrap' }}>
+          🕐 Proyectar con
+          <select value={ventanaMeses} onChange={e => setVentanaMeses(Number(e.target.value))}
+            disabled={cargandoHistorial}
+            style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--orange, #DD6B20)', fontSize: '0.78rem', background: 'white', color: '#333', cursor: cargandoHistorial ? 'wait' : 'pointer', fontWeight: 700 }}>
+            <option value={3}>últimos 3 meses</option>
+            <option value={6}>últimos 6 meses</option>
+            <option value={12}>últimos 12 meses</option>
+          </select>
+          <span style={{ color: '#aaa', fontWeight: 400 }}>de ventas</span>
+        </label>
+        <span style={{ color: '#ddd' }}>|</span>
+        {cargandoHistorial ? <span>⏳ Recalculando consumo con {ventanaMeses} meses...</span> : (
           <>
             <span>📊 <strong>{Object.keys(consumoHistorico).length}</strong> productos con consumo real</span>
             <span>📅 <strong>{periodos.length}</strong> períodos en historial</span>
