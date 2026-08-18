@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
-import { calcularTransito } from '../../lib/transito';
+import { calcularTransito, normCodigo } from '../../lib/transito';
 import KronosTab from './KronosTab'
 import ModalEnviarWhatsApp from '../components/ModalEnviarWhatsApp';
 
@@ -10,7 +10,7 @@ function calcularAlertas(items, transitoMap, dias) {
   return items.map(item => {
     const existencias = parseFloat(item.existencias || 0) || 0;
     const promMensual = parseFloat(item.promedio_mensual || 0) || 0;
-    const codigo = (item.codigo || '').toString().trim();
+    const codigo = normCodigo(item.codigo);
     const transito = transitoMap[codigo] || 0;
     const sugerencia = (promMensual / 30) * dias;
     const aBruto = Math.max(sugerencia - existencias, 0);

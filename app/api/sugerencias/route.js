@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { ejecutarMatch } from '../../lib/procesar-match.js'
-import { calcularTransito } from '../../../lib/transito.js'
+import { calcularTransito, normCodigo } from '../../../lib/transito.js'
 let _supabase; function supabase() { if (!_supabase) _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _supabase; }
 export async function POST(req) {
   try {
@@ -80,13 +80,13 @@ export async function POST(req) {
       const k=String(mm.codigo||'').trim().toUpperCase()
       if(k && !seenCod.has(k)){ seenCod.add(k); todos.push(mm) }
     }
-    const { tMap } = await calcularTransito(supabase())
+    const { tMap, tMapVencido } = await calcularTransito(supabase())
     const totalUnidades=Object.values(tMap).reduce((s,v)=>s+v,0)
     const diasNum=parseInt(dias)||36
     const resultados=[]
     for(const item of todos){
       const prom=parseFloat(item.promedio_mensual)||0, exist=parseFloat(item.existencias)||0
-      const cod=String(item.codigo||'').trim(), transito=tMap[cod]||0
+      const cod=String(item.codigo||'').trim(), transito=tMap[normCodigo(cod)]||0, transitoVencido=tMapVencido[normCodigo(cod)]||0
       const sug=(prom/30)*diasNum, aBruto=Math.max(sug-exist,0), aNeto=Math.max(aBruto-transito,0), cant=Math.ceil(aNeto)
       if(cant<=0) continue
       const tCubre=aBruto>0&&transito>=aBruto
@@ -97,7 +97,7 @@ export async function POST(req) {
       else if(exist<=0) alerta='🔴 Bajo stock'
       else if(transito>0) alerta='🔴 Bajo stock 🚢'
       else alerta='🔴 Bajo stock'
-      resultados.push({codigo:item.codigo,nombre:item.nombre,categoria:item.categoria,proveedor:item.ultimo_proveedor||'Sin proveedor',existencias:exist,promedio_mensual:prom,ultimo_costo:parseFloat(item.ultimo_costo)||0,moneda:item.moneda||'CRC',transito,cantidad:cant,alerta})
+      resultados.push({codigo:item.codigo,transito_vencido:transitoVencido,nombre:item.nombre,categoria:item.categoria,proveedor:item.ultimo_proveedor||'Sin proveedor',existencias:exist,promedio_mensual:prom,ultimo_costo:parseFloat(item.ultimo_costo)||0,moneda:item.moneda||'CRC',transito,cantidad:cant,alerta})
     }
     const {data:pData}=await supabase().from('proveedores_pausados').select('proveedor,motivo')
     return Response.json({resultados,pausados:(pData||[]).map(p=>p.proveedor),fechaCarga:fc,periodo,total:todos.length,transitoProductos:Object.keys(tMap).length,transitoUnidades:Math.round(totalUnidades)})
