@@ -21,6 +21,22 @@ const S = {
   btnSm: (c = SURF) => ({ background: c, color: TEXT, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '5px 11px', cursor: 'pointer', fontSize: '0.78em', fontFamily: 'DM Sans,sans-serif' }),
 }
 
+// Trae todas las filas paginando de a 1000 (límite por defecto de PostgREST).
+async function traerTodoCliente(tabla, columnas, filtro) {
+  const PAGE = 1000
+  let filas = [], offset = 0
+  while (true) {
+    let q = supabase.from(tabla).select(columnas)
+    if (filtro) q = filtro(q)
+    const { data, error } = await q.order('id', { ascending: true }).range(offset, offset + PAGE - 1)
+    if (error || !data || data.length === 0) break
+    filas = filas.concat(data)
+    if (data.length < PAGE) break
+    offset += PAGE
+  }
+  return filas
+}
+
 function diasDesde(fechaStr) {
   if (!fechaStr) return null
   return Math.floor((new Date() - new Date(fechaStr)) / 86400000)
@@ -633,62 +649,183 @@ function TabProcesar({ ordenes, items, loading, recargar }) {
   )
 }
 
+// ─── TAB 4: DUPLICADOS (mismo código pedido en 2+ órdenes abiertas) ──────────
+function TabDuplicados({ ordenes, items, loading }) {
+  const [busq, setBusq] = useState('')
+
+  const duplicados = useMemo(() => {
+    const ordMap = {}; ordenes.forEach(o => { ordMap[o.id] = o })
+    const porCodigo = {}
+    items
+      .filter(it => it.estado_item === 'pendiente' || it.estado_item === 'parcial')
+      .forEach(it => {
+        const cod = String(it.codigo || '').trim().toUpperCase()
+        if (!cod) return
+        const pend = Math.max(0, (parseFloat(it.cantidad_ordenada) || 0) - (parseFloat(it.cantidad_recibida) || 0))
+        if (pend <= 0) return
+        const orden = ordMap[it.orden_id]
+        if (!porCodigo[cod]) porCodigo[cod] = { codigo: it.codigo, nombre: it.nombre, ocs: [] }
+        porCodigo[cod].ocs.push({
+          id: it.id,
+          pendiente: pend,
+          proveedor: it.proveedor || '—',
+          lote: orden?.nombre_lote || '—',
+          fecha: orden?.fecha_orden || null,
+          dias: diasDesde(orden?.fecha_orden),
+        })
+      })
+    return Object.values(porCodigo)
+      .filter(g => g.ocs.length > 1)
+      .map(g => ({
+        ...g,
+        ocs: g.ocs.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1)),
+        totalPendiente: g.ocs.reduce((s, o) => s + o.pendiente, 0),
+        provsDistintos: new Set(g.ocs.map(o => o.proveedor)).size > 1,
+      }))
+      .filter(g => {
+        if (!busq.trim()) return true
+        const q = busq.toLowerCase()
+        return (g.nombre || '').toLowerCase().includes(q) || (g.codigo || '').toLowerCase().includes(q)
+      })
+      .sort((a, b) => b.ocs.length - a.ocs.length || b.totalPendiente - a.totalPendiente)
+  }, [ordenes, items, busq])
+
+  const unidadesRepetidas = duplicados.reduce((s, g) => s + g.totalPendiente, 0)
+
+  return (
+    <div>
+      <p style={{ fontSize: '0.84em', color: MUTED, marginBottom: 14 }}>
+        Productos que están pedidos en <strong style={{ color: TEXT }}>más de una orden abierta al mismo tiempo</strong>.
+        Casi siempre significa que se pidió dos veces lo mismo. Revisá cada uno: si ya llegó, marcalo como recibido en
+        <strong style={{ color: TEXT }}> Alertas de Pendientes</strong>; si el proveedor no lo va a mandar, cancelalo.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 18 }}>
+        {[
+          ['🔁 Productos pedidos 2+ veces', duplicados.length, '#f6ad55'],
+          ['📦 Unidades comprometidas', unidadesRepetidas, '#fc8181'],
+        ].map(([l, v, c]) => (
+          <div key={l} style={{ background: SURF, border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: '0.72em', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
+            <div style={{ fontSize: '1.8em', fontWeight: 700, color: c, marginTop: 4 }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <input style={{ ...S.input, width: '100%', marginBottom: 14, boxSizing: 'border-box' }} placeholder="🔍 Buscar por código o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: MUTED }}>Cargando...</div>
+      ) : duplicados.length === 0 ? (
+        <div style={{ ...S.card, textAlign: 'center', color: '#68d391', padding: 40 }}>✅ Nada pedido dos veces. Todo limpio.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {duplicados.map(g => (
+            <div key={g.codigo} style={{ ...S.card, marginBottom: 0, borderLeft: '4px solid #f6ad55' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: TEXT, fontSize: '0.95em' }}>{g.nombre || '—'}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.76em', color: MUTED, marginTop: 2 }}>{g.codigo}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={S.badge('#f6ad55')}>{g.ocs.length} órdenes abiertas</span>
+                  <span style={S.badge('#fc8181')}>{g.totalPendiente} u. sin llegar</span>
+                  {g.provsDistintos && <span style={S.badge('#b794f4')}>Proveedores distintos</span>}
+                </div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82em' }}>
+                <thead><tr>{['Pedido', '⏱️ Días', 'Proveedor', 'Orden / Lote', 'Pendiente'].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {g.ocs.map(o => (
+                    <tr key={o.id}>
+                      <td style={S.td}>{o.fecha ? String(o.fecha).substring(0, 10) : '—'}</td>
+                      <td style={S.td}><span style={S.badge(colorDias(o.dias, 5, 10))}>{o.dias !== null ? `${o.dias}d` : '–'}</span></td>
+                      <td style={S.td}>{o.proveedor}</td>
+                      <td style={{ ...S.td, fontFamily: 'monospace', fontSize: '0.78em' }}>{o.lote}</td>
+                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: '#f6ad55' }}>{o.pendiente}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 export default function TrazabilidadPage() {
   const [tab, setTab]         = useState(0)
   const [ordenes, setOrdenes] = useState([])
   const [items, setItems]     = useState([])
   const [loading, setLoading] = useState(true)
+  const [avisoAutoCancel, setAvisoAutoCancel] = useState(null)
 
   async function cargar() {
     setLoading(true)
-    // Cargar pendientes/parciales y completos por separado para superar el límite de 1000 rows
-    const [{ data: ords }, { data: itsPend }, { data: itsComp }, { data: cola }] = await Promise.all([
-      supabase.from('ordenes_compra').select('*').order('fecha_orden', { ascending: false }),
-      supabase.from('ordenes_compra_items').select('*').in('estado_item', ['pendiente', 'parcial']),
-      supabase.from('ordenes_compra_items').select('*').eq('estado_item', 'completo').order('fecha_recepcion', { ascending: false }).limit(500),
-      supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null),
+    // Todas las consultas van paginadas: `.select()` sin range corta en 1000
+    // filas sin avisar y las órdenes más nuevas quedaban afuera (por eso
+    // "faltaban" pendientes en este módulo).
+    const [ords, itsPend, itsComp, cola] = await Promise.all([
+      traerTodoCliente('ordenes_compra', '*'),
+      traerTodoCliente('ordenes_compra_items', '*', q => q.in('estado_item', ['pendiente', 'parcial'])),
+      supabase.from('ordenes_compra_items').select('*').eq('estado_item', 'completo').order('fecha_recepcion', { ascending: false }).limit(500).then(r => r.data || []),
+      supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null).then(r => r.data || []),
     ])
+    ords.sort((a, b) => String(b.fecha_orden || '').localeCompare(String(a.fecha_orden || '')))
     // Auto-cancelar ítems pendientes con más de 18 días
     const DIAS_LIMITE = 18
     const ahora = new Date()
-    const vencidos = (itsPend||[]).filter(it => {
-      const orden = (ords||[]).find(o => o.id === it.orden_id)
+    const ordMap = {}; ords.forEach(o => { ordMap[o.id] = o })
+    const vencidos = itsPend.filter(it => {
+      const orden = ordMap[it.orden_id]
       if (!orden?.fecha_orden) return false
       const dias = Math.floor((ahora - new Date(orden.fecha_orden)) / 86400000)
       return dias > DIAS_LIMITE
     })
     if (vencidos.length > 0) {
       const ids = vencidos.map(v => v.id)
-      await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids)
+      // La cancelación automática antes era invisible: la OC desaparecía de la
+      // pantalla sin que nadie se enterara y el ítem se volvía a pedir.
+      for (let i = 0; i < ids.length; i += 200) {
+        await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids.slice(i, i + 200))
+      }
+      setAvisoAutoCancel(`${vencidos.length} ítem(s) se auto-cancelaron por superar ${DIAS_LIMITE} días sin llegar. Si el proveedor todavía los debe, hay que volver a pedirlos.`)
+    } else {
+      setAvisoAutoCancel(null)
     }
-    const itsPendFiltrados = (itsPend||[]).filter(it => !vencidos.some(v => v.id === it.id))
-    // Deduplicar: misma orden (orden_id) O mismo lote (nombre_lote) + mismo código → conservar solo uno
-    const ordMap = {}; (ords||[]).forEach(o => { ordMap[o.id] = o })
-    const vistoDedup = new Set()
-    const itsPendDedup = itsPendFiltrados.filter(it => {
-      const nombreLote = ordMap[it.orden_id]?.nombre_lote || it.orden_id || ''
-      const key = `${nombreLote}__${(it.codigo||'').trim()}`
-      if (vistoDedup.has(key)) return false
-      vistoDedup.add(key)
-      return true
-    })
-    const its = [...itsPendDedup, ...(itsComp||[])]
+    // OJO: acá NO se deduplica por lote+código. La deduplicación anterior
+    // escondía órdenes distintas del mismo proveedor y el mismo día (mismo
+    // nombre_lote), que es justo el caso que hay que ver para no re-pedir.
+    const its = [...itsPend.filter(it => !vencidos.some(v => v.id === it.id)), ...itsComp]
     // Enriquecer ordenes con pdf_url de cola
     const colaMap = {}
-    ;(cola||[]).forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
-    const ordsEnriquecidas = (ords||[]).map(o=>({ ...o, pdf_url: colaMap[o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'')] || null }))
+    cola.forEach(r=>{ if(r.pdf_url) colaMap[r.proveedor_nombre] = r.pdf_url })
+    const ordsEnriquecidas = ords.map(o=>({ ...o, pdf_url: colaMap[o.nombre_lote?.replace(/^OC /,'').replace(/ \d{4}-\d{2}-\d{2}$/,'')] || null }))
     setOrdenes(ordsEnriquecidas)
-    setItems(its || [])
+    setItems(its)
     setLoading(false)
   }
 
   useEffect(() => { cargar() }, [])
 
+  const nDuplicados = useMemo(() => {
+    const cuenta = {}
+    items
+      .filter(it => it.estado_item === 'pendiente' || it.estado_item === 'parcial')
+      .forEach(it => {
+        const cod = String(it.codigo || '').trim().toUpperCase()
+        const pend = Math.max(0, (parseFloat(it.cantidad_ordenada) || 0) - (parseFloat(it.cantidad_recibida) || 0))
+        if (!cod || pend <= 0) return
+        cuenta[cod] = (cuenta[cod] || 0) + 1
+      })
+    return Object.values(cuenta).filter(n => n > 1).length
+  }, [items])
+
   const tabs = [
     ['🚨 Alertas de Pendientes',      0],
     ['📋 Historial de Órdenes',       1],
     ['🔄 Procesar Compras Recibidas', 2],
+    [`🔁 Pedidos duplicados${nDuplicados ? ` (${nDuplicados})` : ''}`, 3],
   ]
 
   return (
@@ -718,9 +855,15 @@ export default function TrazabilidadPage() {
           </button>
         ))}
       </div>
-      {tab === 0 && <TabAlertas   ordenes={ordenes} items={items} setItems={setItems} loading={loading} />}
-      {tab === 1 && <TabHistorial ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
-      {tab === 2 && <TabProcesar  ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
+      {avisoAutoCancel && (
+        <div style={{ background: '#f6ad5522', border: '1px solid #f6ad5555', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#b7791f', fontSize: '0.84em' }}>
+          ⏳ {avisoAutoCancel}
+        </div>
+      )}
+      {tab === 0 && <TabAlertas    ordenes={ordenes} items={items} setItems={setItems} loading={loading} />}
+      {tab === 1 && <TabHistorial  ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
+      {tab === 2 && <TabProcesar   ordenes={ordenes} items={items} loading={loading} recargar={cargar} />}
+      {tab === 3 && <TabDuplicados ordenes={ordenes} items={items} loading={loading} />}
       <div style={{ marginTop: 24, fontSize: '0.7rem', color: '#3a4150', textAlign: 'right' }}>
         Actualizado: {new Date().toLocaleString('es-CR')}
       </div>

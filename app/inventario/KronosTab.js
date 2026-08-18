@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { normCodigo } from '../../lib/transito';
 import BiDashboard from './BiDashboard';
 import BiInteligencia from './BiInteligencia';
 
@@ -189,7 +190,7 @@ export default function KronosTab({ calc, transitoMap }) {
           .range(offset, offset + BATCH - 1);
         if (error || !data || !data.length) break;
         data.forEach(r => {
-          const cod = (r.codigo_interno || '').toString().trim();
+          const cod = normCodigo(r.codigo_interno);
           if (!cod) return;
           const qty = (parseFloat(r.cantidad_facturada) || 0) - (parseFloat(r.cantidad_devuelta) || 0);
           if (!acum[cod]) acum[cod] = { totalUnidades: 0, precioSum: 0, costoSum: 0, cnt: 0 };
@@ -252,7 +253,7 @@ export default function KronosTab({ calc, transitoMap }) {
     if (!calc || !calc.length) return [];
     const hoy = new Date();
     return calc.map(item => {
-      const cod = (item.codigo || '').toString().trim();
+      const cod = normCodigo(item.codigo);
       const prov = (item.ultimo_proveedor || '').trim();
       const existencias = parseFloat(item.existencias) || 0;
       const enTransito = transitoMap?.[cod] || 0;
@@ -435,7 +436,7 @@ export default function KronosTab({ calc, transitoMap }) {
     // alertas falsas el mismo día que se reciben.
     const muertos = proyecciones
       .filter(i =>
-        !consumoHistorico[i.codigo] &&
+        !consumoHistorico[normCodigo(i.codigo)] &&
         (parseFloat(i.existencias) || 0) > 0 &&
         (parseFloat(i.promedio_mensual) || 0) === 0 &&
         diasDesdeUltimaCompra(i.codigo) >= 30
@@ -511,7 +512,7 @@ export default function KronosTab({ calc, transitoMap }) {
 
   // ── Fila de producto (vista por proveedor) ──────────────────────────────
   function FilaProducto({ item, idx }) {
-    const cod = (item.codigo || '').toString().trim();
+    const cod = normCodigo(item.codigo);
     return (
       <tr style={{ borderBottom: '1px solid #f0f0f0', background: idx % 2 === 0 ? 'white' : '#fafafa' }}>
         <td style={{ padding: '6px 10px' }}>
@@ -666,7 +667,7 @@ export default function KronosTab({ calc, transitoMap }) {
                 <tr><td colSpan={11} style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>Sin resultados</td></tr>
               )}
               {productosPlanosPagina.map((item, idx) => {
-                const cod = (item.codigo || '').toString().trim();
+                const cod = normCodigo(item.codigo);
                 const enTransito = transitoMap?.[cod] || 0;
                 return (
                   <tr key={item.codigo + idx} style={{ borderBottom: '1px solid #f0f0f0', background: idx % 2 === 0 ? 'white' : '#fafafa' }}>

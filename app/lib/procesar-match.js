@@ -114,28 +114,59 @@ export async function ejecutarMatch() {
     q => q.in('estado_item', ['pendiente', 'parcial']),
   )
 
-  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos }
+  // 3b. Ítems que YA tienen mercadería acreditada. Sin esto, cada corrida
+  // volvía a "gastar" las mismas compras de NEO: la compra de 30 unidades del
+  // 04/08 se le acreditaba primero a una OC, y en la corrida siguiente —como
+  // esa OC ya no estaba en la lista de pendientes— las mismas 30 unidades se
+  // le acreditaban a la OC siguiente. Resultado: órdenes marcadas "completo"
+  // sin que llegara nada, que desaparecían de tránsito y se volvían a pedir.
+  // Solo 'completo': los 'parcial' siguen en la lista de pendientes y vuelven a
+  // matchear su propia mercadería en esta misma corrida — reservarla acá los
+  // dejaría trabados sin poder completarse nunca.
+  const itemsAcreditados = await traerTodo(
+    'ordenes_compra_items',
+    'id, codigo, cantidad_recibida, fecha_recepcion, estado_item',
+    q => q.eq('estado_item', 'completo'),
+  )
+
+  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos, reservados: 0 }
   if (!itemsPend || itemsPend.length === 0) return res
 
-  // 4. Agrupar compras por código
-  const comprasPorCodigo = {}, comprasPorCodigoNorm = {}
+  // 4. Agrupar compras por código (clave normalizada: NEO devuelve el mismo
+  // código con distinta caja según el reporte)
+  const comprasPorCodigo = {}
+  let fechaNeoMin = null
   for (const c of todos) {
-    const codExacto = String(c.codigo_interno || '').trim()
-    if (!codExacto) continue
-    const codNorm = codExacto.toUpperCase()
+    const cod = String(c.codigo_interno || '').trim().toUpperCase()
+    if (!cod) continue
     const fechaCompra = parseFecha(c.fecha)
     if (!fechaCompra) continue
-    const entrada = { cantidad: parseFloat(c.cantidad_comprada) || 0, fecha: fechaCompra }
-    if (!comprasPorCodigo[codExacto]) comprasPorCodigo[codExacto] = []
-    comprasPorCodigo[codExacto].push(entrada)
-    if (!comprasPorCodigoNorm[codNorm]) comprasPorCodigoNorm[codNorm] = []
-    comprasPorCodigoNorm[codNorm].push(entrada)
+    if (!fechaNeoMin || fechaCompra < fechaNeoMin) fechaNeoMin = fechaCompra
+    if (!comprasPorCodigo[cod]) comprasPorCodigo[cod] = []
+    comprasPorCodigo[cod].push({ cantidad: parseFloat(c.cantidad_comprada) || 0, fecha: fechaCompra })
+  }
+
+  // 4b. Lo ya acreditado, por código: se reserva antes de repartir nada nuevo.
+  // Solo cuenta lo recibido DENTRO de la ventana que cubre neo_items_comprados
+  // (hoy es una ventana móvil, no el histórico completo): una recepción de mayo
+  // no puede consumir una compra de agosto.
+  const acreditadoPorCodigo = {}
+  for (const item of (itemsAcreditados || [])) {
+    const cant = parseFloat(item.cantidad_recibida) || 0
+    if (cant <= 0) continue
+    const cod = String(item.codigo || '').trim().toUpperCase()
+    if (!cod) continue
+    const fRecep = parseFecha(item.fecha_recepcion)
+    if (!fRecep) continue
+    if (fechaNeoMin && fRecep < fechaNeoMin) continue
+    if (!acreditadoPorCodigo[cod]) acreditadoPorCodigo[cod] = []
+    acreditadoPorCodigo[cod].push({ cantidad: cant, fecha: fRecep })
   }
 
   // 5. Agrupar OC items por código, ordenar por fecha (FIFO: más antiguo primero)
   const itemsPorCodigo = {}
   for (const item of itemsPend) {
-    const cod = String(item.codigo || '').trim()
+    const cod = String(item.codigo || '').trim().toUpperCase()
     if (!cod) continue
     if (!itemsPorCodigo[cod]) itemsPorCodigo[cod] = []
     itemsPorCodigo[cod].push(item)
@@ -152,13 +183,29 @@ export async function ejecutarMatch() {
   // 6. Match FIFO
   const actualizaciones = []
   for (const cod of Object.keys(itemsPorCodigo)) {
-    const codNorm = cod.toUpperCase()
-    const comprasBase = comprasPorCodigo[cod] || comprasPorCodigoNorm[codNorm]
+    const comprasBase = comprasPorCodigo[cod]
     if (!comprasBase || comprasBase.length === 0) {
       res.sin_match += itemsPorCodigo[cod].length
       continue
     }
     const disponibles = [...comprasBase].sort((a, b) => a.fecha - b.fecha).map(c => ({ ...c, restante: c.cantidad }))
+
+    // Reservar lo que ya se le acreditó a otras OC en corridas anteriores.
+    // Se consume en el mismo orden FIFO con el que se había repartido.
+    const yaAcreditado = [...(acreditadoPorCodigo[cod] || [])].sort((a, b) => a.fecha - b.fecha)
+    for (const ac of yaAcreditado) {
+      let porReservar = ac.cantidad
+      for (const disp of disponibles) {
+        if (porReservar <= 0) break
+        if (disp.restante <= 0) continue
+        if (disp.fecha > ac.fecha) break // esa compra entró después de la recepción
+        const usar = Math.min(disp.restante, porReservar)
+        disp.restante -= usar
+        porReservar -= usar
+        res.reservados += usar
+      }
+    }
+
     for (const item of itemsPorCodigo[cod]) {
       const fechaOrden = parseFecha(fechaOrdenMap[item.orden_id])
       if (!fechaOrden) { res.ignorados_por_fecha++; continue }

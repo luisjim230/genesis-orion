@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { generarPDFOrden } from '../lib/generarPDFOrden'
+import { supabase } from '../../lib/supabase'
+import { pendientesPorCodigo, normCodigo } from '../../lib/transito'
 
 const GOLD='#ED6E2E',SURF='#ffffff',BORDER='#EAE0E0',TEXT='#1a1a1a',MUTED='#8a7070'
 const S={
@@ -29,6 +31,36 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
   const [neoOk,setNeoOk]=useState(null)
   const [numeroSolOC,setNumeroSolOC]=useState(null)
   const [waLink,setWaLink]=useState(null)
+  // Duplicados: códigos de esta orden que YA están pedidos y sin llegar
+  const [duplicados,setDuplicados]=useState([])
+  const [chequeandoDup,setChequeandoDup]=useState(!soloReenvio)
+  const [confirmoDup,setConfirmoDup]=useState(false)
+
+  useEffect(()=>{
+    // En reenvío la OC ya existe: se detectaría a sí misma como duplicado.
+    if(soloReenvio){setChequeandoDup(false);return}
+    let vivo=true
+    ;(async()=>{
+      try{
+        const mapa=await pendientesPorCodigo(supabase,items.map(i=>i.codigo))
+        if(!vivo) return
+        const dups=items.map(i=>{
+          const abiertas=mapa[normCodigo(i.codigo)]||[]
+          if(!abiertas.length) return null
+          return {
+            codigo:i.codigo,
+            nombre:i.nombre||i.codigo,
+            cantidadNueva:Number(i.cantidad)||0,
+            yaPedido:abiertas.reduce((s,o)=>s+o.pendiente,0),
+            abiertas,
+          }
+        }).filter(Boolean)
+        setDuplicados(dups)
+      }catch(e){console.error('chequeo duplicados:',e)}
+      finally{ if(vivo) setChequeandoDup(false) }
+    })()
+    return()=>{vivo=false}
+  },[items,soloReenvio])
 
   useEffect(()=>{
     fetch('/api/kommo/proveedores').then(r=>r.json()).then(lista=>{
@@ -42,6 +74,7 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
     const tel=telefono.trim().replace(/\D/g,'')
     if(!tel||tel.length<8){setMsg('Ingresa un numero valido. Ej: 50688887777');return}
     if(!proveedor||!String(proveedor).trim()){setMsg('Falta el nombre del proveedor — cerrá este modal y volvé a abrirlo desde la fila correcta.');return}
+    if(!soloReenvio&&duplicados.length>0&&!confirmoDup){setMsg('Hay productos que ya están pedidos y sin llegar. Marcá la casilla si querés pedirlos igual.');return}
     setEnviando(true); setMsg(null); setNeoOk(null); setWaLink(null)
     // iOS/Safari (iPad) solo permite abrir WhatsApp si la ventana se reserva en el
     // mismo gesto del toque, ANTES de los await. Si no, el popup queda bloqueado.
@@ -122,6 +155,38 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
         <div style={S.sub}>{proveedor?<>Proveedor: <strong style={{color:GOLD}}>{proveedor}</strong> &nbsp;&middot;&nbsp; </>:''}{items.length} producto(s)</div>
         <label style={S.label}>Productos incluidos</label>
         <div style={S.itemList}>{items.map((i,idx)=><div key={idx} style={{padding:'2px 0',borderBottom:idx<items.length-1?`1px solid ${BORDER}`:'none'}}>{i.nombre||i.codigo} <span style={{color:GOLD,fontWeight:600}}>&times; {i.cantidad}</span></div>)}</div>
+
+        {chequeandoDup&&<div style={{marginTop:12,fontSize:'0.78rem',color:MUTED}}>Revisando si algo de esto ya está pedido...</div>}
+
+        {!chequeandoDup&&duplicados.length>0&&(
+          <div style={{marginTop:14,background:'#FFF5F5',border:'2px solid #FC8181',borderRadius:10,padding:'12px 14px'}}>
+            <div style={{fontWeight:700,color:'#C53030',fontSize:'0.88rem',marginBottom:8}}>
+              ⚠️ {duplicados.length} producto(s) ya están pedidos y sin llegar
+            </div>
+            <div style={{maxHeight:150,overflowY:'auto'}}>
+              {duplicados.map((d,idx)=>(
+                <div key={idx} style={{padding:'6px 0',borderTop:idx>0?'1px solid #FEB2B2':'none'}}>
+                  <div style={{fontSize:'0.8rem',fontWeight:600,color:'#742A2A'}}>{d.nombre}</div>
+                  <div style={{fontSize:'0.74rem',color:'#9B2C2C',marginTop:2}}>
+                    Ya pedidas y sin llegar: <strong>{d.yaPedido} u.</strong> · ahora estás pidiendo <strong>{d.cantidadNueva} u.</strong> más
+                  </div>
+                  {d.abiertas.map((o,j)=>(
+                    <div key={j} style={{fontSize:'0.71rem',color:'#B83280',marginTop:2}}>
+                      • {o.pendiente} u. {o.fecha?`del ${String(o.fecha).slice(0,10)}`:''}{o.dias!=null?` (hace ${o.dias} día${o.dias===1?'':'s'})`:''}{o.lote?` · ${o.lote}`:''}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <label style={{display:'flex',alignItems:'center',gap:8,marginTop:10,fontSize:'0.79rem',color:'#742A2A',cursor:'pointer',fontWeight:600}}>
+              <input type="checkbox" checked={confirmoDup} onChange={e=>setConfirmoDup(e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
+              Lo revisé y quiero pedirlo igual
+            </label>
+            <div style={{fontSize:'0.71rem',color:'#9B2C2C',marginTop:6}}>
+              Si ya llegó, marcalo como recibido en Trazabilidad antes de volver a pedirlo.
+            </div>
+          </div>
+        )}
         <div style={{marginTop:16}}>
           <label style={S.label}>Numero WhatsApp del proveedor {guardado&&<span style={{background:'#25D36622',color:'#25D366',border:'1px solid #25D36644',borderRadius:20,padding:'2px 8px',fontSize:'0.7rem',fontWeight:600,marginLeft:8}}>Guardado</span>}</label>
           <input style={S.input} type="tel" placeholder="50688887777 (codigo pais + numero)" value={cargando?'Cargando...':telefono} onChange={e=>setTelefono(e.target.value)} disabled={cargando||enviando} autoFocus/>
@@ -137,7 +202,14 @@ export default function ModalEnviarWhatsApp({proveedor,items,onClose,onEnviado,s
         </div>}
         <div style={S.btnRow}>
           <button style={S.btnSecondary} onClick={onClose} disabled={enviando}>Cancelar</button>
-          <button style={enviando?S.btnPrimaryDisabled:S.btnPrimary} onClick={enviar} disabled={enviando||cargando}>{enviando?'Enviando...':'Abrir WhatsApp'}</button>
+          {(() => {
+            const bloqueado = enviando || cargando || chequeandoDup || (duplicados.length > 0 && !confirmoDup)
+            return (
+              <button style={bloqueado?S.btnPrimaryDisabled:S.btnPrimary} onClick={enviar} disabled={bloqueado}>
+                {enviando?'Enviando...':chequeandoDup?'Revisando...':duplicados.length>0&&!confirmoDup?'Confirmá arriba para enviar':'Abrir WhatsApp'}
+              </button>
+            )
+          })()}
         </div>
       </div>
     </div>

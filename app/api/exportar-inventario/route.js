@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
-import { calcularTransito } from '../../../lib/transito.js';
+import { calcularTransito, normCodigo } from '../../../lib/transito.js';
 
 let _sb;
 function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _sb; }
@@ -16,7 +16,7 @@ function calcularAlertas(items, transitoMap, dias) {
   return items.map(item => {
     const existencias = parseFloat(item.existencias || 0) || 0;
     const promMensual = parseFloat(item.promedio_mensual || 0) || 0;
-    const codigo      = (item.codigo || '').toString().trim();
+    const codigo      = normCodigo(item.codigo);
     const transito    = transitoMap[codigo] || 0;
     const sugerencia  = (promMensual / 30) * dias;
     const aBruto      = Math.max(sugerencia - existencias, 0);
@@ -47,7 +47,7 @@ export async function POST(request) {
     const { dias = 36 } = await request.json().catch(() => ({}));
 
     // 1. Cargar datos
-    const { data: fd } = await supabase
+    const { data: fd } = await getDb()
       .from('neo_minimos_maximos').select('fecha_carga')
       .order('fecha_carga', { ascending: false }).limit(1);
     if (!fd?.length) return NextResponse.json({ error: 'Sin datos' }, { status: 400 });
