@@ -36,7 +36,9 @@ export async function POST(req) {
         if(!chunk?.length) break; listaRows=listaRows.concat(chunk); if(chunk.length<1000) break; off+=1000
       }
     }
-    // Promedio mensual real (últimos 6m) para items sin min/max
+    // Promedio mensual real (últimos 6m) para items sin min/max.
+    // Sin p_force: la base ignora el rebuild si ya se hizo hace menos de 15 min
+    // (throttle anti Disk IO, ver supabase/migrations/20260819_...sql).
     try { await supabase().rpc('refresh_mv_consumo_mensual') } catch(_) {}
     const consumoByCod={}
     {

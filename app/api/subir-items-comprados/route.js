@@ -157,7 +157,10 @@ export async function POST(request) {
       match = { error: e.message };
     }
 
-    // Refrescar las vistas derivadas DESPUÉS de responder. Son muy pesadas
+    // Refrescar las vistas derivadas DESPUÉS de responder. Van sin p_force:
+    // el throttle de la base descarta el rebuild si la vista ya se reconstruyó
+    // hace poco (ver supabase/migrations/20260819_disk_io_throttle_refresh.sql).
+    // Son muy pesadas
     // (refresh_mv_items_por_vend_mes sola tarda ~150s); si bloquean la respuesta
     // el browser queda esperando minutos y la subida parece fallar. Con after()
     // la respuesta sale apenas termina el match (lo crítico para Trazabilidad) y
