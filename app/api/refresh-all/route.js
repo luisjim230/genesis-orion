@@ -18,6 +18,14 @@ function sb() {
 // diario. Cada RPC se ejecuta en paralelo y los errores se reportan por
 // separado sin abortar al resto: la idea es que un solo botón sincronice
 // inventario, consumo, ventas e indicadores BI en un único click.
+//
+// Va con p_force: true. Los RPC ahora traen un throttle propio (ver
+// supabase/migrations/20260819_disk_io_throttle_refresh.sql) que ignora las
+// llamadas repetidas — necesario porque reconstruir estas vistas barre las
+// 786k filas de neo_items_facturados y era el grueso del Disk IO de Supabase.
+// Acá el usuario pidió el recálculo explícitamente, así que se saltea el
+// throttle. El force solo lo acepta la base si viene con service key (este
+// route corre en el servidor); desde el navegador se ignora.
 const TAREAS = [
   { nombre: 'profecias_panel', rpc: 'refresh_profecias_panel' },
   { nombre: 'mv_consumo_mensual', rpc: 'refresh_mv_consumo_mensual' },
@@ -28,7 +36,7 @@ const TAREAS = [
 async function correrTarea(t) {
   const t0 = Date.now();
   try {
-    const { data, error } = await sb().rpc(t.rpc);
+    const { data, error } = await sb().rpc(t.rpc, { p_force: true });
     if (error) return { ...t, ok: false, ms: Date.now() - t0, error: error.message };
     return { ...t, ok: true, ms: Date.now() - t0, resultado: data ?? null };
   } catch (e) {

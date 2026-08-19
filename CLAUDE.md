@@ -83,6 +83,21 @@
 - `app/admin/page.js` solo mantiene `LABEL_OVERRIDE` (nombres amigables) y `MODULOS_EXTRA`
   (módulos con permiso propio que no están en el nav, ej. `rotacion`, `vendedores`).
 
+### Disk IO de Supabase (regla permanente)
+
+- **Nunca refrescar una vista materializada desde un click o una carga de página.**
+  `refresh_mv_items_por_vend_mes`, `refresh_profecias_panel`, `bi_recalcular_resumen`,
+  `refresh_mv_consumo_mensual` y `refresh_hermes_panel` reconstruyen la vista entera
+  barriendo las 786k filas de `neo_items_facturados`. Ya tienen throttle en la base
+  (`_mv_debe_refrescar`), y `p_force` solo lo acepta Postgres si la llamada viene con
+  service key — desde el navegador se ignora.
+- **Nunca traer una tabla grande entera al navegador.** Filtrar en la base por
+  `fecha_real` (date, indexada), nunca por `fecha` (texto). Paginar con keyset
+  (`order('id')` + `gt('id', ultimoId)`), no con `range()` de offset grande.
+- **Tabla nueva = índice por su clave de consulta** (ej. `cliente`, o `(cliente, fecha)`).
+- Diagnóstico completo, evidencia y consultas listas para pegar:
+  `docs/disk-io-supabase.md`.
+
 ### Rama de trabajo actual
 
 `main` (los PRs de feature se mergean directo).

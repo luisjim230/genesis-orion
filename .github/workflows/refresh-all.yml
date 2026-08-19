@@ -34,6 +34,12 @@ jobs:
           # reintentar unos segundos después suele pasar. Solo se cuenta como
           # falla real (y dispara alerta de Telegram) si sigue fallando tras
           # agotar los reintentos.
+          # p_force=true: los RPC traen un throttle interno (ver
+          # supabase/migrations/20260819_disk_io_throttle_refresh.sql) que
+          # descarta las llamadas repetidas del UI para no quemar Disk IO. Esta
+          # corrida diaria es justamente la que SÍ tiene que reconstruir todo,
+          # así que se saltea el throttle. La base solo acepta el force cuando
+          # viene con service key, como acá.
           refrescar() {
             local rpc=$1
             local intentos=4 espera=15 i=1 response body status
@@ -44,7 +50,7 @@ jobs:
                 -H "apikey: $AUTH" \
                 -H "Authorization: Bearer $AUTH" \
                 -H "Content-Type: application/json" \
-                -d '{}') || true
+                -d '{"p_force": true}') || true
               body=$(echo "$response" | head -n -1)
               status=$(echo "$response" | tail -n 1)
               echo "  HTTP $status  $body"

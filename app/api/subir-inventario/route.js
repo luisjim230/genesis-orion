@@ -110,6 +110,11 @@ export async function POST(request) {
 
     // Refrescar todas las vistas derivadas: sin esto los módulos siguen
     // mostrando datos viejos hasta el cron diario.
+    // Van SIN p_force a propósito: el throttle de la base (ver
+    // supabase/migrations/20260819_disk_io_throttle_refresh.sql) descarta el
+    // rebuild si la vista ya se reconstruyó hace poco. Subir inventario dos
+    // veces seguidas no puede volver a barrer las 786k filas de
+    // neo_items_facturados: eso es lo que estaba agotando el Disk IO Budget.
     let refreshOk = false;
     let refreshDetalle = null;
     try {

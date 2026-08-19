@@ -266,7 +266,11 @@ export default function Inventario() {
 
     // ── 3. Cargar promedio mensual de ventas (últimos 6 meses) ──
     // Cubre items sin min/max para los que NEO no tiene promedio_mensual calculado.
-    try { await supabase.rpc('refresh_mv_consumo_mensual'); } catch(_) {}
+    // NO se refresca la vista acá: mv_consumo_mensual se reconstruye barriendo
+    // neo_items_facturados entera, y hacerlo en cada carga de esta página era
+    // uno de los que se comía el Disk IO Budget de Supabase. La refresca el
+    // cron diario (workflow refresh-all) y la subida de inventario, que son los
+    // dos momentos en que el dato realmente cambia.
     const consumoByCod = {};
     {
       let offset = 0;
