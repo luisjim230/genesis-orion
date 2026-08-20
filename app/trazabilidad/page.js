@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { DIAS_LIMITE_OC } from '../../lib/transito'
 import ModalEnviarWhatsApp from '../components/ModalEnviarWhatsApp'
 import SyncBadge from '../components/SyncBadge';
 
@@ -58,8 +59,10 @@ function badgeDias(d, limA, limR) {
 
 // ─── TAB 1: ALERTAS ──────────────────────────────────────────────────────────
 function TabAlertas({ ordenes, items, setItems, loading }) {
-  const [limA, setLimA] = useState(5)
-  const [limR, setLimR] = useState(10)
+  // El semáforo vive dentro de la ventana de DIAS_LIMITE_OC días: pasado eso el
+  // ítem se da por perdido y ya no aparece acá.
+  const [limA, setLimA] = useState(3)
+  const [limR, setLimR] = useState(7)
   const [filtroProv, setFiltroProv] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Todos')
   const [busqueda, setBusqueda] = useState('')
@@ -142,6 +145,10 @@ function TabAlertas({ ordenes, items, setItems, loading }) {
     <div>
       <p style={{ fontSize: '0.84em', color: MUTED, marginBottom: 16 }}>
         Productos ordenados que aún no han llegado completamente. El semáforo indica urgencia según los días desde la orden.
+        <br />
+        A los <strong style={{ color: TEXT }}>{DIAS_LIMITE_OC} días</strong> sin llegar, el ítem se da por perdido automáticamente:
+        sale de esta lista, deja de contar como tránsito y el producto vuelve a quedar disponible para pedir.
+        La orden queda en el historial.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
         {[
@@ -762,6 +769,18 @@ export default function TrazabilidadPage() {
 
   async function cargar() {
     setLoading(true)
+    // Primero el servidor da por perdidas las OC de más de DIAS_LIMITE_OC días
+    // (corre con service key, así que no lo frena RLS) y recién después se carga
+    // la pantalla, para que no aparezca en tránsito algo ya dado por perdido.
+    try {
+      const r = await fetch('/api/auto-cancelar-oc', { method: 'POST' })
+      const d = await r.json()
+      setAvisoAutoCancel(
+        d?.cancelados > 0
+          ? `${d.cancelados} ítem(s) (${d.unidades} u.) se dieron por perdidos al cumplir ${DIAS_LIMITE_OC} días sin llegar. Ya volvieron a estar disponibles para pedir.`
+          : null,
+      )
+    } catch (e) { console.error('auto-cancelar-oc:', e) }
     // Todas las consultas van paginadas: `.select()` sin range corta en 1000
     // filas sin avisar y las órdenes más nuevas quedaban afuera (por eso
     // "faltaban" pendientes en este módulo).
@@ -772,27 +791,18 @@ export default function TrazabilidadPage() {
       supabase.from('cola_neo_uploads').select('proveedor_nombre,pdf_url,numero_sol').not('pdf_url','is',null).then(r => r.data || []),
     ])
     ords.sort((a, b) => String(b.fecha_orden || '').localeCompare(String(a.fecha_orden || '')))
-    // Auto-cancelar ítems pendientes con más de 18 días
-    const DIAS_LIMITE = 18
+    // La auto-cancelación a los DIAS_LIMITE_OC días la hace el servidor (ver
+    // autoCancelarVencidas en app/lib/procesar-match.js). Acá solo se filtra lo
+    // que quedó viejo entre esa corrida y esta carga, para no mostrar en
+    // tránsito algo que ya se dio por perdido.
     const ahora = new Date()
     const ordMap = {}; ords.forEach(o => { ordMap[o.id] = o })
     const vencidos = itsPend.filter(it => {
       const orden = ordMap[it.orden_id]
       if (!orden?.fecha_orden) return false
       const dias = Math.floor((ahora - new Date(orden.fecha_orden)) / 86400000)
-      return dias > DIAS_LIMITE
+      return dias >= DIAS_LIMITE_OC
     })
-    if (vencidos.length > 0) {
-      const ids = vencidos.map(v => v.id)
-      // La cancelación automática antes era invisible: la OC desaparecía de la
-      // pantalla sin que nadie se enterara y el ítem se volvía a pedir.
-      for (let i = 0; i < ids.length; i += 200) {
-        await supabase.from('ordenes_compra_items').update({ estado_item: 'cancelado' }).in('id', ids.slice(i, i + 200))
-      }
-      setAvisoAutoCancel(`${vencidos.length} ítem(s) se auto-cancelaron por superar ${DIAS_LIMITE} días sin llegar. Si el proveedor todavía los debe, hay que volver a pedirlos.`)
-    } else {
-      setAvisoAutoCancel(null)
-    }
     // OJO: acá NO se deduplica por lote+código. La deduplicación anterior
     // escondía órdenes distintas del mismo proveedor y el mismo día (mismo
     // nombre_lote), que es justo el caso que hay que ver para no re-pedir.
