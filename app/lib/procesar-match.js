@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { DIAS_LIMITE_OC } from '../../lib/transito.js'
 
 let _sb
 function getDb() {
@@ -55,6 +56,53 @@ async function traerTodo(tabla, columnas, filtro) {
   return filas
 }
 
+// Da por perdida toda OC pendiente/parcial con más de DIAS_LIMITE_OC días: el
+// ítem pasa a 'cancelado', sale de Trazabilidad, deja de contar como tránsito y
+// el producto vuelve a quedar libre para pedir. La orden queda en el historial.
+//
+// Corre con la service key desde el servidor (no depende de que alguien abra la
+// pantalla de Trazabilidad) y se dispara en cada corrida del match, o sea en
+// cada carga de Inventario, Sugerencias y Trazabilidad.
+export async function autoCancelarVencidas(fechaOrdenMap) {
+  let mapa = fechaOrdenMap
+  if (!mapa) {
+    mapa = {}
+    const ordenes = await traerTodo('ordenes_compra', 'id, fecha_orden')
+    for (const o of (ordenes || [])) if (o.id && o.fecha_orden) mapa[o.id] = o.fecha_orden
+  }
+
+  const abiertos = await traerTodo(
+    'ordenes_compra_items',
+    'id, orden_id, codigo, cantidad_ordenada, cantidad_recibida',
+    q => q.in('estado_item', ['pendiente', 'parcial']),
+  )
+
+  const ahora = Date.now()
+  const vencidos = []
+  for (const item of (abiertos || [])) {
+    const fechaOrden = parseFecha(mapa[item.orden_id])
+    if (!fechaOrden) continue
+    const dias = Math.floor((ahora - fechaOrden.getTime()) / 86400000)
+    if (dias >= DIAS_LIMITE_OC) vencidos.push(item)
+  }
+  if (!vencidos.length) return { cancelados: 0, unidades: 0 }
+
+  const ids = vencidos.map(v => v.id)
+  for (let i = 0; i < ids.length; i += 100) {
+    const { error } = await getDb()
+      .from('ordenes_compra_items')
+      .update({ estado_item: 'cancelado' })
+      .in('id', ids.slice(i, i + 100))
+    if (error) throw new Error(`autoCancelarVencidas falló: ${error.message}`)
+  }
+
+  const unidades = vencidos.reduce(
+    (s, v) => s + Math.max((parseFloat(v.cantidad_ordenada) || 0) - (parseFloat(v.cantidad_recibida) || 0), 0),
+    0,
+  )
+  return { cancelados: vencidos.length, unidades }
+}
+
 export async function ejecutarMatch() {
   // Cargar fechas de órdenes por separado (no depender de joins FK).
   // Paginado: hay >1000 órdenes y sin esto las más nuevas se perdían.
@@ -93,6 +141,11 @@ export async function ejecutarMatch() {
       await getDb().from('ordenes_compra_items').upsert(aRevertir, { onConflict: 'id' })
   }
 
+  // 1b. Dar por perdidas las OC de más de DIAS_LIMITE_OC días. Va después del
+  // revert para que un ítem que acaba de volver a 'pendiente' y ya es viejo se
+  // cancele en la misma corrida.
+  const autoCancel = await autoCancelarVencidas(fechaOrdenMap)
+
   // 2. Traer TODAS las compras históricas de NEO
   const PAGE_SIZE = 1000
   let todos = [], offset = 0
@@ -105,7 +158,7 @@ export async function ejecutarMatch() {
     if (data.length < PAGE_SIZE) break
     offset += PAGE_SIZE
   }
-  if (todos.length === 0) return { ok: false, error: 'Sin datos en neo_items_comprados' }
+  if (todos.length === 0) return { ok: false, error: 'Sin datos en neo_items_comprados', auto_cancelados: autoCancel.cancelados, auto_cancelados_unidades: autoCancel.unidades }
 
   // 3. Ítems pendientes/parciales (paginado por si algún día superan las 1000)
   const itemsPend = await traerTodo(
@@ -120,16 +173,17 @@ export async function ejecutarMatch() {
   // esa OC ya no estaba en la lista de pendientes— las mismas 30 unidades se
   // le acreditaban a la OC siguiente. Resultado: órdenes marcadas "completo"
   // sin que llegara nada, que desaparecían de tránsito y se volvían a pedir.
-  // Solo 'completo': los 'parcial' siguen en la lista de pendientes y vuelven a
-  // matchear su propia mercadería en esta misma corrida — reservarla acá los
+  // Se reservan 'completo' y 'cancelado' (este último puede traer recepción
+  // parcial real). Los 'parcial' NO: siguen en la lista de pendientes y vuelven
+  // a matchear su propia mercadería en esta misma corrida — reservarla acá los
   // dejaría trabados sin poder completarse nunca.
   const itemsAcreditados = await traerTodo(
     'ordenes_compra_items',
     'id, codigo, cantidad_recibida, fecha_recepcion, estado_item',
-    q => q.eq('estado_item', 'completo'),
+    q => q.in('estado_item', ['completo', 'cancelado']),
   )
 
-  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos, reservados: 0 }
+  const res = { ok: true, completados: 0, parciales: 0, sin_match: 0, ignorados_por_fecha: 0, revertidos, reservados: 0, auto_cancelados: autoCancel.cancelados, auto_cancelados_unidades: autoCancel.unidades }
   if (!itemsPend || itemsPend.length === 0) return res
 
   // 4. Agrupar compras por código (clave normalizada: NEO devuelve el mismo
