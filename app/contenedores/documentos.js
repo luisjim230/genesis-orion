@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { S, usd } from './estilos';
 import Diferencias from './diferencias';
+import ZonaSubida from './zona-subida';
 
 // Subida masiva: Luis tira todas las proformas juntas y el sistema propone a
 // qué contenedor pertenece cada una (comparando adelanto, saldo y total contra
@@ -15,7 +16,7 @@ export default function Documentos({ envios, onCambio }) {
   const [msg, setMsg]               = useState(null);
   const [diffs, setDiffs]           = useState({});   // doc_id → diferencias
   const [destino, setDestino]       = useState({});   // doc_id → envio_id elegido a mano
-  const fileRef = useRef(null);
+  const [releyendo, setReleyendo]   = useState(null);
 
   const cargar = useCallback(async () => {
     const { data } = await supabase.from('neptuno_docs')
@@ -48,16 +49,17 @@ export default function Documentos({ envios, onCambio }) {
       await cargar();
     }
     setProgreso(null);
-    const mal = todos.filter(x => x.estado === 'error');
-    const dup = todos.filter(x => x.estado === 'duplicado');
-    const ok  = todos.filter(x => x.estado === 'procesado');
+    const mal   = todos.filter(x => x.estado === 'error');
+    const crudo = todos.filter(x => x.estado === 'sin_leer');
+    const dup   = todos.filter(x => x.estado === 'duplicado');
+    const ok    = todos.filter(x => x.estado === 'procesado');
     const partes = [];
-    if (ok.length)  partes.push(`${ok.length} archivo(s) leído(s)`);
-    if (dup.length) partes.push(`${dup.length} ya estaba(n)`);
-    if (mal.length) partes.push(`con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
-    aviso(partes.join(' · '), mal.length ? 'warn' : 'ok');
+    if (ok.length)    partes.push(`${ok.length} archivo(s) leído(s)`);
+    if (dup.length)   partes.push(`${dup.length} ya estaba(n)`);
+    if (crudo.length) partes.push(`${crudo.length} se guardó pero no se pudo leer: ${crudo.map(x=>x.motivo).join(' · ')}`);
+    if (mal.length)   partes.push(`con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
+    aviso(partes.join(' · '), (mal.length || crudo.length) ? 'warn' : 'ok');
     setSubiendo(false);
-    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function asignar(docId, envioId) {
@@ -74,6 +76,16 @@ export default function Documentos({ envios, onCambio }) {
     onCambio?.();
   }
 
+  async function releer(docId) {
+    setReleyendo(docId);
+    const r = await fetch(`/api/contenedores/docs/${docId}/releer`, { method:'POST' });
+    const j = await r.json();
+    setReleyendo(null);
+    if (!r.ok) { aviso(j.error || 'No se pudo leer.', 'err'); return; }
+    aviso('Archivo leído: ' + j.items + ' línea(s) de mercadería.');
+    await cargar();
+  }
+
   async function borrar(docId) {
     if (!confirm('¿Borrar este archivo?')) return;
     await fetch(`/api/contenedores/docs/${docId}`, { method:'DELETE' });
@@ -85,16 +97,9 @@ export default function Documentos({ envios, onCambio }) {
     <div>
       <div style={{ ...S.card, marginBottom:'16px' }}>
         <div style={S.seccion}>📤 Subir documentos de varias órdenes juntas</div>
-        <input ref={fileRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv"
-               onChange={e=>subir([...e.target.files])} style={{ display:'none' }}/>
-        <div style={{ display:'flex', gap:'12px', alignItems:'center', flexWrap:'wrap' }}>
-          <button style={S.btn()} disabled={subiendo} onClick={()=>fileRef.current?.click()}>
-            {subiendo ? (progreso || '⏳ Leyendo los archivos...') : '📎 Elegir archivos'}
-          </button>
-          <span style={{ fontSize:'0.8em', color:'var(--text-muted)' }}>
-            Proformas, facturas o contratos en PDF o Excel. Se leen solos y el sistema te dice a qué contenedor cree que van.
-          </span>
-        </div>
+        <ZonaSubida onArchivos={subir} subiendo={subiendo} progreso={progreso}
+                    titulo="Arrastrá acá las proformas y facturas"
+                    ayuda="O hacé click para elegirlas. Se leen solas y el sistema te dice a qué contenedor cree que van."/>
         {msg && <div style={{ ...S.aviso(msg.tipo), marginTop:'12px', marginBottom:0 }}>{msg.txt}</div>}
       </div>
 
@@ -124,10 +129,18 @@ export default function Documentos({ envios, onCambio }) {
                     ex.saldo_monto && 'Saldo ' + usd(ex.saldo_monto)].filter(Boolean).join(' · ')}
                 </div>
                 {ex.resumen && <div style={{ fontSize:'0.82em', marginTop:'8px', lineHeight:1.5 }}>{ex.resumen}</div>}
+                {d.estado !== 'procesado' && (
+                  <div style={{ ...S.aviso('warn'), marginTop:'8px', marginBottom:0 }}>
+                    Este archivo está guardado pero todavía no se pudo leer.{d.error ? ' ' + d.error : ''} Cuando se arregle, apretá <strong>Leer de nuevo</strong>.
+                  </div>
+                )}
               </div>
               <div style={{ display:'flex', gap:'6px', alignItems:'flex-start' }}>
                 <a href={`/api/contenedores/docs/${d.id}/archivo`} target="_blank" rel="noreferrer"
                    style={{ ...S.btnSm(), textDecoration:'none' }}>👁️ Ver</a>
+                <button style={S.btnSm()} disabled={releyendo === d.id} onClick={()=>releer(d.id)}>
+                  {releyendo === d.id ? '⏳ Leyendo...' : '🔄 Leer de nuevo'}
+                </button>
                 <button style={S.btnSm('#fff5f5')} onClick={()=>borrar(d.id)}>🗑️</button>
               </div>
             </div>

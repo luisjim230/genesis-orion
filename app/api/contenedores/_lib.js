@@ -122,7 +122,7 @@ const ESQUEMA = `{
 export async function extraerDoc({ file, buffer }) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    throw new HttpError(400, 'Falta ANTHROPIC_API_KEY en Vercel: sin eso no se pueden leer los archivos.')
+    throw new HttpError(400, 'Todavía no está cargada la clave de lectura de documentos (ANTHROPIC_API_KEY en Vercel). El archivo queda guardado: cuando la carguen, apretá "Leer de nuevo".')
   }
 
   const partidas = await partidasTLC()
@@ -407,4 +407,61 @@ export async function recalcularEstimado(envioId) {
     .update({ impuestos_estimado: est.total, impuestos_detalle: est.detalle })
     .eq('id', envioId)
   return est
+}
+
+// ── Lectura (y relectura) de un documento ya guardado ───────────────────────
+// El archivo se sube SIEMPRE, se lea o no. Si la lectura falla (falta la clave,
+// el PDF es una foto borrosa, lo que sea), el documento queda con estado
+// 'error' y se puede reintentar después sin volver a subirlo.
+export async function leerDocumento(doc, { file, buffer } = {}) {
+  const db = getDb()
+
+  let bin = buffer
+  if (!bin) {
+    const { data: blob, error } = await db.storage.from(BUCKET).download(doc.storage_path)
+    if (error || !blob) throw new HttpError(404, 'El archivo ya no está en el storage.')
+    bin = Buffer.from(await blob.arrayBuffer())
+  }
+  const archivo = file || { name: doc.nombre, type: doc.mime_type || '' }
+
+  let extraido = null
+  let error = null
+  try {
+    extraido = await extraerDoc({ file: archivo, buffer: bin })
+  } catch (e) {
+    error = e instanceof HttpError ? e.message : String(e?.message || e)
+  }
+
+  // Candidatos de envío solo si todavía no está asignado.
+  let candidatos = []
+  if (extraido && !doc.envio_id) {
+    const { data: activos } = await db.from('neptuno_envios')
+      .select('id, nombre, proveedor, eta, pi_num, adelanto_monto, final_monto')
+      .eq('archivado', false)
+    candidatos = matchEnvios(extraido, activos || [])
+  }
+
+  const { data: actualizado } = await db.from('neptuno_docs').update({
+    tipo_doc: extraido?.tipo_doc || doc.tipo_doc || 'otro',
+    estado: extraido ? 'procesado' : 'error',
+    error,
+    extraido: extraido ?? doc.extraido ?? null,
+    match_sugerido: candidatos.length ? { candidatos } : null,
+  }).eq('id', doc.id).select('*').single()
+
+  // Las líneas que salieron de este documento se rehacen, salvo las que Luis
+  // corrigió a mano: esas mandan y no se tocan.
+  let items = []
+  if (extraido) {
+    await db.from('neptuno_items').delete().eq('doc_id', doc.id).eq('editado', false)
+    items = await armarItems(extraido)
+    if (items.length) {
+      await db.from('neptuno_items').insert(
+        items.map((it) => ({ ...it, doc_id: doc.id, envio_id: doc.envio_id || null }))
+      )
+    }
+    if (doc.envio_id) await recalcularEstimado(doc.envio_id)
+  }
+
+  return { doc: actualizado || doc, extraido, error, candidatos, items }
 }
