@@ -30,8 +30,11 @@ export async function middleware(req) {
   // path como slug: hay que exceptuar /club para que go.depositojimenezcr.com/club
   // sirva la página del club en vez de buscarla como link corto.
   const clubPath = req.nextUrl.pathname === '/club' || req.nextUrl.pathname.startsWith('/club/');
+  // La Gran Rifa de Motos (/rifa o /rifa/*) es también una página PÚBLICA, con el
+  // mismo tratamiento que el Club: sin sesión y sin el chrome de SOL.
+  const rifaPath = req.nextUrl.pathname === '/rifa' || req.nextUrl.pathname.startsWith('/rifa/');
 
-  if (host === SHORTENER_HOST && !clubPath) {
+  if (host === SHORTENER_HOST && !clubPath && !rifaPath) {
     const pathname = req.nextUrl.pathname;
 
     // Path raíz → e-commerce.
@@ -111,7 +114,7 @@ export async function middleware(req) {
   // OJO: /club es coincidencia EXACTA (clubPath) — el panel admin (/club-admin)
   // NO entra acá y queda protegido por el guard de abajo.
   // ────────────────────────────────────────────────────────────────────────
-  if (host === CLUB_HOST || clubPath) {
+  if (host === CLUB_HOST || clubPath || rifaPath) {
     const h = new Headers(req.headers);
     h.set('x-club-public', '1');
     if (host === CLUB_HOST && (pathname === '/' || pathname === '')) {

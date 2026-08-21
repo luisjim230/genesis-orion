@@ -16,6 +16,7 @@ export const ALL_NAV = [
     { href: '/comercial',                          key: 'comercial',              icon: '💼', name: 'Ventas · Equipo' },
     { href: '/comercial/seguimiento-proformas',    key: 'seguimiento-proformas',  icon: '📋', name: 'Seguimiento de Proformas' },
     { href: '/club-admin',                         key: 'club-admin',             icon: '🧱', name: 'Club del Enchapador' },
+    { href: '/rifa-admin',                         key: 'rifa-admin',             icon: '🏍️', name: 'Rifa de Motos' },
   ]},
   { group: 'Importaciones', items: [
     { href: '/cif',               key: 'cif',                   icon: '🧮', name: 'Calculadora CIF' },
