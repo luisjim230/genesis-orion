@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { S, usd, usd2, numFmt } from './estilos';
 import Diferencias from './diferencias';
+import ZonaSubida from './zona-subida';
 
 // Expediente de UN envío: los archivos de la orden (proforma, factura,
 // contrato), la mercadería que trae y el estimado de impuestos.
@@ -26,7 +27,7 @@ export default function Expediente({ envio, onEnvioActualizado }) {
   const [msg, setMsg]           = useState(null);
   const [abierto, setAbierto]   = useState(null);   // { doc, diferencias }
   const [impuesto, setImpuesto] = useState('');
-  const fileRef   = useRef(null);
+  const [releyendo, setReleyendo] = useState(null);
   const sucios    = useRef(new Set());   // líneas tocadas y todavía sin guardar
   const itemsRef  = useRef([]);
   itemsRef.current = items;
@@ -67,20 +68,21 @@ export default function Expediente({ envio, onEnvioActualizado }) {
       }
     }
     setProgreso(null);
-    const oks  = todos.filter(x => x.estado === 'procesado');
-    const mal  = todos.filter(x => x.estado === 'error');
-    const dups = todos.filter(x => x.estado === 'duplicado');
+    const oks   = todos.filter(x => x.estado === 'procesado');
+    const crudo = todos.filter(x => x.estado === 'sin_leer');
+    const mal   = todos.filter(x => x.estado === 'error');
+    const dups  = todos.filter(x => x.estado === 'duplicado');
     const partes = [];
-    if (oks.length)  partes.push(`${oks.length} archivo(s) leído(s)`);
-    if (dups.length) partes.push(`${dups.length} ya estaba(n) subido(s)`);
-    if (mal.length)  partes.push(`${mal.length} con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
-    aviso(partes.join(' · '), mal.length ? 'warn' : 'ok');
+    if (oks.length)   partes.push(`${oks.length} archivo(s) leído(s)`);
+    if (dups.length)  partes.push(`${dups.length} ya estaba(n) subido(s)`);
+    if (crudo.length) partes.push(`${crudo.length} se guardó pero no se pudo leer: ${crudo.map(x=>x.motivo).join(' · ')}`);
+    if (mal.length)   partes.push(`${mal.length} con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
+    aviso(partes.join(' · '), (mal.length || crudo.length) ? 'warn' : 'ok');
     await cargar();
     onEnvioActualizado?.();
     // Se abre solo el comparativo del primero que se leyó bien.
     if (oks.length) abrirComparativo(oks[0].doc_id);
     setSubiendo(false);
-    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function abrirComparativo(docId) {
@@ -89,6 +91,18 @@ export default function Expediente({ envio, onEnvioActualizado }) {
     const j = await r.json();
     if (!r.ok) { aviso(j.error || 'No se pudo abrir el documento.', 'err'); return; }
     setAbierto({ doc: j.doc, diferencias: j.diferencias });
+  }
+
+  async function releerDoc(docId) {
+    setReleyendo(docId);
+    const r = await fetch(`/api/contenedores/docs/${docId}/releer`, { method:'POST' });
+    const j = await r.json();
+    setReleyendo(null);
+    if (!r.ok) { aviso(j.error || 'No se pudo leer el archivo.', 'err'); return; }
+    aviso('Archivo leído: ' + j.items + ' línea(s) de mercadería.');
+    setAbierto({ doc: j.doc, diferencias: j.diferencias });
+    await cargar();
+    onEnvioActualizado?.();
   }
 
   async function borrarDoc(docId) {
@@ -182,15 +196,10 @@ export default function Expediente({ envio, onEnvioActualizado }) {
       {/* ── Archivos ─────────────────────────────────────────────────────── */}
       <div style={{ ...S.caja, marginBottom:'14px' }}>
         <div style={S.seccion}>📎 Archivos de esta orden</div>
-        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', marginBottom:'10px' }}>
-          <input ref={fileRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv"
-                 onChange={e=>subir([...e.target.files])} style={{ display:'none' }}/>
-          <button style={S.btn()} disabled={subiendo} onClick={()=>fileRef.current?.click()}>
-            {subiendo ? (progreso || '⏳ Leyendo el archivo...') : '📤 Subir proforma / factura'}
-          </button>
-          <span style={{ fontSize:'0.78em', color:'var(--text-muted)' }}>
-            PDF o Excel. Se lee solo y te muestra qué coincide con lo que ya cargaste.
-          </span>
+        <div style={{ marginBottom:'12px' }}>
+          <ZonaSubida onArchivos={subir} subiendo={subiendo} progreso={progreso}
+                      titulo="Arrastrá acá la proforma o la factura"
+                      ayuda="O hacé click para elegirla. Se lee sola y te muestra qué coincide con lo que ya cargaste."/>
         </div>
 
         {cargando ? <div style={{ fontSize:'0.82em', color:'var(--text-muted)' }}>Cargando...</div>
@@ -214,12 +223,22 @@ export default function Expediente({ envio, onEnvioActualizado }) {
                 </div>
                 <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
                   <a href={`/api/contenedores/docs/${d.id}/archivo`} target="_blank" rel="noreferrer" style={{ ...S.btnSm(), textDecoration:'none', display:'inline-block' }}>👁️ Ver</a>
-                  <button style={S.btnSm(activo ? '#fff7e6' : '#fff')} onClick={()=>abrirComparativo(d.id)}>
-                    {activo ? '✖️ Cerrar' : '🔍 Comparar'}
+                  {d.estado === 'procesado' && (
+                    <button style={S.btnSm(activo ? '#fff7e6' : '#fff')} onClick={()=>abrirComparativo(d.id)}>
+                      {activo ? '✖️ Cerrar' : '🔍 Comparar'}
+                    </button>
+                  )}
+                  <button style={S.btnSm()} disabled={releyendo === d.id} onClick={()=>releerDoc(d.id)}>
+                    {releyendo === d.id ? '⏳ Leyendo...' : '🔄 Leer de nuevo'}
                   </button>
                   <button style={S.btnSm('#fff5f5')} onClick={()=>borrarDoc(d.id)}>🗑️</button>
                 </div>
               </div>
+              {d.estado !== 'procesado' && (
+                <div style={{ ...S.aviso('warn'), marginTop:'10px', marginBottom:0 }}>
+                  Guardado, pero todavía no se pudo leer.{d.error ? ' ' + d.error : ''} Cuando se arregle, apretá <strong>Leer de nuevo</strong>.
+                </div>
+              )}
               {activo && (
                 <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid var(--border-soft)' }}>
                   <Diferencias docId={d.id} diferencias={abierto.diferencias}

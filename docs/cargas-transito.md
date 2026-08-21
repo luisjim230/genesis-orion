@@ -67,6 +67,7 @@ Se deduplican por `sha256`: el mismo archivo subido dos veces no se procesa de n
 | `PATCH /api/contenedores/docs/:id` | Asigna el documento a un contenedor |
 | `DELETE /api/contenedores/docs/:id` | Borra el archivo (deja las líneas editadas a mano) |
 | `GET /api/contenedores/docs/:id/archivo` | Sirve el archivo original |
+| `POST /api/contenedores/docs/:id/releer` | Vuelve a leer un archivo ya guardado |
 | `POST /api/contenedores/docs/:id/aplicar` | Aplica al envío solo los campos marcados |
 | `GET/POST /api/contenedores/estimar` | Calcula (y guarda) el estimado de impuestos |
 
@@ -77,6 +78,11 @@ que ya usa Contabilidad).
 
 - Cada archivo se manda en su propio request desde el browser: leer una proforma
   con IA tarda, y así ni se cae por timeout ni un archivo malo arrastra al resto.
+- **El archivo se sube siempre, se lea o no.** Si la lectura falla (falta la clave,
+  se cayó la conexión, el PDF es una foto ilegible) el documento queda con
+  `estado = 'error'` y se reintenta con **Leer de nuevo**, sin volver a subirlo.
+  Al releer se rehacen solo las líneas que no tocó Luis (`editado = false`).
+- Los archivos se sueltan arrastrándolos, con click o pegando con Ctrl/Cmd+V.
 - Las líneas sin cantidad (filas de encabezado o vacías del Excel) se descartan.
 - Si la IA no logra ubicar la partida de una línea, se asume 0% de DAI y el
   módulo muestra qué porcentaje del valor quedó con partida identificada.
