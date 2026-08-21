@@ -5,6 +5,7 @@
  * Job diario del módulo Compras a Proveedor. Llama a la función SQL
  * cp_generar_alertas() (idempotente) que detecta:
  *   - PAGO_SIN_FACTURA / PAGO_SIN_FACTURA_CRITICO
+ *   - SOLICITUD_SIN_PAGAR
  *   - COMPRA_SIN_PAGO
  *   - COTIZACION_VENCIDA
  *   - FACTURA_HUERFANA
@@ -29,6 +30,7 @@ const TIPO_LABEL = {
   PAGO_SIN_FACTURA: 'Pago sin factura',
   PAGO_SIN_FACTURA_CRITICO: 'Pago sin factura (crítico)',
   COMPRA_SIN_PAGO: 'Compra sin pago',
+  SOLICITUD_SIN_PAGAR: 'Solicitud de pago sin pagar',
   COTIZACION_VENCIDA: 'Cotización vencida',
   DISCREPANCIA_MONTO: 'Discrepancia de monto',
   FACTURA_HUERFANA: 'Factura huérfana',

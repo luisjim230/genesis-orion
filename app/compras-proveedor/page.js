@@ -45,6 +45,27 @@ function Msg({ msg }) {
 function Field({ label, children }) {
   return <div><label style={S.label}>{label}</label>{children}</div>
 }
+// ── Documentos: qué falta en cada compra ────────────────────────────────────
+// El que casi siempre queda colgando es la factura del proveedor.
+const DOC_META = {
+  venta:       { emoji: '🧍', label: 'Venta al cliente',      corto: 'venta',          color: AMBER },
+  cotizacion:  { emoji: '💬', label: 'Cotización proveedor',  corto: 'cotización',     color: AMBER },
+  comprobante: { emoji: '💸', label: 'Comprobante de pago',   corto: 'pago',           color: BLUE },
+  factura:     { emoji: '🧾', label: 'Factura del proveedor', corto: 'factura prov.',  color: RED },
+}
+const ACEPTA = 'application/pdf,image/*'
+
+function DocsPendientes({ faltantes = [] }) {
+  if (!faltantes.length) return <Badge color={GREEN}>✓ completo</Badge>
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {faltantes.map(f => (
+        <Badge key={f} color={DOC_META[f]?.color || AMBER}>falta {DOC_META[f]?.corto || f}</Badge>
+      ))}
+    </div>
+  )
+}
+
 function Modal({ children, onClose, width = 720 }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '40px 16px', overflowY: 'auto' }}>
@@ -69,8 +90,8 @@ export default function ComprasProveedorPage() {
   }
 
   const TABS = [
-    ['dashboard', '📊 Dashboard'], ['compras', '🧾 Compras'], ['proveedores', '🏭 Proveedores'],
-    ['factura', '📥 Subir factura'], ['alertas', '🔔 Alertas'], ['reportes', '📈 Reportes'],
+    ['dashboard', '📊 Dashboard'], ['compras', '🧾 Compras y pagos'], ['proveedores', '🏭 Proveedores'],
+    ['alertas', '🔔 Alertas'], ['reportes', '📈 Reportes'],
   ]
 
   return (
@@ -78,7 +99,7 @@ export default function ComprasProveedorPage() {
       <div style={{ marginBottom: 22 }}>
         <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: GOLD, display: 'block', marginBottom: 4 }}>Finanzas · SOL</span>
         <h1 style={{ fontSize: '1.7rem', fontWeight: 700, color: TEXT, letterSpacing: '-0.02em', margin: 0 }}>🧾 Control de Compras a Proveedor</h1>
-        <p style={{ fontSize: '0.82rem', color: MUTED, marginTop: 4 }}>Pago → factura: controlá el limbo documental · Depósito Jiménez</p>
+        <p style={{ fontSize: '0.82rem', color: MUTED, marginTop: 4 }}>Solicitud → pago → factura: controlá el limbo documental · Depósito Jiménez</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
@@ -90,7 +111,6 @@ export default function ComprasProveedorPage() {
       {tab === 'dashboard' && <Dashboard go={setTab} />}
       {tab === 'compras' && <ComprasTab perfil={perfil} />}
       {tab === 'proveedores' && <ProveedoresTab />}
-      {tab === 'factura' && <FacturaTab perfil={perfil} />}
       {tab === 'alertas' && <AlertasTab />}
       {tab === 'reportes' && <ReportesTab />}
     </div>
@@ -110,7 +130,7 @@ function Dashboard({ go }) {
         const [r, a, c] = await Promise.all([
           api('/reportes'),
           api('/alertas?resuelta=false'),
-          api('/compras?estado=ABIERTA'),
+          api('/alerts/pendientes'),
         ])
         setRep(r); setAlertas(a); setCompras(c)
       } catch (e) { /* noop */ }
@@ -123,19 +143,20 @@ function Dashboard({ go }) {
   alertas.forEach(a => { sev[a.severidad] = (sev[a.severidad] || 0) + 1 })
 
   const cards = [
-    ['Compras abiertas', compras.total || 0, BLUE],
-    ['Saldo documental', fmtCRC(rep?.saldo_total || 0), GOLD],
-    ['Alertas activas', alertas.length, alertas.length ? RED : GREEN],
-    ['Pagos sin factura', rep?.pagos_sin_factura || 0, AMBER],
+    ['Solicitudes sin pagar', compras.solicitudes || 0, compras.solicitudes ? AMBER : GREEN, compras.solicitudes ? fmtCRC(compras.monto_solicitudes) : 'todo pagado ✓'],
+    ['Falta factura del proveedor', compras.sin_factura || 0, compras.sin_factura ? RED : GREEN, compras.sin_factura ? fmtCRC(compras.monto_sin_factura) + (compras.vencidas ? ` · ${compras.vencidas} vencida(s)` : '') : 'todo conciliado ✓'],
+    ['Compras con algo pendiente', compras.docs_faltantes || 0, compras.docs_faltantes ? GOLD : GREEN, 'les falta algún documento'],
+    ['Saldo documental', fmtCRC(rep?.saldo_total || 0), GOLD, `${rep?.pagos_sin_factura || 0} pago(s) sin factura`],
   ]
 
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 22 }}>
-        {cards.map(([l, v, c]) => (
+        {cards.map(([l, v, c, sub]) => (
           <div key={l} style={{ background: SURF, border: `1px solid ${c}33`, borderTop: `3px solid ${c}`, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: '0.7em', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{l}</div>
             <div style={{ fontSize: '1.6em', fontWeight: 700, color: c, marginTop: 4 }}>{v}</div>
+            {sub && <div style={{ fontSize: '0.72em', color: MUTED, marginTop: 2 }}>{sub}</div>}
           </div>
         ))}
       </div>
@@ -244,8 +265,9 @@ function ComprasTab({ perfil }) {
   const [proveedores, setProveedores] = useState([])
   const [data, setData] = useState({ compras: [], total: 0 })
   const [loading, setLoading] = useState(true)
-  const [filtros, setFiltros] = useState({ estado: '', proveedor_id: '', alerta: '', q: '' })
+  const [filtros, setFiltros] = useState({ estado: '', proveedor_id: '', falta: '', alerta: '', q: '' })
   const [nueva, setNueva] = useState(false)
+  const [factura, setFactura] = useState(null) // { proveedor_id } | null
   const [detalle, setDetalle] = useState(null)
   const [msg, setMsg] = useState(null)
   function show(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 3500) }
@@ -264,7 +286,7 @@ function ComprasTab({ perfil }) {
     <>
       <Msg msg={msg} />
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select style={{ ...S.input, width: 'auto' }} value={filtros.estado} onChange={e => setFiltros({ ...filtros, estado: e.target.value })}>
+        <select style={{ ...S.input, width: 'auto' }} value={filtros.estado} onChange={e => setFiltros({ ...filtros, estado: e.target.value, falta: '' })}>
           <option value="">Todos los estados</option>
           {['ABIERTA', 'PAGADA', 'FACTURADA', 'CERRADA'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -272,19 +294,27 @@ function ComprasTab({ perfil }) {
           <option value="">Todos los proveedores</option>
           {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
+        <select style={{ ...S.input, width: 'auto' }} value={filtros.falta} onChange={e => setFiltros({ ...filtros, falta: e.target.value, estado: '' })}>
+          <option value="">Todos los documentos</option>
+          <option value="factura">🧾 Falta la factura del proveedor</option>
+          <option value="pago">💸 Falta pagar (solicitud abierta)</option>
+          <option value="venta">🧍 Falta el respaldo de la venta</option>
+          <option value="cotizacion">💬 Falta la cotización del proveedor</option>
+        </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82em', color: MUTED, cursor: 'pointer' }}>
           <input type="checkbox" checked={filtros.alerta === 'true'} onChange={e => setFiltros({ ...filtros, alerta: e.target.checked ? 'true' : '' })} style={{ accentColor: GOLD }} />
           Sólo con alerta
         </label>
         <input style={{ ...S.input, width: 220 }} placeholder="Buscar descripción / cliente…" value={filtros.q} onChange={e => setFiltros({ ...filtros, q: e.target.value })} />
         <div style={{ flex: 1 }} />
-        <button style={S.btn()} onClick={() => setNueva(true)}>➕ Nueva compra</button>
+        <button style={S.btnSm(SURF3, BLUE, BLUE + '44')} onClick={() => setFactura({ proveedor_id: filtros.proveedor_id || '' })}>📥 Subir factura del proveedor</button>
+        <button style={S.btn()} onClick={() => setNueva(true)}>➕ Nueva compra / solicitud de pago</button>
       </div>
 
       <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
         {loading ? <div style={{ padding: 30, color: MUTED }}>Cargando…</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['Descripción', 'Proveedor', 'Cliente', 'Cotizado', 'Estado', 'Alertas', 'Creada', ''].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{['Descripción', 'Proveedor', 'Cliente', 'Cotizado', 'Estado', 'Qué falta', 'Creada', ''].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
               {data.compras.map(c => {
                 const alerta = c.bandera_alerta_vencida || c.bandera_discrepancia
@@ -295,11 +325,11 @@ function ComprasTab({ perfil }) {
                     <td style={{ ...S.td, color: MUTED }}>{c.cliente_nombre || '—'}</td>
                     <td style={S.td}>{c.monto_cotizado ? fmtCRC(c.monto_cotizado) : '—'}</td>
                     <td style={S.td}><Badge color={ESTADO_COLOR[c.estado]}>{c.estado}</Badge></td>
-                    <td style={S.td}>
-                      <div style={{ display: 'flex', gap: 4 }}>
+                    <td style={{ ...S.td, minWidth: 210 }}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <DocsPendientes faltantes={c.faltantes} />
                         {c.bandera_alerta_vencida && <Badge color={RED}>vencida</Badge>}
                         {c.bandera_discrepancia && <Badge color={GOLD}>discrepancia</Badge>}
-                        {!alerta && <span style={{ color: MUTED, fontSize: '0.8em' }}>—</span>}
                       </div>
                     </td>
                     <td style={{ ...S.td, color: MUTED, fontSize: '0.78em' }}>{fmtDate(c.created_at)}</td>
@@ -314,26 +344,44 @@ function ComprasTab({ perfil }) {
       </div>
       <div style={{ marginTop: 8, fontSize: '0.78em', color: MUTED }}>{data.total} compra(s)</div>
 
-      {nueva && <NuevaCompra proveedores={proveedores} onClose={() => setNueva(false)} onSaved={() => { setNueva(false); cargar(); show('✅ Compra creada.') }} />}
+      {nueva && <NuevaCompra proveedores={proveedores} perfil={perfil} onClose={() => setNueva(false)} onSaved={(m) => { setNueva(false); cargar(); show(m || '✅ Compra creada.') }} />}
+      {factura && <SubirFacturaModal proveedores={proveedores} perfil={perfil} proveedorInicial={factura.proveedor_id} onClose={() => setFactura(null)} onDone={(m, okk) => { cargar(); show(m, okk) }} />}
       {detalle && <DetalleCompra id={detalle} perfil={perfil} onClose={() => setDetalle(null)} onChange={cargar} />}
     </>
   )
 }
 
-function NuevaCompra({ proveedores, onClose, onSaved }) {
-  const [f, setF] = useState({ proveedor_id: '', descripcion: '', cliente_nombre: '', venta_cliente_ref: '', cantidad: '', unidad: 'm', monto_cotizado: '', fecha_cotizacion: '', notas: '' })
+function NuevaCompra({ proveedores, perfil, onClose, onSaved }) {
+  const [f, setF] = useState({ proveedor_id: '', descripcion: '', cliente_nombre: '', venta_cliente_ref: '', cantidad: '', unidad: 'm', monto_cotizado: '', fecha_cotizacion: '', notas: '', urgente: false })
+  const [ventaFile, setVentaFile] = useState(null)
+  const [cotizacionFile, setCotizacionFile] = useState(null)
   const [msg, setMsg] = useState(null)
   const [saving, setSaving] = useState(false)
+
   async function guardar() {
     if (!f.proveedor_id) return setMsg({ t: 'Seleccioná un proveedor.', ok: false })
     if (!f.descripcion.trim()) return setMsg({ t: 'La descripción es obligatoria.', ok: false })
     setSaving(true)
-    try { await api('/compras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) }); onSaved() }
-    catch (e) { setMsg({ t: e.message, ok: false }); setSaving(false) }
+    const fd = new FormData()
+    Object.entries(f).forEach(([k, v]) => fd.append(k, v === null || v === undefined ? '' : String(v)))
+    fd.append('uploaded_by', perfil?.nombre || perfil?.email || '')
+    if (ventaFile) fd.append('venta_file', ventaFile)
+    if (cotizacionFile) fd.append('cotizacion_file', cotizacionFile)
+    try {
+      await api('/compras', { method: 'POST', body: fd })
+      const faltan = [
+        !ventaFile && 'el respaldo de la venta',
+        !cotizacionFile && 'la cotización del proveedor',
+        'el pago', 'la factura del proveedor',
+      ].filter(Boolean)
+      onSaved(`✅ Compra creada. Queda pendiente: ${faltan.join(', ')}.`)
+    } catch (e) { setMsg({ t: e.message, ok: false }); setSaving(false) }
   }
+
   return (
-    <Modal onClose={onClose}>
-      <h3 style={{ marginTop: 0 }}>➕ Nueva compra</h3>
+    <Modal onClose={onClose} width={780}>
+      <h3 style={{ marginTop: 0 }}>➕ Nueva compra / solicitud de pago</h3>
+      <p style={{ fontSize: '0.8em', color: MUTED, marginTop: -6 }}>Adjuntá la venta al cliente y la cotización del proveedor (PDF o foto). Con eso queda pedido el pago y arranca el control de documentos.</p>
       <Msg msg={msg} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
         <Field label="Proveedor *">
@@ -344,16 +392,37 @@ function NuevaCompra({ proveedores, onClose, onSaved }) {
         </Field>
         <Field label="Factura del vendedor al cliente"><input style={S.input} value={f.venta_cliente_ref} onChange={e => setF({ ...f, venta_cliente_ref: e.target.value })} placeholder="N° factura NEO" /></Field>
         <Field label="Cliente final"><input style={S.input} value={f.cliente_nombre} onChange={e => setF({ ...f, cliente_nombre: e.target.value })} /></Field>
-        <Field label="Cotizado (₡)"><input type="number" style={S.input} value={f.monto_cotizado} onChange={e => setF({ ...f, monto_cotizado: e.target.value })} /></Field>
+        <Field label="Cotizado / a pagar (₡)"><input type="number" style={S.input} value={f.monto_cotizado} onChange={e => setF({ ...f, monto_cotizado: e.target.value })} /></Field>
         <Field label="Cantidad"><input type="number" style={S.input} value={f.cantidad} onChange={e => setF({ ...f, cantidad: e.target.value })} /></Field>
         <Field label="Unidad"><input style={S.input} value={f.unidad} onChange={e => setF({ ...f, unidad: e.target.value })} placeholder="m, unid…" /></Field>
         <Field label="Fecha cotización"><input type="date" style={S.input} value={f.fecha_cotizacion} onChange={e => setF({ ...f, fecha_cotizacion: e.target.value })} /></Field>
+        <Field label="Urgencia">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84em', color: TEXT, padding: '8px 0', cursor: 'pointer' }}>
+            <input type="checkbox" checked={f.urgente} onChange={e => setF({ ...f, urgente: e.target.checked })} style={{ accentColor: GOLD }} />
+            Pagar de urgencia
+          </label>
+        </Field>
       </div>
+
       <div style={{ marginTop: 12 }}>
         <Field label="Descripción *"><textarea style={{ ...S.input, minHeight: 60, resize: 'vertical' }} value={f.descripcion} onChange={e => setF({ ...f, descripcion: e.target.value })} placeholder="lámina zinc 3.66m calibre 26…" /></Field>
       </div>
-      <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
-        <button style={S.btn(saving ? '#555' : GOLD)} onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : '💾 Crear compra'}</button>
+
+      <div style={{ marginTop: 14, background: SURF2, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ fontSize: '0.82em', fontWeight: 600, marginBottom: 10 }}>📎 Respaldos de la solicitud (PDF o foto)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
+          <Field label="🧍 Venta al cliente">
+            <input type="file" accept={ACEPTA} onChange={e => setVentaFile(e.target.files[0] || null)} style={{ ...S.input, padding: 6 }} />
+          </Field>
+          <Field label="💬 Cotización del proveedor">
+            <input type="file" accept={ACEPTA} onChange={e => setCotizacionFile(e.target.files[0] || null)} style={{ ...S.input, padding: 6 }} />
+          </Field>
+        </div>
+        <div style={{ fontSize: '0.74em', color: MUTED, marginTop: 8 }}>Se pueden subir después desde el detalle de la compra. Máx. 15 MB cada uno.</div>
+      </div>
+
+      <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
+        <button style={S.btn(saving ? '#555' : GOLD)} onClick={guardar} disabled={saving}>{saving ? 'Guardando…' : '💾 Crear y pedir el pago'}</button>
         <button style={S.btnSm()} onClick={onClose}>Cancelar</button>
       </div>
     </Modal>
@@ -364,9 +433,25 @@ function DetalleCompra({ id, perfil, onClose, onChange }) {
   const [d, setD] = useState(null)
   const [msg, setMsg] = useState(null)
   const [pagoForm, setPagoForm] = useState(null)
+  const [factura, setFactura] = useState(false)
+  const [subiendo, setSubiendo] = useState(null)
   function show(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 4000) }
   const cargar = useCallback(async () => { try { setD(await api(`/compras/${id}`)) } catch (e) { show(e.message, false) } }, [id])
   useEffect(() => { cargar() }, [cargar])
+
+  async function subirDoc(tipo, file) {
+    if (!file) return
+    setSubiendo(tipo)
+    const fd = new FormData()
+    fd.append('tipo', tipo)
+    fd.append('file', file)
+    fd.append('uploaded_by', perfil?.nombre || perfil?.email || '')
+    try {
+      await api(`/compras/${id}/documentos`, { method: 'POST', body: fd })
+      show('✅ Documento adjuntado.'); cargar(); onChange?.()
+    } catch (e) { show(e.message, false) }
+    setSubiendo(null)
+  }
 
   async function borrarPago(pid) {
     if (!confirm('¿Eliminar este pago? El comprobante queda archivado pero se desvincula.')) return
@@ -408,6 +493,51 @@ function DetalleCompra({ id, perfil, onClose, onChange }) {
           </div>
         ))}
       </div>
+
+      {/* Documentos: lo que falta, de una */}
+      <div style={{ background: SURF2, border: `1px solid ${(d.faltantes || []).length ? GOLD + '44' : GREEN + '33'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <h4 style={{ margin: 0, fontSize: '0.9em' }}>📎 Documentos</h4>
+          {(d.faltantes || []).length
+            ? <Badge color={d.falta_factura ? RED : GOLD}>faltan {d.faltantes.length}</Badge>
+            : <Badge color={GREEN}>✓ completo</Badge>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(d.docs || []).map(doc => {
+            const archivo = doc.clave === 'venta' ? c.venta_archivo : doc.clave === 'cotizacion' ? c.cotizacion_archivo : null
+            const comprobante = doc.clave === 'comprobante' ? (d.pagos.find(p => p.comprobante)?.comprobante || null) : null
+            const facturaArch = doc.clave === 'factura' ? (d.facturas.find(f => f.archivo)?.archivo || null) : null
+            const ver = archivo || comprobante || facturaArch
+            const subible = doc.clave === 'venta' || doc.clave === 'cotizacion'
+            return (
+              <div key={doc.clave} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: SURF3, borderRadius: 8 }}>
+                <span style={{ fontSize: '0.95em' }}>{doc.ok ? '✅' : '⏳'}</span>
+                <span style={{ fontSize: '0.83em', flex: 1, color: doc.ok ? TEXT : MUTED }}>{doc.emoji} {doc.label}{!doc.ok && <span style={{ color: doc.clave === 'factura' ? RED : AMBER }}> · pendiente</span>}</span>
+                {ver && <a href={`${API}/archivos/${ver.id}`} target="_blank" rel="noreferrer" style={{ ...S.btnSm(SURF2, BLUE, BLUE + '44'), textDecoration: 'none' }}>👁 Ver</a>}
+                {subible && (
+                  <label style={{ ...S.btnSm(), display: 'inline-block' }}>
+                    {subiendo === doc.clave ? 'Subiendo…' : (doc.ok ? '↻ Cambiar' : '⬆ Subir')}
+                    <input type="file" accept={ACEPTA} style={{ display: 'none' }} onChange={e => subirDoc(doc.clave, e.target.files[0])} />
+                  </label>
+                )}
+                {doc.clave === 'factura' && !doc.ok && d.pagos.length > 0 && (
+                  <button style={S.btnSm(GOLD, '#fff', GOLD)} onClick={() => setFactura(true)}>📥 Subir factura</button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {factura && (
+        <SubirFacturaModal
+          proveedores={[c.proveedor]}
+          perfil={perfil}
+          proveedorInicial={String(c.proveedor_id)}
+          onClose={() => setFactura(false)}
+          onDone={(m, okk) => { show(m, okk); cargar(); onChange?.() }}
+        />
+      )}
 
       {/* Pagos */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -470,7 +600,7 @@ function RegistrarPago({ id, perfil, form, setForm, onDone, onCancel }) {
   async function subir() {
     if (!(Number(form.monto) > 0)) return setErr('El monto debe ser mayor a 0.')
     if (!form.fecha_pago) return setErr('Falta la fecha de pago.')
-    if (!form.file) return setErr('Adjuntá el PDF del comprobante.')
+    if (!form.file) return setErr('Adjuntá el comprobante (PDF o foto).')
     setSaving(true); setErr(null)
     const fd = new FormData()
     fd.append('pdf', form.file)
@@ -495,7 +625,7 @@ function RegistrarPago({ id, perfil, form, setForm, onDone, onCancel }) {
         <Field label="Banco origen"><input style={S.input} value={form.banco_origen} onChange={e => setForm({ ...form, banco_origen: e.target.value })} /></Field>
       </div>
       <div style={{ marginTop: 10 }}>
-        <Field label="Comprobante PDF *"><input type="file" accept="application/pdf" onChange={e => setForm({ ...form, file: e.target.files[0] })} style={{ ...S.input, padding: 6 }} /></Field>
+        <Field label="Comprobante de la transferencia (PDF o foto) *"><input type="file" accept={ACEPTA} onChange={e => setForm({ ...form, file: e.target.files[0] })} style={{ ...S.input, padding: 6 }} /></Field>
       </div>
       <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
         <button style={S.btn(saving ? '#555' : GOLD)} onClick={subir} disabled={saving}>{saving ? 'Subiendo…' : '💾 Guardar pago'}</button>
@@ -505,23 +635,22 @@ function RegistrarPago({ id, perfil, form, setForm, onDone, onCancel }) {
   )
 }
 
-// ── Subir factura + match ───────────────────────────────────────────────────
-function FacturaTab({ perfil }) {
-  const [proveedores, setProveedores] = useState([])
-  const [f, setF] = useState({ proveedor_id: '', numero_factura: '', fecha_factura: new Date().toISOString().slice(0, 10), monto_total: '', notas: '', file: null })
+// ── Subir factura del proveedor + conciliación ──────────────────────────────
+// Vive donde se trabaja la compra (no en una pestaña aparte): se abre desde la
+// lista de compras o desde el detalle, con el proveedor ya elegido.
+function SubirFacturaModal({ proveedores, perfil, proveedorInicial = '', onClose, onDone }) {
+  const [f, setF] = useState({ proveedor_id: proveedorInicial || '', numero_factura: '', fecha_factura: new Date().toISOString().slice(0, 10), monto_total: '', notas: '', file: null })
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
   const [match, setMatch] = useState(null) // { factura, sugerencia_fuerte, alternativas, todos_los_candidatos }
   const [sel, setSel] = useState({}) // pago_id -> monto_aplicado
   function show(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 5000) }
 
-  useEffect(() => { api('/proveedores').then(setProveedores).catch(() => {}) }, [])
-
   async function subir() {
     if (!f.proveedor_id) return show('Seleccioná un proveedor.', false)
     if (!f.numero_factura.trim()) return show('Falta el número de factura.', false)
     if (!(Number(f.monto_total) > 0)) return show('El monto total debe ser mayor a 0.', false)
-    if (!f.file) return show('Adjuntá el PDF de la factura.', false)
+    if (!f.file) return show('Adjuntá el PDF (o la foto) de la factura.', false)
     setSaving(true)
     const fd = new FormData()
     fd.append('pdf', f.file)
@@ -540,7 +669,7 @@ function FacturaTab({ perfil }) {
         pre[pid] = pago ? pago.monto : ''
       })
       setSel(pre)
-      show('✅ Factura subida. Revisá las sugerencias de conciliación.')
+      show('✅ Factura subida. Revisá con qué pago(s) hace match.')
     } catch (e) { show(e.message, false) }
     setSaving(false)
   }
@@ -559,27 +688,31 @@ function FacturaTab({ perfil }) {
     if (!links.length) return show('Seleccioná al menos un pago.', false)
     try {
       const r = await api(`/facturas/${match.factura.id}/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(links) })
-      show(r.conciliada ? '✅ Conciliada. Compras actualizadas.' : '⚠️ ' + (r.warning || 'Registrado con discrepancia.'), r.conciliada)
-      setMatch(null); setSel({})
-      setF({ proveedor_id: '', numero_factura: '', fecha_factura: new Date().toISOString().slice(0, 10), monto_total: '', notas: '', file: null })
+      onDone?.(r.conciliada ? '✅ Factura conciliada. Compras actualizadas.' : '⚠️ ' + (r.warning || 'Registrado con discrepancia.'), !!r.conciliada)
+      onClose()
     } catch (e) { show(e.message, false) }
   }
 
   const sumSel = Object.values(sel).reduce((s, v) => s + (Number(v) || 0), 0)
   const target = match ? Number(match.factura.monto_total) : 0
   const cuadra = match && Math.round(sumSel * 100) === Math.round(target * 100)
+  const provList = (proveedores || []).filter(Boolean)
 
   return (
-    <>
+    <Modal onClose={onClose} width={match ? 880 : 720}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: '1em' }}>{match ? `🔗 Conciliar factura ${match.factura.numero_factura}` : '📥 Subir factura del proveedor'}</h3>
+        <button style={S.btnSm()} onClick={onClose}>✕</button>
+      </div>
       <Msg msg={msg} />
+
       {!match ? (
-        <div style={{ ...S.card, maxWidth: 720 }}>
-          <h3 style={{ marginTop: 0, fontSize: '0.95em' }}>📥 Subir factura del proveedor</h3>
+        <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
             <Field label="Proveedor *">
               <select style={S.input} value={f.proveedor_id} onChange={e => setF({ ...f, proveedor_id: e.target.value })}>
                 <option value="">Seleccioná…</option>
-                {proveedores.filter(p => p.activo).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {provList.filter(p => p.activo !== false).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </Field>
             <Field label="Número de factura *"><input style={S.input} value={f.numero_factura} onChange={e => setF({ ...f, numero_factura: e.target.value })} /></Field>
@@ -587,21 +720,16 @@ function FacturaTab({ perfil }) {
             <Field label="Monto total (₡) *"><input type="number" style={S.input} value={f.monto_total} onChange={e => setF({ ...f, monto_total: e.target.value })} /></Field>
           </div>
           <div style={{ marginTop: 12 }}>
-            <Field label="PDF de la factura *"><input type="file" accept="application/pdf" onChange={e => setF({ ...f, file: e.target.files[0] })} style={{ ...S.input, padding: 6 }} /></Field>
+            <Field label="Factura del proveedor (PDF o foto) *"><input type="file" accept={ACEPTA} onChange={e => setF({ ...f, file: e.target.files[0] })} style={{ ...S.input, padding: 6 }} /></Field>
           </div>
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
             <button style={S.btn(saving ? '#555' : GOLD)} onClick={subir} disabled={saving}>{saving ? 'Subiendo…' : '📥 Subir y buscar match'}</button>
+            <button style={S.btnSm()} onClick={onClose}>Cancelar</button>
           </div>
-        </div>
+        </>
       ) : (
-        <div style={{ ...S.card }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1em' }}>🔗 Conciliar factura {match.factura.numero_factura}</h3>
-              <div style={{ fontSize: '0.82em', color: MUTED, marginTop: 2 }}>Total a cubrir: <strong style={{ color: TEXT }}>{fmtCRC(target)}</strong></div>
-            </div>
-            <button style={S.btnSm()} onClick={() => { setMatch(null); setSel({}) }}>✕ Cerrar</button>
-          </div>
+        <>
+          <div style={{ fontSize: '0.82em', color: MUTED, marginBottom: 12 }}>Total a cubrir: <strong style={{ color: TEXT }}>{fmtCRC(target)}</strong></div>
 
           {match.sugerencia_fuerte && <div style={{ background: GREEN + '18', border: `1px solid ${GREEN}44`, borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: '0.82em', color: GREEN }}>💡 Sugerencia fuerte: {match.sugerencia_fuerte.length} pago(s) suman exactamente el total. Ya quedaron preseleccionados.</div>}
           {!match.sugerencia_fuerte && match.alternativas?.length > 1 && <div style={{ background: AMBER + '18', border: `1px solid ${AMBER}44`, borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: '0.82em', color: AMBER }}>Hay {match.alternativas.length} combinaciones posibles que cuadran. Elegí cuál corresponde.</div>}
@@ -639,9 +767,9 @@ function FacturaTab({ perfil }) {
             <button style={S.btn(cuadra ? GREEN : GOLD)} onClick={confirmar}>{cuadra ? '✓ Conciliar (cuadra exacto)' : '⚠️ Conciliar con discrepancia'}</button>
             <span style={{ fontSize: '0.84em', color: cuadra ? GREEN : AMBER }}>Seleccionado: {fmtCRC(sumSel)} / {fmtCRC(target)} {cuadra ? '✓' : `(dif ${fmtCRC(Math.abs(target - sumSel))})`}</span>
           </div>
-        </div>
+        </>
       )}
-    </>
+    </Modal>
   )
 }
 
