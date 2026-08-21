@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { S, usd } from './estilos';
 import Diferencias from './diferencias';
 import ZonaSubida from './zona-subida';
+import { subirDocumentos, resumirSubida } from './subir-doc';
 
 // Subida masiva: Luis tira todas las proformas juntas y el sistema propone a
 // qué contenedor pertenece cada una (comparando adelanto, saldo y total contra
@@ -28,37 +29,13 @@ export default function Documentos({ envios, onCambio }) {
 
   function aviso(txt, tipo='ok') { setMsg({ txt, tipo }); setTimeout(()=>setMsg(null), 8000); }
 
-  // De a un archivo por request (leer una proforma con IA tarda) y refrescando
-  // la lista en cada vuelta, así Luis ve cómo van cayendo.
   async function subir(files) {
     if (!files?.length) return;
     setSubiendo(true); setMsg(null);
-    const todos = [];
-    for (let i = 0; i < files.length; i++) {
-      setProgreso(files.length > 1 ? `Leyendo ${i + 1} de ${files.length}...` : null);
-      const fd = new FormData();
-      fd.append('files', files[i]);
-      try {
-        const r = await fetch('/api/contenedores/docs', { method:'POST', body: fd });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || 'No se pudo subir.');
-        todos.push(...(j.resultados || []));
-      } catch (e) {
-        todos.push({ archivo: files[i].name, estado:'error', motivo: e.message });
-      }
-      await cargar();
-    }
-    setProgreso(null);
-    const mal   = todos.filter(x => x.estado === 'error');
-    const crudo = todos.filter(x => x.estado === 'sin_leer');
-    const dup   = todos.filter(x => x.estado === 'duplicado');
-    const ok    = todos.filter(x => x.estado === 'procesado');
-    const partes = [];
-    if (ok.length)    partes.push(`${ok.length} archivo(s) leído(s)`);
-    if (dup.length)   partes.push(`${dup.length} ya estaba(n)`);
-    if (crudo.length) partes.push(`${crudo.length} se guardó pero no se pudo leer: ${crudo.map(x=>x.motivo).join(' · ')}`);
-    if (mal.length)   partes.push(`con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
-    aviso(partes.join(' · '), (mal.length || crudo.length) ? 'warn' : 'ok');
+    const todos = await subirDocumentos(files, { onProgreso: setProgreso });
+    const res = resumirSubida(todos);
+    aviso(res.texto, res.tipo);
+    await cargar();
     setSubiendo(false);
   }
 

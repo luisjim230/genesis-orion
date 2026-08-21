@@ -98,22 +98,15 @@ create policy allow_all on neptuno_docs  for all using (true) with check (true);
 create policy allow_all on neptuno_items for all using (true) with check (true);
 
 -- ── 5. Bucket privado de los documentos ─────────────────────────────────────
+-- El browser sube directo al bucket con una URL firmada (el body de una función
+-- de Vercel tope en 4.5 MB y las proformas con fotos pesan más). Por eso el mime
+-- no se restringe acá: la extensión se valida en la API antes de firmar la URL.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'contenedores', 'contenedores', false, 20971520,
-  array[
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-    'text/csv',
-    'image/png',
-    'image/jpeg'
-  ]
-)
+values ('contenedores', 'contenedores', false, 26214400, null)
 on conflict (id) do update
   set public = false,
-      file_size_limit = 20971520,
-      allowed_mime_types = excluded.allowed_mime_types;
+      file_size_limit = 26214400,
+      allowed_mime_types = null;
 
 -- ── 6. Vistas para el agente analista (chat) ────────────────────────────────
 -- eta/etd son text en neptuno_envios: se castean solo si vienen bien formadas.

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { S, usd, usd2, numFmt } from './estilos';
 import Diferencias from './diferencias';
 import ZonaSubida from './zona-subida';
+import { subirDocumentos, resumirSubida } from './subir-doc';
 
 // Expediente de UN envío: los archivos de la orden (proforma, factura,
 // contrato), la mercadería que trae y el estimado de impuestos.
@@ -47,41 +48,16 @@ export default function Expediente({ envio, onEnvioActualizado }) {
   function aviso(txt, tipo='ok') { setMsg({ txt, tipo }); setTimeout(()=>setMsg(null), 6000); }
 
   // ── Subida de archivos ────────────────────────────────────────────────────
-  // Se manda de a un archivo por request: leer una proforma con IA toma su
-  // tiempo y así ni se cae por timeout ni se queda todo pendiente de uno.
   async function subir(files) {
     if (!files?.length) return;
     setSubiendo(true); setMsg(null);
-    const todos = [];
-    for (let i = 0; i < files.length; i++) {
-      setProgreso(files.length > 1 ? `Leyendo ${i + 1} de ${files.length}...` : null);
-      const fd = new FormData();
-      fd.append('files', files[i]);
-      fd.append('envio_id', envio.id);
-      try {
-        const r = await fetch('/api/contenedores/docs', { method:'POST', body: fd });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || 'No se pudo subir.');
-        todos.push(...(j.resultados || []));
-      } catch (e) {
-        todos.push({ archivo: files[i].name, estado:'error', motivo: e.message });
-      }
-    }
-    setProgreso(null);
-    const oks   = todos.filter(x => x.estado === 'procesado');
-    const crudo = todos.filter(x => x.estado === 'sin_leer');
-    const mal   = todos.filter(x => x.estado === 'error');
-    const dups  = todos.filter(x => x.estado === 'duplicado');
-    const partes = [];
-    if (oks.length)   partes.push(`${oks.length} archivo(s) leído(s)`);
-    if (dups.length)  partes.push(`${dups.length} ya estaba(n) subido(s)`);
-    if (crudo.length) partes.push(`${crudo.length} se guardó pero no se pudo leer: ${crudo.map(x=>x.motivo).join(' · ')}`);
-    if (mal.length)   partes.push(`${mal.length} con problema: ${mal.map(x=>x.archivo+' — '+x.motivo).join(' · ')}`);
-    aviso(partes.join(' · '), (mal.length || crudo.length) ? 'warn' : 'ok');
+    const todos = await subirDocumentos(files, { envioId: envio.id, onProgreso: setProgreso });
+    const res = resumirSubida(todos);
+    aviso(res.texto, res.tipo);
     await cargar();
     onEnvioActualizado?.();
     // Se abre solo el comparativo del primero que se leyó bien.
-    if (oks.length) abrirComparativo(oks[0].doc_id);
+    if (res.ok.length) abrirComparativo(res.ok[0].doc_id);
     setSubiendo(false);
   }
 
