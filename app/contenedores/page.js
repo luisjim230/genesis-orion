@@ -1,30 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { S, usd } from './estilos';
+import Expediente from './expediente';
+import Mercaderia from './mercaderia';
+import Documentos from './documentos';
 
-const S = {
-  page:    { background:'var(--cream)', minHeight:'100vh', padding:'32px 36px', fontFamily:"'Rubik','DM Sans',sans-serif", color:'var(--text-primary)' },
-  title:   { fontFamily:"'Bungee',cursive", fontSize:'1.6rem', color:'var(--burgundy)', letterSpacing:'0.03em', margin:0 },
-  sub:     { fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'4px', marginBottom:'24px' },
-  card:    { background:'#fff', border:'1px solid var(--border-soft)', borderRadius:'12px', padding:'20px', marginBottom:'12px', boxShadow:'var(--card-shadow)' },
-  tabBar:  { display:'flex', gap:'0', marginBottom:'24px', borderBottom:'2px solid var(--border)', flexWrap:'wrap' },
-  tab:     (a)=>({ padding:'10px 20px', cursor:'pointer', border:'none', background:'none', color:a?'var(--orange)':'var(--text-muted)', fontWeight:a?600:400, borderBottom:a?'2px solid var(--orange)':'2px solid transparent', marginBottom:'-2px', fontSize:'0.86em', fontFamily:'inherit', transition:'all 0.15s' }),
-  btn:     (c='var(--orange)')=>({ background:c, color:'#fff', border:'none', borderRadius:'8px', padding:'8px 16px', cursor:'pointer', fontSize:'0.84em', fontWeight:500, fontFamily:'inherit' }),
-  btnSm:   (c='#fff')=>({ background:c, color:'var(--text-primary)', border:'1px solid var(--border)', borderRadius:'6px', padding:'5px 12px', cursor:'pointer', fontSize:'0.78em', fontFamily:'inherit' }),
-  input:   { background:'#fff', border:'1px solid var(--border)', borderRadius:'8px', padding:'8px 12px', color:'var(--text-primary)', fontSize:'0.87em', width:'100%', boxSizing:'border-box', fontFamily:'inherit' },
-  label:   { fontSize:'0.74em', color:'var(--text-muted)', display:'block', marginBottom:'4px', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' },
-  grid2:   { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' },
-  grid3:   { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'14px' },
-  divider: { border:'none', borderTop:'1px solid var(--border-soft)', margin:'20px 0' },
-  badge:   (c)=>({ background:c+'18', color:c, border:'1px solid '+c+'44', borderRadius:'20px', padding:'3px 10px', fontSize:'0.72em', fontWeight:600 }),
-  table:   { width:'100%', borderCollapse:'collapse', fontSize:'0.83em' },
-  th:      { textAlign:'left', padding:'9px 12px', background:'var(--cream)', color:'var(--text-muted)', fontSize:'0.7em', textTransform:'uppercase', letterSpacing:'0.06em', borderBottom:'2px solid var(--border)' },
-  td:      { padding:'9px 12px', borderBottom:'1px solid var(--border-soft)', color:'var(--text-primary)', verticalAlign:'middle' },
-  kpi:     (c='var(--orange)')=>({ background:'#fff', border:'1px solid var(--border-soft)', borderTop:'3px solid '+c, borderRadius:'10px', padding:'14px 16px', boxShadow:'var(--card-shadow)' }),
-  metric:  { fontSize:'1.5em', fontWeight:700, color:'var(--text-primary)', marginTop:'4px' },
-  mLabel:  { fontSize:'0.68em', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.07em' },
-  mDelta:  (warn)=>({ fontSize:'0.74em', color:warn?'#DD6B20':'#38A169', marginTop:'2px' }),
-};
 
 const ESTADOS = {
   '🏭 En producción':        '#f6ad55',
@@ -37,7 +18,6 @@ const ESTADOS = {
 const ESTADOS_LIST = Object.keys(ESTADOS);
 const INCOTERMS = ['FOB','CIF','EXW','DAP'];
 
-const usd = (n) => (n && Number(n) !== 0) ? '$'+Number(n).toLocaleString('es-CR',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
 const fmtF = (s) => s ? String(s).substring(0,10) : '—';
 const chk = (v) => v ? '✅' : '❌';
 
@@ -71,6 +51,8 @@ function calcTotales(c) {
 
 const FORM_INIT = {
   nombre:'', proveedor:'', naviero:'', bl_num:'',
+  pi_num:'', puerto_origen:'', puerto_destino:'', contenedor_tipo:'',
+  mercaderia_monto:'', cbm_total:'', resumen:'',
   estado:'🚢 En el mar', incoterm:'FOB', tlc:false,
   etd:'', eta:'',
   adelanto_monto:'', adelanto_pago:false,
@@ -95,13 +77,7 @@ export default function Contenedores() {
   const [buscar, setBuscar]     = useState('');
   const [tcBac, setTcBac]       = useState(null);
 
-  useEffect(() => {
-    cargar();
-    fetch('/api/mercado?fuente=bccr_ref')
-      .then(r=>r.json())
-      .then(j=>{ if(j.ok && j.data?.venta) setTcBac(j.data.venta); })
-      .catch(()=>{});
-  }, []);
+  function mostrarMsg(texto, tipo='ok') { setMsg({texto,tipo}); setTimeout(()=>setMsg(null), 4000); }
 
   async function cargar() {
     setLoading(true);
@@ -113,8 +89,15 @@ export default function Contenedores() {
     setLoading(false);
   }
 
+  useEffect(() => {
+    cargar();
+    fetch('/api/mercado?fuente=bccr_ref')
+      .then(r=>r.json())
+      .then(j=>{ if(j.ok && j.data?.venta) setTcBac(j.data.venta); })
+      .catch(()=>{});
+  }, []);
+
   function setF(k,v) { setForm(f=>({...f,[k]:v})); }
-  function mostrarMsg(texto, tipo='ok') { setMsg({texto,tipo}); setTimeout(()=>setMsg(null), 4000); }
 
   async function guardar() {
     if (!form.nombre.trim()) { mostrarMsg('El nombre del envío es requerido.','err'); return; }
@@ -126,6 +109,8 @@ export default function Contenedores() {
       flete_monto:    form.flete_monto    !== '' ? parseFloat(form.flete_monto)    : 0,
       impuestos_monto: form.impuestos_monto !== '' ? parseFloat(form.impuestos_monto) : 0,
       transporte_local_monto: form.transporte_local_monto !== '' ? parseFloat(form.transporte_local_monto) : 0,
+      mercaderia_monto: form.mercaderia_monto !== '' && form.mercaderia_monto !== null ? parseFloat(form.mercaderia_monto) : null,
+      cbm_total:        form.cbm_total        !== '' && form.cbm_total        !== null ? parseFloat(form.cbm_total)        : null,
       etd: form.etd || null,
       eta: form.eta || null,
       actualizado: new Date().toLocaleDateString('es-CR', { timeZone:'America/Costa_Rica', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }),
@@ -146,6 +131,8 @@ export default function Contenedores() {
       flete_monto:    env.flete_monto    ?? '',
       impuestos_monto: env.impuestos_monto ?? '',
       transporte_local_monto: env.transporte_local_monto ?? '',
+      mercaderia_monto: env.mercaderia_monto ?? '',
+      cbm_total:        env.cbm_total ?? '',
     });
     setEditId(env.id); setTab(1);
   }
@@ -187,7 +174,7 @@ export default function Contenedores() {
       )}
 
       <div style={S.tabBar}>
-        {['🌊 Envíos Activos','➕ Nuevo Envío','⚓ Historial'].map((t,i)=>(
+        {['🌊 Envíos Activos','➕ Nuevo Envío','📦 Mercadería','📎 Documentos','⚓ Historial'].map((t,i)=>(
           <button key={i} style={S.tab(tab===i)} onClick={()=>{ setTab(i); if(i!==1){ setEditId(null); setForm(FORM_INIT); } }}>{t}</button>
         ))}
       </div>
@@ -270,7 +257,7 @@ export default function Contenedores() {
                       {/* General */}
                       <div>
                         <div style={{fontSize:'0.75em',color:'#c8a84b',fontWeight:700,textTransform:'uppercase',marginBottom:'8px'}}>🏭 General</div>
-                        {[['Proveedor',env.proveedor],['Naviero',env.naviero],['BL',env.bl_num],['Incoterm',env.incoterm],['TLC',chk(env.tlc)]].map(([l,v])=>(
+                        {[['Proveedor',env.proveedor],['Naviero',env.naviero],['BL',env.bl_num],['Incoterm',env.incoterm],['TLC',chk(env.tlc)],['N° PI',env.pi_num],['Ruta',[env.puerto_origen,env.puerto_destino].filter(Boolean).join(' → ')],['Contenedor',env.contenedor_tipo],['CBM',env.cbm_total]].map(([l,v])=>(
                           <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'var(--text-primary)'}}><span style={{color:'var(--text-muted)'}}>{l}:</span> {v||'—'}</div>
                         ))}
                       </div>
@@ -281,11 +268,12 @@ export default function Contenedores() {
                           ['Adelanto', env.adelanto_monto, env.adelanto_pago],
                           ['Pago final', env.final_monto, env.final_pago],
                           ['Flete int\'l', env.flete_monto, env.flete_pago],
-                          ['Impuestos', env.impuestos_monto, env.impuestos_pago],
+                          ['Impuestos', env.impuestos_monto, env.impuestos_pago, env.impuestos_estimado ? 'estimado '+usd(env.impuestos_estimado) : null],
                           ['Transp. local', env.transporte_local_monto, env.transporte_local_pago],
-                        ].map(([l,m,p])=>(
+                        ].map(([l,m,p,extra])=>(
                           <div key={l} style={{fontSize:'0.82em',marginBottom:'4px',color:'var(--text-primary)'}}>
                             <span style={{color:'var(--text-muted)'}}>{l}:</span> {usd(m)} {chk(p)}
+                            {extra && <span style={{color:'#c8a84b',fontSize:'0.9em'}}> · {extra}</span>}
                           </div>
                         ))}
                       </div>
@@ -298,7 +286,10 @@ export default function Contenedores() {
                       </div>
                     </div>
                     {env.notas && <div style={{marginTop:'12px',background:'var(--cream)',borderRadius:'8px',padding:'10px',fontSize:'0.82em',color:'#8899aa'}}>📝 {env.notas}</div>}
-                    <div style={{marginTop:'10px',fontSize:'0.72em',color:'#3a4a5a'}}>Creado: {env.creado||'—'} · Actualizado: {env.actualizado||'—'}</div>
+
+                    <Expediente envio={env} onEnvioActualizado={cargar}/>
+
+                    <div style={{marginTop:'14px',fontSize:'0.72em',color:'#3a4a5a'}}>Creado: {env.creado||'—'} · Actualizado: {env.actualizado||'—'}</div>
                     <button style={{...S.btnSm('#fff5f5'),marginTop:'10px'}} onClick={()=>eliminar(env.id)}>🗑️ Eliminar registro</button>
                   </div>
                 )}
@@ -315,7 +306,7 @@ export default function Contenedores() {
 
           <div style={{fontWeight:600,color:'#c8a84b',fontSize:'0.8em',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'12px'}}>📋 Datos generales</div>
           <div style={S.grid3}>
-            {[['nombre','Nombre del envío','text'],['proveedor','Proveedor / origen','text'],['naviero','Naviero / línea marítima','text'],['bl_num','Número de BL / tracking','text']].map(([k,l])=>(
+            {[['nombre','Nombre del envío','text'],['proveedor','Proveedor / origen','text'],['naviero','Naviero / línea marítima','text'],['bl_num','Número de BL / tracking','text'],['pi_num','N° de PI / contrato','text'],['puerto_origen','Puerto de origen','text'],['puerto_destino','Puerto de destino','text'],['contenedor_tipo','Contenedor (ej. 1x40HQ)','text']].map(([k,l])=>(
               <div key={k}><label style={S.label}>{l}</label><input style={S.input} type="text" value={form[k]||''} onChange={e=>setF(k,e.target.value)}/></div>
             ))}
             <div><label style={S.label}>Estado del envío</label>
@@ -328,6 +319,8 @@ export default function Contenedores() {
                 {INCOTERMS.map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
+            <div><label style={S.label}>Valor de la mercadería (USD)</label><input style={S.input} type="number" value={form.mercaderia_monto||''} onChange={e=>setF('mercaderia_monto',e.target.value)}/></div>
+            <div><label style={S.label}>CBM total</label><input style={S.input} type="number" step="0.001" value={form.cbm_total||''} onChange={e=>setF('cbm_total',e.target.value)}/></div>
             <div><label style={S.label}>ETD (fecha de salida)</label><input style={S.input} type="date" value={form.etd||''} onChange={e=>setF('etd',e.target.value)}/></div>
             <div><label style={S.label}>ETA (fecha llegada estimada)</label><input style={S.input} type="date" value={form.eta||''} onChange={e=>setF('eta',e.target.value)}/></div>
             <div style={{display:'flex',alignItems:'center',gap:'10px',paddingTop:'20px'}}>
@@ -376,6 +369,10 @@ export default function Contenedores() {
             ))}
           </div>
 
+          <div style={{marginBottom:'14px'}}><label style={S.label}>📦 Qué viene en esta carga</label>
+            <textarea style={{...S.input,minHeight:'60px',resize:'vertical'}} placeholder="Se llena solo cuando subís la proforma, pero lo podés escribir vos." value={form.resumen||''} onChange={e=>setF('resumen',e.target.value)}/>
+          </div>
+
           <div><label style={S.label}>📝 Notas del expediente</label>
             <textarea style={{...S.input,minHeight:'80px',resize:'vertical'}} placeholder="Observaciones, contactos, incidencias..." value={form.notas||''} onChange={e=>setF('notas',e.target.value)}/>
           </div>
@@ -387,8 +384,24 @@ export default function Contenedores() {
         </div>
       )}
 
-      {/* ── TAB 2: HISTORIAL ── */}
+      {/* ── TAB 2: MERCADERÍA EN TRÁNSITO ── */}
       {tab===2 && (
+        <div>
+          <div style={{fontSize:'0.8em',color:'var(--text-muted)',marginBottom:'16px'}}>Todo lo que viene en camino, producto por producto. Sale de las proformas y facturas que subís.</div>
+          <Mercaderia/>
+        </div>
+      )}
+
+      {/* ── TAB 3: DOCUMENTOS ── */}
+      {tab===3 && (
+        <div>
+          <div style={{fontSize:'0.8em',color:'var(--text-muted)',marginBottom:'16px'}}>Subí las proformas y facturas de tus órdenes. El sistema las lee, te dice a qué contenedor van y compara contra lo que ya cargaste a mano.</div>
+          <Documentos envios={envios} onCambio={cargar}/>
+        </div>
+      )}
+
+      {/* ── TAB 4: HISTORIAL ── */}
+      {tab===4 && (
         <div>
           <div style={{marginBottom:'16px'}}>
             <input style={{...S.input,maxWidth:'360px'}} placeholder="🔍 Buscar por nombre, proveedor, BL..." value={buscar} onChange={e=>setBuscar(e.target.value)}/>

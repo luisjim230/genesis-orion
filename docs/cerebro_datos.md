@@ -32,6 +32,8 @@ Este documento le enseña al agente AgenteDJ cómo leer y calcular correctamente
 - Cuentas por cobrar (clientes) + antigüedad: fin_cuentas_cobrar
 - Cotizaciones / proformas (cabecera y líneas): hermes_proformas_cabecera, hermes_proformas_items
 - Tareas de Luis: vega_tareas (estado 'activa')
+- Mercadería que viene en camino (producto por producto): v_neptuno_transito
+- Contenedores en tránsito (plata comprometida, ETA, estado): v_neptuno_envios_resumen
 
 ## 3. Reglas de oro de cálculo (las trampas que descuadran todo)
 
@@ -75,6 +77,18 @@ Cabecera: numero, estado, fecha (date), facturada (bool), vendedor, cliente, tot
 
 ### vega_tareas — tareas de Luis
 titulo, prioridad, notas, estado ('activa' / 'completada'). Las pendientes: estado = 'activa'.
+
+### v_neptuno_transito — qué mercadería viene en camino
+Una fila por producto de cada contenedor en tránsito (solo envíos NO archivados). Sale de las proformas y facturas que Luis sube en el módulo Cargas en tránsito, más las correcciones que hace a mano.
+Columnas: envio_id, envio (nombre del contenedor), proveedor, estado ('🏭 En producción', '🚢 En el mar', '🚛 En aduana'...), incoterm, pi_num, eta (date), etd (date), item_no, descripcion, nombre_comercial (el nombre con que se vende acá: AMALFI, ROMA, MONTREAL), categoria, color, medida, unidad, cantidad, precio_unitario, monto (USD FOB de la línea), cbm, partida (código arancelario), dai_pct, codigo_interno, origen ('archivo' o 'manual'), editado.
+- Los montos están en USD, NO en colones. Nunca los sumes con ventas ni inventario sin convertir.
+- Para "¿viene tal producto en camino?" buscá con ILIKE sobre descripcion y nombre_comercial.
+- Para "¿cuánta plata viene?" sumá monto (es valor de mercadería FOB, sin flete ni impuestos).
+
+### v_neptuno_envios_resumen — los contenedores en tránsito
+Una fila por contenedor activo: envio_id, envio, proveedor, estado, incoterm, pi_num, eta, resumen (qué trae, en una frase), cbm_total, contenedor_tipo, mercaderia_pagos (adelanto + pago final), mercaderia_doc, flete, impuestos, impuestos_estimado, transporte_local, costo_total, lineas, unidades.
+- impuestos es lo que Luis fijó a mano y es el que manda; impuestos_estimado es un cálculo automático referencial (DAI + 1% Ley 6946 + 13% IVA sobre CIF). Si difieren, el bueno es impuestos.
+- Las tablas crudas detrás son neptuno_envios (cabecera), neptuno_items (mercadería) y neptuno_docs (los archivos subidos, con la lectura cruda en el campo jsonb `extraido`).
 
 ## 5. Recetas (consultas modelo)
 
