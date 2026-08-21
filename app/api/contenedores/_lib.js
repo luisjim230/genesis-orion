@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import * as XLSX from 'xlsx'
 
 export const BUCKET = 'contenedores'
-export const MAX_BYTES = 20 * 1024 * 1024 // 20 MB
+export const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
 let _sb
 export function getDb() {
@@ -52,6 +52,28 @@ export function esPdf(file) {
 export function esExcel(file) {
   return /\.(xlsx|xlsm|xls|csv)$/i.test(file?.name || '') ||
     /spreadsheet|excel|csv/i.test(file?.type || '')
+}
+
+const MIMES = {
+  pdf:  'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  xls:  'application/vnd.ms-excel',
+  csv:  'text/csv',
+}
+export function mimePorNombre(nombre) {
+  const ext = String(nombre || '').split('.').pop().toLowerCase()
+  return MIMES[ext] || 'application/octet-stream'
+}
+export function extensionValida(nombre) {
+  return /\.(pdf|xlsx|xlsm|xls|csv)$/i.test(String(nombre || ''))
+}
+
+// Nombre del objeto dentro del bucket. Se le antepone el año y un random para
+// que dos archivos con el mismo nombre no se pisen.
+export function rutaStorage(nombre, prefijo) {
+  const safe = String(nombre || 'documento').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
+  return `${new Date().getFullYear()}/${prefijo}_${safe}`
 }
 
 const MAX_TEXTO = 60000
@@ -386,8 +408,7 @@ export function sha256(buffer) {
 }
 
 export async function subirArchivo(file, buffer, hash) {
-  const safe = (file.name || 'documento').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
-  const path = `${new Date().getFullYear()}/${hash.slice(0, 12)}_${safe}`
+  const path = rutaStorage(file.name, hash.slice(0, 12))
   const { error } = await getDb().storage.from(BUCKET).upload(path, buffer, {
     contentType: file.type || 'application/octet-stream',
     upsert: true,

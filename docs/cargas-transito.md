@@ -54,14 +54,19 @@ Luis fija a mano; cuando lo hace, se marca `impuestos_fijado = true`.
 | `v_neptuno_transito` | Un producto en camino por fila, con el contexto de su contenedor |
 | `v_neptuno_envios_resumen` | Un contenedor por fila, con costo total, líneas y unidades |
 
-Los binarios van al bucket privado `contenedores` (20 MB máx., PDF/Excel/CSV/imagen).
-Se deduplican por `sha256`: el mismo archivo subido dos veces no se procesa de nuevo.
+Los binarios van al bucket privado `contenedores` (25 MB máx.). **El browser los
+sube directo al bucket con una URL firmada**, no a través de la API: el body de
+una función de Vercel tope en 4.5 MB y una proforma con fotos adentro pesa más
+(la de Barana pesa 7,4 MB). La API recibe solo la ruta del archivo ya guardado,
+lo baja, lo deduplica por `sha256` y lo manda a leer. Por eso el bucket no
+restringe mime types: la extensión se valida antes de firmar la URL.
 
 ## API
 
 | Ruta | Qué hace |
 |---|---|
-| `POST /api/contenedores/docs` | Sube y lee archivos (multipart `files[]`, `envio_id` opcional) |
+| `POST /api/contenedores/upload-url` | Firma la URL para que el browser suba el archivo directo al bucket |
+| `POST /api/contenedores/docs` | Registra y lee archivos ya subidos (JSON `archivos[]`) o un multipart `files[]` |
 | `GET /api/contenedores/docs?envio_id=` | Lista documentos (o `?sin_asignar=1`) |
 | `GET /api/contenedores/docs/:id` | Documento + comparativo contra su envío |
 | `PATCH /api/contenedores/docs/:id` | Asigna el documento a un contenedor |
