@@ -7,28 +7,32 @@ canjeables** se acumulan **acciones** para un **sorteo de motos**.
 
 ## Mecánica de acciones (modelo propuesto — todo configurable en `rifa_config`)
 
-- **Base:** 1 acción por cada ₡50.000 del total real de la factura (`floor`).
+- **Base:** 1 acción por cada ₡25.000 del total real de la factura (`floor`; mínimo ₡25.000).
 - **Bono patrocinador (×2):** si la factura lleva ≥1 producto de un proveedor
   patrocinador. Un solo bono por factura, no por producto (evita abuso).
 - **Bono web (×3):** si la factura la hizo el vendedor de la web.
 - **No se apilan: gana el mayor.** Patrocinador + web → ×3.
 - **Fecha de corte:** después de esa fecha/hora no cuentan facturas nuevas.
 
-Perillas ajustables sin tocar código: `colones_por_accion` (50000),
-`bono_patrocinador_mult` (2), `bono_web_mult` (3), `vendedor_web`, `fecha_corte`,
-`digitos_factura` (5), `tolerancia_monto_pct` (10), `activa`.
+Perillas ajustables sin tocar código: `colones_por_accion` (25000),
+`bono_patrocinador_mult` (2), `bono_web_mult` (3), `vendedor_web` (`Vnidux`),
+`fecha_corte`, `digitos_factura` (5), `tolerancia_monto_pct` (10), `activa`.
 
-### Detección del ×2 (proveedor)
-NEO no guarda proveedor en `neo_items_facturados`, pero sí mapea
-`codigo_interno → proveedor` en `neo_lista_items` / `neo_inventario_proveedor`.
-El ×2 se dispara si alguna línea de la factura pertenece a un proveedor marcado
-como patrocinador.
+### Detección del ×2 (patrocinador)
+Dos disparadores:
+1. **Producto de proveedor patrocinador.** NEO mapea `codigo_interno → proveedor`
+   en `neo_lista_items` / `neo_inventario_proveedor`. El ×2 se dispara si alguna
+   línea de la factura pertenece a un proveedor marcado como patrocinador.
+2. **Pago con Credix.** Se detecta por `observaciones ilike '%credix%'` en
+   `neo_consolidado_facturas` (incluye órdenes Nidux "Medio pago: Credix").
 
-### Pendiente de confirmar
-- **Vendedor web para el ×3:** Luis dijo "UberNeals"; en NEO el vendedor de la
-  web (Nidux) figura como `Vnidux`. Confirmar cuál (o varios) marca venta web.
-- **ARSA / COFERSA / DHF:** no aparecen en el catálogo de proveedores. Si venden
-  por DJ, conseguir un código de factura de ejemplo para enchufar el ×2.
+### Decidido
+- **Vendedor web (×3):** `Vnidux`.
+- **Base:** ₡25.000 por acción.
+- Proveedores mapeados en NEO: ARSA = `DISTRIBUIDORA ARGUEDAS Y SALAS`,
+  COFERSA = `CONSORCIO FERRETERO DE SAN JOSE`, DHF = `DISTRIBUIDORA HERMANOS FUENTES`.
+- **Estado:** motor (tablas + RPC) aplicado y probado — ver
+  `supabase/migrations/20260821_rifa_motos.sql`.
 
 ## Patrocinadores y escala de importancia
 
