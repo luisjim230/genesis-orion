@@ -199,6 +199,7 @@ export default function DashboardPage() {
   const [tareas, setTareas] = useState([])
   const [recurrentesHoy, setRecurrentesHoy] = useState([])
   const [devolPend, setDevolPend] = useState({ count: 0, total_crc: 0, total_usd: 0, atrasadas: 0 })
+  const [compraPend, setCompraPend] = useState({ solicitudes: 0, monto_solicitudes: 0, sin_factura: 0, monto_sin_factura: 0, vencidas: 0, dias_mas_viejo: 0 })
   const { perfil, loading: authLoading } = useAuth()
 
   const esAdmin = perfil?.rol === 'admin'
@@ -434,6 +435,13 @@ export default function DashboardPage() {
           const jd = await rd.json()
           if (jd.ok) setDevolPend(jd)
         } catch (_) { /* no bloquear el dashboard si falla */ }
+
+        // Compras a proveedor: solicitudes sin pagar + facturas del proveedor que no llegaron.
+        try {
+          const rc = await fetch('/api/compras-proveedor/alerts/pendientes')
+          const jc = await rc.json()
+          if (jc.ok) setCompraPend(jc)
+        } catch (_) { /* no bloquear el dashboard si falla */ }
       } catch (e) {
         console.error(e)
       } finally {
@@ -481,6 +489,17 @@ export default function DashboardPage() {
           color={devolPend.atrasadas ? '#f43f5e' : devolPend.count ? '#f59e0b' : '#059669'}
           loading={loading}
           href="/devoluciones"
+        />
+        <KpiCard
+          icon="🧾"
+          label="Compras proveedor"
+          value={(compraPend.solicitudes || 0) + (compraPend.sin_factura || 0)}
+          sub={(compraPend.solicitudes || compraPend.sin_factura)
+            ? `${compraPend.solicitudes || 0} por pagar · ${compraPend.sin_factura || 0} sin factura${compraPend.vencidas ? ` 🔴 ${compraPend.vencidas} vencida(s)` : ''}`
+            : 'todo al día ✓'}
+          color={compraPend.vencidas ? '#f43f5e' : (compraPend.solicitudes || compraPend.sin_factura) ? '#f59e0b' : '#059669'}
+          loading={loading}
+          href="/compras-proveedor"
         />
         <KpiCard
           icon={posPositiva ? '🟢' : '🔴'}
@@ -649,9 +668,9 @@ export default function DashboardPage() {
               : tareas.map((t, i) => <TareaRow key={i} tarea={t} />)
           }
         </div>
-        {(recurrentesHoy.length > 0 || devolPend.count > 0) && (
+        {(recurrentesHoy.length > 0 || devolPend.count > 0 || compraPend.solicitudes > 0 || compraPend.sin_factura > 0) && (
           <div style={{ ...GLASS.card, padding: '18px 20px' }}>
-            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>⚡ Tareas recurrentes hoy</div>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'rgba(0,0,0,0.8)', marginBottom: 14 }}>⚡ Pendientes de hoy</div>
             {devolPend.count > 0 && (
               <Link href="/devoluciones" style={{ textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, marginBottom: 8, background: devolPend.atrasadas ? '#f43f5e18' : '#f59e0b18', border: `1px solid ${devolPend.atrasadas ? '#f43f5e40' : '#f59e0b40'}` }}>
@@ -662,6 +681,30 @@ export default function DashboardPage() {
                       ? ` · ${[devolPend.total_crc ? fmt_crc(devolPend.total_crc) : null, devolPend.total_usd ? fmt_usd(devolPend.total_usd) : null].filter(Boolean).join(' + ')}`
                       : ''}
                     {devolPend.atrasadas ? ` · ${devolPend.atrasadas} atrasada(s) 🔴` : ''}
+                  </span>
+                </div>
+              </Link>
+            )}
+            {compraPend.solicitudes > 0 && (
+              <Link href="/compras-proveedor" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, marginBottom: 8, background: '#f59e0b18', border: '1px solid #f59e0b40' }}>
+                  <span style={{ fontSize: '1rem' }}>💸</span>
+                  <span style={{ fontSize: '0.83rem', color: 'rgba(0,0,0,0.75)', flex: 1 }}>
+                    <b>{compraPend.solicitudes} solicitud{compraPend.solicitudes !== 1 ? 'es' : ''} de pago a proveedor</b> sin pagar
+                    {compraPend.monto_solicitudes ? ` · ${fmt_crc(compraPend.monto_solicitudes)}` : ''}
+                  </span>
+                </div>
+              </Link>
+            )}
+            {compraPend.sin_factura > 0 && (
+              <Link href="/compras-proveedor" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, marginBottom: 8, background: compraPend.vencidas ? '#f43f5e18' : '#f59e0b18', border: `1px solid ${compraPend.vencidas ? '#f43f5e40' : '#f59e0b40'}` }}>
+                  <span style={{ fontSize: '1rem' }}>🧾</span>
+                  <span style={{ fontSize: '0.83rem', color: 'rgba(0,0,0,0.75)', flex: 1 }}>
+                    <b>{compraPend.sin_factura} compra{compraPend.sin_factura !== 1 ? 's' : ''} pagada{compraPend.sin_factura !== 1 ? 's' : ''}</b> sin la factura del proveedor
+                    {compraPend.monto_sin_factura ? ` · ${fmt_crc(compraPend.monto_sin_factura)}` : ''}
+                    {compraPend.vencidas ? ` · ${compraPend.vencidas} vencida(s) 🔴` : ''}
+                    {compraPend.dias_mas_viejo ? ` · la más vieja hace ${compraPend.dias_mas_viejo} día(s)` : ''}
                   </span>
                 </div>
               </Link>

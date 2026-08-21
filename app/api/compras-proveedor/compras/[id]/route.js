@@ -1,4 +1,4 @@
-import { getDb, ok, bad, handle, HttpError } from '../../_lib'
+import { getDb, ok, bad, handle, docsDeCompra, HttpError } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +12,11 @@ export async function GET(_request, { params }) {
 
     const { data: compra, error: e1 } = await db
       .from('cp_compras')
-      .select('*, proveedor:cp_proveedores(*)')
+      .select(
+        '*, proveedor:cp_proveedores(*), ' +
+        'venta_archivo:cp_archivos!cp_compras_venta_archivo_id_fkey(id,nombre,mime_type,created_at), ' +
+        'cotizacion_archivo:cp_archivos!cp_compras_cotizacion_archivo_id_fkey(id,nombre,mime_type,created_at)'
+      )
       .eq('id', id)
       .maybeSingle()
     if (e1) throw e1
@@ -58,7 +62,9 @@ export async function GET(_request, { params }) {
     const suma_pagos = (pagos || []).reduce((s, p) => s + Number(p.monto), 0)
     const suma_facturado = (pagos || []).reduce((s, p) => s + (p.link || []).reduce((ss, l) => ss + Number(l.monto_aplicado), 0), 0)
 
-    return ok({ compra, pagos: pagos || [], facturas, alertas: alertas || [], eventos, suma_pagos, suma_facturado })
+    const docs = docsDeCompra(compra, pagos || [])
+
+    return ok({ compra, pagos: pagos || [], facturas, alertas: alertas || [], eventos, suma_pagos, suma_facturado, ...docs })
   })
 }
 

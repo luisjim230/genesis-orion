@@ -4,7 +4,17 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
 export const BUCKET = 'compras-proveedor'
-export const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+export const MAX_BYTES = 15 * 1024 * 1024 // 15 MB (entra una foto de celu sin comprimir)
+
+// Tipos aceptados: PDF y fotos (Luis manda la venta o la cotización desde el celu).
+export const MIMES_OK = [
+  'application/pdf',
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+]
+const EXT_MIME = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+}
 
 let _sb
 export function getDb() {
@@ -28,20 +38,23 @@ export function fail(error) {
   return Response.json({ error: String(error?.message || error) }, { status: 500 })
 }
 
-// Sube un PDF al bucket privado, calcula sha256, deduplica e inserta metadata
-// en cp_archivos. Devuelve { archivo } o lanza { code, message }.
-export async function subirPdf(file, { uploadedBy } = {}) {
+// Sube un PDF o una foto al bucket privado, calcula sha256, deduplica e
+// inserta metadata en cp_archivos. Devuelve el archivo o lanza HttpError.
+// - reusarSiExiste: para respaldos (venta / cotización) el mismo archivo puede
+//   servir a varias compras, así que se reusa la fila en vez de fallar.
+//   Para comprobantes y facturas se mantiene el bloqueo anti doble-carga.
+export async function subirArchivo(file, { uploadedBy, reusarSiExiste = false } = {}) {
   if (!file || typeof file.arrayBuffer !== 'function') {
-    throw new HttpError(400, 'Archivo PDF requerido.')
+    throw new HttpError(400, 'Archivo requerido (PDF o foto).')
   }
-  const tipo = file.type || ''
   const nombre = file.name || 'documento.pdf'
-  if (tipo !== 'application/pdf' && !nombre.toLowerCase().endsWith('.pdf')) {
-    throw new HttpError(400, 'El archivo debe ser un PDF.')
-  }
+  const ext = (nombre.split('.').pop() || '').toLowerCase()
+  const mime = (file.type && MIMES_OK.includes(file.type)) ? file.type : EXT_MIME[ext]
+  if (!mime) throw new HttpError(400, 'El archivo debe ser un PDF o una foto (JPG, PNG, WEBP, HEIC).')
+
   const buffer = Buffer.from(await file.arrayBuffer())
-  if (buffer.length === 0) throw new HttpError(400, 'El PDF está vacío.')
-  if (buffer.length > MAX_BYTES) throw new HttpError(400, 'El PDF supera el máximo de 10 MB.')
+  if (buffer.length === 0) throw new HttpError(400, 'El archivo está vacío.')
+  if (buffer.length > MAX_BYTES) throw new HttpError(400, 'El archivo supera el máximo de 15 MB.')
 
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
   const db = getDb()
@@ -49,11 +62,12 @@ export async function subirPdf(file, { uploadedBy } = {}) {
   // Defensa anti doble-carga: mismo contenido ya cargado.
   const { data: dup } = await db
     .from('cp_archivos')
-    .select('id, nombre')
+    .select('*')
     .eq('sha256', sha256)
     .maybeSingle()
   if (dup) {
-    throw new HttpError(409, `Este PDF ya fue cargado antes (archivo #${dup.id} · ${dup.nombre}).`)
+    if (reusarSiExiste) return dup
+    throw new HttpError(409, `Este archivo ya fue cargado antes (archivo #${dup.id} · ${dup.nombre}).`)
   }
 
   const safe = nombre.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
@@ -61,14 +75,14 @@ export async function subirPdf(file, { uploadedBy } = {}) {
 
   const { error: upErr } = await db.storage
     .from(BUCKET)
-    .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: false })
-  if (upErr) throw new HttpError(500, 'No se pudo subir el PDF: ' + upErr.message)
+    .upload(storagePath, buffer, { contentType: mime, upsert: false })
+  if (upErr) throw new HttpError(500, 'No se pudo subir el archivo: ' + upErr.message)
 
   const { data: archivo, error: insErr } = await db
     .from('cp_archivos')
     .insert({
       nombre,
-      mime_type: 'application/pdf',
+      mime_type: mime,
       tamano_bytes: buffer.length,
       storage_path: storagePath,
       sha256,
@@ -82,6 +96,45 @@ export async function subirPdf(file, { uploadedBy } = {}) {
     throw new HttpError(500, 'No se pudo registrar el archivo: ' + insErr.message)
   }
   return archivo
+}
+
+// Alias histórico (comprobantes de pago y facturas siguen llamándolo así).
+export const subirPdf = subirArchivo
+
+// ── Documentos de una compra ────────────────────────────────────────────────
+// El corazón de "¿qué me falta?": 4 documentos por compra. El que casi siempre
+// queda colgando es la factura del proveedor.
+export const DOCS = [
+  { clave: 'venta',        label: 'Venta al cliente',       emoji: '🧍' },
+  { clave: 'cotizacion',   label: 'Cotización proveedor',   emoji: '💬' },
+  { clave: 'comprobante',  label: 'Comprobante de pago',    emoji: '💸' },
+  { clave: 'factura',      label: 'Factura del proveedor',  emoji: '🧾' },
+]
+
+// Calcula qué documentos faltan. `pagos` viene con comprobante_archivo_id y
+// link (cp_factura_pago_link). Devuelve { docs, faltantes, falta_factura, ... }.
+export function docsDeCompra(compra, pagos = []) {
+  const hayPagos = pagos.length > 0
+  const conComprobante = pagos.some(p => p.comprobante_archivo_id)
+  const pagosSinFactura = pagos.filter(p => !p.link || p.link.length === 0)
+
+  const estados = {
+    venta: !!compra?.venta_archivo_id,
+    cotizacion: !!compra?.cotizacion_archivo_id,
+    comprobante: hayPagos && conComprobante,
+    // La factura se considera pendiente sólo cuando ya se pagó algo: antes de
+    // pagar, lo pendiente es el pago, no la factura.
+    factura: hayPagos ? pagosSinFactura.length === 0 : true,
+  }
+  const docs = DOCS.map(d => ({ ...d, ok: estados[d.clave] }))
+  const faltantes = docs.filter(d => !d.ok).map(d => d.clave)
+  return {
+    docs,
+    faltantes,
+    falta_factura: !estados.factura,
+    falta_pago: !hayPagos,
+    monto_sin_factura: pagosSinFactura.reduce((s, p) => s + Number(p.monto || 0), 0),
+  }
 }
 
 // Sugerencia automática de match para una factura (sección 8.2 del spec).
