@@ -130,6 +130,7 @@ function ConsultaTab() {
   }
 
   const acciones = res?.encontrado ? Number(res.acciones) || 0 : 0;
+  const pendientes = res ? Number(res.pendientes) || 0 : 0;
 
   return (
     <div>
@@ -142,7 +143,7 @@ function ConsultaTab() {
         {error && <ErrorMsg>{error}</ErrorMsg>}
       </Card>
 
-      {res && !res.encontrado && (
+      {res && !res.encontrado && pendientes === 0 && (
         <Card>
           <div style={{ textAlign: 'center', padding: '6px 0' }}>
             <div style={{ fontSize: 40 }}>🔍</div>
@@ -155,7 +156,27 @@ function ConsultaTab() {
       )}
 
       {res?.encontrado && <AccionesCard nombre={res.nombre} acciones={acciones} yaGano={res.ya_gano} />}
+
+      {pendientes > 0 && <EnProceso n={pendientes} />}
     </div>
+  );
+}
+
+function EnProceso({ n }) {
+  return (
+    <Card style={{ background: '#fff7ee', borderColor: '#f4d3ac' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 28 }}>⏳</span>
+        <div>
+          <p style={{ margin: 0, fontWeight: 700, color: C.orange, fontSize: 15 }}>
+            {n} {n === 1 ? 'factura en proceso' : 'facturas en proceso'}
+          </p>
+          <p style={{ margin: '2px 0 0', color: C.muted, fontSize: 13 }}>
+            Se acreditan solas apenas tu factura entre al sistema (puede tardar hasta ~2 horas). No tenés que hacer nada.
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -261,7 +282,21 @@ function RegistrarTab() {
         {error && <ErrorMsg>{error}</ErrorMsg>}
       </Card>
 
-      {ok && (
+      {ok && ok.pendiente && (
+        <Card style={{ borderColor: '#f4d3ac', background: '#fff7ee' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 40 }}>⏳</div>
+            <p style={{ margin: '6px 0 4px', fontWeight: 700, color: C.orange, fontSize: 18 }}>
+              ¡Recibimos tu factura!
+            </p>
+            <p style={{ margin: 0, color: C.ink, fontSize: 14, lineHeight: 1.5 }}>
+              {ok.mensaje || 'Tus acciones se acreditan solas en un rato. No tenés que hacer nada más.'}
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {ok && !ok.pendiente && (
         <Card style={{ borderColor: '#bfe3cd', background: C.greenBg }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 40 }}>🎉</div>
