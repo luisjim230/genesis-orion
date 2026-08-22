@@ -68,6 +68,7 @@ export default function RifaAdminPage() {
             {[
               ['ranking', `Participantes (${data.saldos.length})`],
               ['registros', `Registros (${data.registros.length})`],
+              ['pendientes', `⏳ Pendientes (${data.kpis.pendientesEnCola || 0})`],
               ['sorteo', `🎰 Sorteo (${data.ganadores.length})`],
               ['patrocinadores', `Patrocinadores (${data.patrocinadores.length})`],
               ['config', 'Configuración'],
@@ -82,6 +83,7 @@ export default function RifaAdminPage() {
 
           {tab === 'ranking' && <Ranking saldos={data.saldos} />}
           {tab === 'registros' && <Registros registros={data.registros} />}
+          {tab === 'pendientes' && <Pendientes lista={data.pendientes} onChange={cargar} />}
           {tab === 'sorteo' && <Sorteo kpis={data.kpis} ganadores={data.ganadores} onChange={cargar} />}
           {tab === 'patrocinadores' && <Patrocinadores lista={data.patrocinadores} onChange={cargar} />}
           {tab === 'config' && <Config rows={data.configRows} onChange={cargar} />}
@@ -165,6 +167,70 @@ function Registros({ registros }) {
               </tr>
             ))}
             {registros.length === 0 && <tr><Td colSpan={6}><span style={{ color: C.muted }}>Sin registros.</span></Td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Pendientes ────────────────────────────────────────────────────────────────
+function Pendientes({ lista, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function accion(metodo, body) {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch('/api/rifa-admin/pendientes', {
+        method: metodo, headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Error');
+      if (j.resultado) setMsg({ tipo: 'ok', txt: `Robot: ${j.resultado.acreditadas} acreditadas, ${j.resultado.en_espera} en espera, ${j.resultado.fallidas} fallidas.` });
+      await onChange();
+    } catch (e) { setMsg({ tipo: 'error', txt: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  const badge = (estado) => {
+    const map = { pendiente: [C.gold, 'En cola'], procesada: [C.green, 'Acreditada'], fallida: [C.red, 'Fallida'] };
+    const [color, txt] = map[estado] || [C.muted, estado];
+    return <Chip color={color}>{txt}</Chip>;
+  };
+
+  return (
+    <div style={cardStyle}>
+      {msg && <Banner tipo={msg.tipo}>{msg.txt}</Banner>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <p style={{ fontSize: 13, color: C.sec, margin: 0 }}>
+          Facturas que el cliente registró antes de que sincronizaran. El robot reintenta solo cada 30 min.
+        </p>
+        <button onClick={() => accion('POST')} disabled={busy} style={miniBtnOrange}>
+          {busy ? 'Procesando…' : '⚡ Procesar ahora'}
+        </button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={tableStyle}>
+          <thead><tr><Th>Fecha</Th><Th>Cédula</Th><Th>Factura</Th><Th right>Monto</Th><Th>Estado</Th><Th right>Intentos</Th><Th>Detalle</Th><Th></Th></tr></thead>
+          <tbody>
+            {lista.map((p) => (
+              <tr key={p.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                <Td>{fmtFecha(p.fecha_creacion)}</Td>
+                <Td mono>{p.cedula}</Td>
+                <Td mono>…{p.ult_factura}</Td>
+                <Td right>{money(p.monto_declarado)}</Td>
+                <Td>{badge(p.estado)}</Td>
+                <Td right>{p.intentos}</Td>
+                <Td><span style={{ fontSize: 12, color: C.muted }}>{p.ultimo_error || '—'}</span></Td>
+                <Td right>
+                  {p.estado === 'fallida' && <button onClick={() => accion('PATCH', { id: p.id })} style={miniBtn}>Reintentar</button>}{' '}
+                  <button onClick={() => { if (confirm('¿Eliminar este pendiente?')) accion('DELETE', { id: p.id }); }} style={miniBtn}>✕</button>
+                </Td>
+              </tr>
+            ))}
+            {lista.length === 0 && <tr><Td colSpan={8}><span style={{ color: C.muted }}>Sin pendientes.</span></Td></tr>}
           </tbody>
         </table>
       </div>
