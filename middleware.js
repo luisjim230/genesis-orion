@@ -121,6 +121,12 @@ export async function middleware(req) {
   // NO entra acá y queda protegido por el guard de abajo.
   // ────────────────────────────────────────────────────────────────────────
   if (host === CLUB_HOST || host === RIFA_HOST || clubPath || rifaPath) {
+    // La rifa pública vive en su subdominio propio. Si alguien entra por /rifa en
+    // CUALQUIER otro host (ej. sol.depositojimenez.com/rifa), lo mandamos al
+    // subdominio para que el dominio interno de SOL nunca aparezca.
+    if (rifaPath && host !== RIFA_HOST) {
+      return NextResponse.redirect(new URL('/', `https://${RIFA_HOST}`), 307);
+    }
     const h = new Headers(req.headers);
     h.set('x-club-public', '1');
     if (host === CLUB_HOST && (pathname === '/' || pathname === '')) {
