@@ -415,12 +415,14 @@ const LABELS = {
   bono_patrocinador_mult: 'Multiplicador patrocinador (×)',
   bono_web_mult: 'Multiplicador web (×)',
   vendedor_web: 'Vendedor web (nombre en NEO)',
+  fecha_desde: 'Solo cuentan facturas desde (YYYY-MM-DD, vacío = todas)',
   fecha_corte: 'Fecha de corte (ISO, vacío = sin corte)',
   activa: 'Rifa activa (true/false)',
   digitos_factura: 'Dígitos de factura para el match',
   tolerancia_monto_pct: 'Tolerancia de monto (%)',
+  horas_max_pendiente: 'Horas de espera antes de dar por fallida una factura',
 };
-const ORDEN_CFG = ['activa', 'colones_por_accion', 'bono_patrocinador_mult', 'bono_web_mult', 'vendedor_web', 'fecha_corte', 'digitos_factura', 'tolerancia_monto_pct'];
+const ORDEN_CFG = ['activa', 'fecha_desde', 'colones_por_accion', 'bono_patrocinador_mult', 'bono_web_mult', 'vendedor_web', 'fecha_corte', 'digitos_factura', 'tolerancia_monto_pct', 'horas_max_pendiente'];
 
 function Config({ rows, onChange }) {
   const [drafts, setDrafts] = useState({});
