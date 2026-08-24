@@ -132,6 +132,7 @@ function ConsultaTab() {
   const acciones = res?.encontrado ? Number(res.acciones) || 0 : 0;
   const pendientes = res ? Number(res.pendientes) || 0 : 0;
   const fallidas = res && Array.isArray(res.fallidas) ? res.fallidas : [];
+  const historial = res && Array.isArray(res.historial) ? res.historial : [];
 
   return (
     <div>
@@ -161,8 +162,50 @@ function ConsultaTab() {
       {pendientes > 0 && <EnProceso n={pendientes} />}
 
       {fallidas.length > 0 && <Fallidas lista={fallidas} />}
+
+      {res?.encontrado && historial.length > 0 && <Historial lista={historial} />}
     </div>
   );
+}
+
+function Historial({ lista }) {
+  const fmt = (s) => {
+    try { return new Date(s).toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit', year: '2-digit' }); }
+    catch { return ''; }
+  };
+  return (
+    <Card>
+      <h3 style={{ margin: '0 0 4px', fontSize: 16, color: C.burgundy, fontWeight: 700 }}>Tus facturas que sumaron</h3>
+      <p style={{ margin: '0 0 12px', fontSize: 13, color: C.muted }}>De acá salen tus acciones.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {lista.map((h, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+            borderRadius: 12, background: C.cream, border: `1px solid ${C.border}`,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>
+                {money(h.monto)}
+                <span style={{ color: C.muted, fontWeight: 400, fontSize: 12.5 }}> · factura …{h.factura} · {fmt(h.fecha)}</span>
+              </div>
+              <div style={{ marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {h.es_web && <MiniTag color={C.teal}>🌐 web ×3</MiniTag>}
+                {!h.es_web && h.patrocinador && <MiniTag color={C.gold}>🤝 patrocinador ×2</MiniTag>}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: C.green, lineHeight: 1 }}>+{Number(h.acciones) || 0}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>{Number(h.acciones) === 1 ? 'acción' : 'acciones'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function MiniTag({ children, color }) {
+  return <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: color, borderRadius: 6, padding: '2px 7px' }}>{children}</span>;
 }
 
 function Fallidas({ lista }) {
