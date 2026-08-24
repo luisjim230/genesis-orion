@@ -14,6 +14,12 @@ const PUBLIC_SITE = 'https://depositojimenezcr.com';
 // de sesión de SOL). Configurable por env var CLUB_DOMAIN.
 const CLUB_HOST = (process.env.CLUB_DOMAIN || 'club.depositojimenez.com').toLowerCase();
 
+// Subdominio público dedicado de la Rifa de Motos. Igual que el Club: su raíz
+// sirve la página pública de la rifa y NUNCA pasa por el guard de sesión de SOL,
+// para que el link que se comparte con clientes no exponga el dominio interno.
+// Configurable por env var RIFA_DOMAIN.
+const RIFA_HOST = (process.env.RIFA_DOMAIN || 'rifa.depositojimenez.com').toLowerCase();
+
 export async function middleware(req) {
   // ────────────────────────────────────────────────────────────────────────
   // CHECK ESPECIAL: dominio del acortador.
@@ -114,12 +120,17 @@ export async function middleware(req) {
   // OJO: /club es coincidencia EXACTA (clubPath) — el panel admin (/club-admin)
   // NO entra acá y queda protegido por el guard de abajo.
   // ────────────────────────────────────────────────────────────────────────
-  if (host === CLUB_HOST || clubPath || rifaPath) {
+  if (host === CLUB_HOST || host === RIFA_HOST || clubPath || rifaPath) {
     const h = new Headers(req.headers);
     h.set('x-club-public', '1');
     if (host === CLUB_HOST && (pathname === '/' || pathname === '')) {
       const url = req.nextUrl.clone();
       url.pathname = '/club';
+      return NextResponse.rewrite(url, { request: { headers: h } });
+    }
+    if (host === RIFA_HOST && (pathname === '/' || pathname === '')) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/rifa';
       return NextResponse.rewrite(url, { request: { headers: h } });
     }
     return NextResponse.next({ request: { headers: h } });
