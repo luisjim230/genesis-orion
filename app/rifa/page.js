@@ -288,7 +288,7 @@ function RegistrarTab() {
     if (!f.cedula.trim()) { setError('La cédula es obligatoria.'); return; }
     if (!f.nombre.trim()) { setError('Escribí tu nombre completo (lo necesitamos para contactarte si ganás).'); return; }
     if (!f.telefono.trim()) { setError('Escribí tu teléfono (lo necesitamos para contactarte si ganás).'); return; }
-    if (!f.factura.trim()) { setError('Escribí los últimos 5 dígitos de la factura.'); return; }
+    if (!f.factura.trim()) { setError('Escribí los últimos dígitos de la factura.'); return; }
     if (!f.monto || Number(f.monto) <= 0) { setError('Escribí el monto de la factura.'); return; }
 
     setLoading(true);
@@ -341,8 +341,8 @@ function RegistrarTab() {
           </p>
 
           <div style={{ marginTop: 12 }}>
-            <Label>Últimos 5 dígitos de la factura</Label>
-            <Input value={f.factura} onChange={set('factura')} placeholder="Ej: 04812" inputMode="numeric" maxLength={5} />
+            <Label>Últimos 6 dígitos de la factura</Label>
+            <Input value={f.factura} onChange={set('factura')} placeholder="Ej: 226327" inputMode="numeric" maxLength={6} />
           </div>
 
           <div style={{ marginTop: 12 }}>
