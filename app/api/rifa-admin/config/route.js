@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 const CLAVES_OK = new Set([
   'digitos_factura', 'tolerancia_monto_pct', 'colones_por_accion',
   'bono_patrocinador_mult', 'bono_web_mult', 'vendedor_web', 'fecha_corte', 'activa',
+  'fecha_desde', 'horas_max_pendiente',
 ]);
 
 // Actualiza una perilla de configuración de la rifa.
