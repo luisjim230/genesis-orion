@@ -279,17 +279,37 @@ function RegistrarTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [ok, setOk] = useState(null);
+  const [yaReg, setYaReg] = useState(null); // {nombre} si la cédula ya está registrada
 
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  // Al salir del campo cédula: si ya existe, no le volvemos a pedir sus datos.
+  async function chequearCedula() {
+    const ced = f.cedula.trim();
+    if (ced.length < 5) { setYaReg(null); return; }
+    try {
+      const { data } = await supabase.rpc('rifa_consultar_acciones', { p_cedula: ced });
+      setYaReg(data?.encontrado ? { nombre: data.nombre } : null);
+    } catch { /* si falla, pedimos los datos igual */ }
+  }
 
   async function registrar(e) {
     e.preventDefault();
     setError(null); setOk(null);
     if (!f.cedula.trim()) { setError('La cédula es obligatoria.'); return; }
-    if (!f.nombre.trim()) { setError('Escribí tu nombre completo (lo necesitamos para contactarte si ganás).'); return; }
-    if (!f.telefono.trim()) { setError('Escribí tu teléfono (lo necesitamos para contactarte si ganás).'); return; }
     if (!f.factura.trim()) { setError('Escribí los últimos dígitos de la factura.'); return; }
     if (!f.monto || Number(f.monto) <= 0) { setError('Escribí el monto de la factura.'); return; }
+
+    // Nombre y teléfono solo la PRIMERA vez (si la cédula todavía no existe).
+    let conocido = yaReg;
+    if (!conocido && (!f.nombre.trim() || !f.telefono.trim())) {
+      try {
+        const { data } = await supabase.rpc('rifa_consultar_acciones', { p_cedula: f.cedula.trim() });
+        if (data?.encontrado) { conocido = { nombre: data.nombre }; setYaReg(conocido); }
+      } catch { /* seguimos con la validación de abajo */ }
+    }
+    if (!conocido && !f.nombre.trim()) { setError('La primera vez necesitamos tu nombre (para avisarte si ganás).'); return; }
+    if (!conocido && !f.telefono.trim()) { setError('La primera vez necesitamos tu teléfono (para avisarte si ganás).'); return; }
 
     setLoading(true);
     try {
@@ -301,8 +321,14 @@ function RegistrarTab() {
         p_monto: Number(f.monto),
       });
       if (error) throw error;
-      if (data?.ok) setOk(data);
-      else setError(data?.error || 'No pudimos registrar la factura.');
+      if (data?.ok) {
+        setOk(data);
+        // Ya quedó registrado: no volver a pedir sus datos en esta sesión.
+        setYaReg({ nombre: f.nombre.trim() || yaReg?.nombre || '' });
+        setF((s) => ({ ...s, factura: '', monto: '' }));
+      } else {
+        setError(data?.error || 'No pudimos registrar la factura.');
+      }
     } catch {
       setError('No pudimos registrar. Revisá los datos y probá de nuevo.');
     } finally {
@@ -322,23 +348,34 @@ function RegistrarTab() {
         <form onSubmit={registrar}>
           <div style={{ background: C.cream, border: `1.5px solid ${C.orange}`, borderRadius: 12, padding: 12, marginBottom: 14 }}>
             <Label style={{ color: C.orange }}>Cédula</Label>
-            <Input value={f.cedula} onChange={set('cedula')} placeholder="1-2345-6789" inputMode="numeric" />
+            <Input value={f.cedula} onChange={set('cedula')} onBlur={chequearCedula} placeholder="1-2345-6789" inputMode="numeric" />
             <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted }}>Las acciones se acreditan a esta cédula.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <Label>Nombre completo</Label>
-              <Input value={f.nombre} onChange={set('nombre')} placeholder="Tu nombre" />
+          {yaReg ? (
+            <div style={{
+              marginBottom: 14, padding: '10px 12px', borderRadius: 12,
+              background: C.greenBg, border: '1px solid #bfe3cd', fontSize: 13.5, color: C.green, fontWeight: 600,
+            }}>
+              👋 Te reconocimos{yaReg.nombre ? `, ${yaReg.nombre}` : ''}. No hace falta que pongas tus datos de nuevo.
             </div>
-            <div>
-              <Label>Teléfono</Label>
-              <Input value={f.telefono} onChange={set('telefono')} placeholder="8888-8888" inputMode="tel" />
-            </div>
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted }}>
-            📞 Los pedimos para poder avisarte si ganás.
-          </p>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <Label>Nombre completo</Label>
+                  <Input value={f.nombre} onChange={set('nombre')} placeholder="Tu nombre" />
+                </div>
+                <div>
+                  <Label>Teléfono</Label>
+                  <Input value={f.telefono} onChange={set('telefono')} placeholder="8888-8888" inputMode="tel" />
+                </div>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted }}>
+                📞 Los pedimos (solo la primera vez) para avisarte si ganás.
+              </p>
+            </>
+          )}
 
           <div style={{ marginTop: 12 }}>
             <Label>Últimos 6 dígitos de la factura</Label>
