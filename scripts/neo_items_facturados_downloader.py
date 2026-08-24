@@ -379,20 +379,26 @@ def subir_a_supabase(excel_path):
     log.info(f"✅ Supabase: {ok:,}/{total:,} registros cargados")
     exito = ok == total
 
-    # Refrescar la vista materializada que alimenta comercial_top_productos/tendencias.
-    # Sin esto, los reportes quedan congelados en datos viejos.
-    refresh_status = supa_request("POST", "rpc/refresh_mv_items_por_vend_mes", {},
-                                   prefer="return=minimal")
-    if refresh_status and refresh_status < 300:
-        log.info("  ↻ vista materializada refrescada")
-
-    # Refrescar promedio mensual de ventas (últimos 6m) usado por Compras.
-    refresh_consumo = supa_request("POST", "rpc/refresh_mv_consumo_mensual", {},
-                                    prefer="return=minimal")
-    if refresh_consumo and refresh_consumo < 300:
-        log.info("  ↻ mv_consumo_mensual refrescada")
+    # Refresco de vistas materializadas (PESADO: barren ~786k filas). Se OMITE en las
+    # corridas rápidas (--no-mv), que solo bajan facturas frescas (para la rifa) sin
+    # disparar Disk IO. El refresco lo hace la corrida completa cada 2h.
+    if "--no-mv" in sys.argv:
+        log.info("  ⏭ --no-mv: se omite el refresco de vistas materializadas (ahorro Disk IO)")
     else:
-        log.warning(f"  ⚠ refresh de vista materializada falló (status={refresh_status})")
+        # Refrescar la vista materializada que alimenta comercial_top_productos/tendencias.
+        # Sin esto, los reportes quedan congelados en datos viejos.
+        refresh_status = supa_request("POST", "rpc/refresh_mv_items_por_vend_mes", {},
+                                       prefer="return=minimal")
+        if refresh_status and refresh_status < 300:
+            log.info("  ↻ vista materializada refrescada")
+
+        # Refrescar promedio mensual de ventas (últimos 6m) usado por Compras.
+        refresh_consumo = supa_request("POST", "rpc/refresh_mv_consumo_mensual", {},
+                                        prefer="return=minimal")
+        if refresh_consumo and refresh_consumo < 300:
+            log.info("  ↻ mv_consumo_mensual refrescada")
+        else:
+            log.warning(f"  ⚠ refresh de vista materializada falló (status={refresh_status})")
 
     # Actualizar sync_status
     ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")

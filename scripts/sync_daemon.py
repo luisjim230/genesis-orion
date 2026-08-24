@@ -60,6 +60,7 @@ SCRIPT_MAP = {
     "antiguedad_proveedores":  "neo_antiguedad_proveedores_downloader.py",
     "antiguedad_clientes":     "neo_antiguedad_clientes_downloader.py",
     "items_facturados":        "neo_items_facturados_downloader.py",
+    "items_facturados_rapido": "neo_items_facturados_downloader.py",
     "informe_ventas_vendedor": "neo_informe_ventas_vendedor_downloader.py",
     "movimientos_contables":   "neo_movimientos_contables_downloader.py",
     "asientos_estado":         "neo_asientos_estado_downloader.py",
@@ -74,6 +75,9 @@ SCRIPT_MAP = {
 # dispara el daemon en segundo plano.
 SCRIPT_EXTRA_ARGS = {
     "asientos_upload": ["--headless"],
+    # Corrida rápida de facturas: baja datos frescos para la rifa SIN refrescar las
+    # vistas materializadas pesadas (eso lo hace 'items_facturados' cada 2h).
+    "items_facturados_rapido": ["--no-mv"],
 }
 
 
@@ -229,7 +233,10 @@ def _cada(paso_horas, minuto, desde=7, hasta=18):
 # Cadencia por reporte. Calibrada para bajar el Disk IO sin perder frescura:
 # todos los insumos del Reporte Matutino corren ANTES de las 9:30.
 SCHEDULE = {
-    "items_facturados":        _cada(2, 0, 7, 18),             # ventas: cada 2h 7am-6pm
+    "items_facturados":        _cada(2, 0, 7, 18),             # ventas + vistas materializadas: cada 2h 7am-6pm
+    # Rifa: baja facturas frescas cada 30 min (7:15am–8:45pm) SIN refrescar vistas
+    # (corre con --no-mv), así las acciones se acreditan rápido sin subir el Disk IO.
+    "items_facturados_rapido": [(h, m) for h in range(7, 21) for m in (15, 45)],
     "items_comprados":         [(10,0),(16,0)],
     "lista_items":             [(8,0),(12,0),(16,0)],
     "minimos_maximos":         [(8,5),(12,5),(16,5)],
