@@ -131,6 +131,7 @@ function ConsultaTab() {
 
   const acciones = res?.encontrado ? Number(res.acciones) || 0 : 0;
   const pendientes = res ? Number(res.pendientes) || 0 : 0;
+  const fallidas = res && Array.isArray(res.fallidas) ? res.fallidas : [];
 
   return (
     <div>
@@ -158,7 +159,32 @@ function ConsultaTab() {
       {res?.encontrado && <AccionesCard nombre={res.nombre} acciones={acciones} yaGano={res.ya_gano} />}
 
       {pendientes > 0 && <EnProceso n={pendientes} />}
+
+      {fallidas.length > 0 && <Fallidas lista={fallidas} />}
     </div>
+  );
+}
+
+function Fallidas({ lista }) {
+  return (
+    <Card style={{ background: '#fdf0ef', borderColor: '#f2c2bd' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontSize: 24 }}>⚠️</span>
+        <p style={{ margin: 0, fontWeight: 700, color: '#b03a3a', fontSize: 15 }}>
+          {lista.length === 1 ? 'Una factura no sumó' : 'Facturas que no sumaron'}
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {lista.map((f, i) => (
+          <div key={i} style={{ background: '#fff', border: '1px solid #f2c2bd', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>
+              {money(f.monto)}{f.factura ? <span style={{ color: C.muted, fontWeight: 400 }}> · factura …{f.factura}</span> : null}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#b03a3a', marginTop: 2 }}>{f.motivo || 'No aplicó.'}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -248,7 +274,7 @@ function RegistrarTab() {
           background: C.cream, border: `1px solid ${C.border}`, borderRadius: 12,
           padding: '10px 12px', marginBottom: 14, fontSize: 12.5, color: C.muted,
         }}>
-          ⏱️ Tu factura puede tardar hasta <b>1 hora</b> en aparecer en el sistema. Si no la encontramos, esperá un rato y probá de nuevo.
+          ⏱️ Tu factura puede tardar hasta <b>2 horas</b> en aparecer en el sistema. Igual dejá tus datos: tus acciones se acreditan solas cuando la factura entre.
         </div>
         <form onSubmit={registrar}>
           <div style={{ background: C.cream, border: `1.5px solid ${C.orange}`, borderRadius: 12, padding: 12, marginBottom: 14 }}>
