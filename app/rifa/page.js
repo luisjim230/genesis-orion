@@ -34,7 +34,7 @@ const fontBody = "var(--font-rubik), system-ui, sans-serif";
 const money = (n) => '₡' + (Number(n) || 0).toLocaleString('es-CR');
 
 export default function RifaPage() {
-  const [tab, setTab] = useState('acciones');
+  const [tab, setTab] = useState('factura');
 
   return (
     <div style={{
@@ -55,8 +55,8 @@ export default function RifaPage() {
           border: `1px solid ${C.border}`, boxShadow: '0 4px 18px rgba(94,39,51,0.08)',
           margin: '18px 0', position: 'sticky', top: 8, zIndex: 5,
         }}>
-          <TabBtn active={tab === 'acciones'} onClick={() => setTab('acciones')}>Mis acciones</TabBtn>
           <TabBtn active={tab === 'factura'} onClick={() => setTab('factura')}>Registrar factura</TabBtn>
+          <TabBtn active={tab === 'acciones'} onClick={() => setTab('acciones')}>Mis acciones</TabBtn>
         </div>
 
         {tab === 'acciones' ? <ConsultaTab /> : <RegistrarTab />}
