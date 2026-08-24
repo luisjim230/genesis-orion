@@ -217,6 +217,8 @@ function RegistrarTab() {
     e.preventDefault();
     setError(null); setOk(null);
     if (!f.cedula.trim()) { setError('La cédula es obligatoria.'); return; }
+    if (!f.nombre.trim()) { setError('Escribí tu nombre completo (lo necesitamos para contactarte si ganás).'); return; }
+    if (!f.telefono.trim()) { setError('Escribí tu teléfono (lo necesitamos para contactarte si ganás).'); return; }
     if (!f.factura.trim()) { setError('Escribí los últimos 5 dígitos de la factura.'); return; }
     if (!f.monto || Number(f.monto) <= 0) { setError('Escribí el monto de la factura.'); return; }
 
@@ -257,14 +259,17 @@ function RegistrarTab() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
-              <Label>Nombre <Solo /></Label>
+              <Label>Nombre completo</Label>
               <Input value={f.nombre} onChange={set('nombre')} placeholder="Tu nombre" />
             </div>
             <div>
-              <Label>Teléfono <Solo /></Label>
+              <Label>Teléfono</Label>
               <Input value={f.telefono} onChange={set('telefono')} placeholder="8888-8888" inputMode="tel" />
             </div>
           </div>
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted }}>
+            📞 Los pedimos para poder avisarte si ganás.
+          </p>
 
           <div style={{ marginTop: 12 }}>
             <Label>Últimos 5 dígitos de la factura</Label>
@@ -443,9 +448,6 @@ function Card({ children, style }) {
 }
 function Label({ children, style }) {
   return <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.burgundy, marginBottom: 6, ...style }}>{children}</label>;
-}
-function Solo() {
-  return <span style={{ fontWeight: 500, color: C.muted, fontSize: 11 }}>(solo la primera vez)</span>;
 }
 function Input(props) {
   return (
