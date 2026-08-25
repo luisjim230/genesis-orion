@@ -111,6 +111,47 @@ def supa_patch(path, data):
         return None
 
 
+TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")
+
+# script_key → id de la fila en sync_status (cuando no coinciden).
+SYNC_STATUS_ID = {
+    "lista_items": "items_lista_general",
+}
+# Scripts que no tienen fila propia en sync_status (o que son corridas parciales
+# y no deben ensuciar el estado del reporte completo).
+SIN_SYNC_STATUS = {"gmail_facturas", "asientos_estado", "asientos_upload",
+                   "items_facturados_rapido"}
+
+
+def alertar_telegram(texto):
+    """Aviso inmediato por Telegram. No crítico: si falta el token, solo loguea."""
+    if not TG_TOKEN or not TG_CHAT:
+        log.warning("  (falta TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID en scripts/.env — no mando alerta)")
+        return
+    try:
+        body = json.dumps({"chat_id": TG_CHAT, "text": texto,
+                           "parse_mode": "HTML", "disable_web_page_preview": True}).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            data=body, method="POST", headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=15)
+    except Exception as e:
+        log.warning(f"  alerta Telegram falló: {e}")
+
+
+def marcar_fallo(script_key):
+    """Deja constancia del fallo en sync_status: exitoso=false y updated_at=ahora,
+    SIN tocar ultima_sync. Antes, cuando un downloader reventaba no escribía nada
+    en Supabase, así que el badge de SOL seguía mostrando la hora vieja como si
+    todo estuviera bien y el health-check no veía nada raro."""
+    if script_key in SIN_SYNC_STATUS:
+        return
+    sid = SYNC_STATUS_ID.get(script_key, script_key)
+    ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    supa_patch(f"sync_status?id=eq.{sid}", {"exitoso": False, "updated_at": ahora})
+
+
 def latido():
     """Escribe un latido (timestamp UTC) a Supabase y a un archivo local en cada
     ciclo. Permite que el health-check (en la nube) detecte si el daemon murió en
@@ -188,6 +229,8 @@ def procesar_solicitud(req):
         "status": status,
         "completed_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     })
+    if status != "completed":
+        marcar_fallo(script_key)
 
     # Tras bajar los estados de asientos de NEO, rellenar el número de asiento
     # (asiento_neo) en los asientos ya sincronizados, cruzando por descripción.
@@ -266,7 +309,8 @@ def _slot_vencido(spec, now):
 
 
 def reportes_pendientes():
-    """Reportes con un horario vencido que todavía no se corrió en ese slot."""
+    """[(slot, script_key)] de los reportes con un horario vencido que todavía no
+    se corrió en ese slot, en orden de horario."""
     now = datetime.now()
     if now.weekday() not in SCHEDULE_WEEKDAYS:
         return []
@@ -278,19 +322,20 @@ def reportes_pendientes():
         if _last_run.get(key) is None or _last_run[key] < slot:
             due.append((slot, key))
     due.sort()  # correr en orden de horario
-    return [key for _, key in due]
+    return due
 
 
 def ejecutar_script(script_key):
-    """Corre un script directamente (sin pasar por sync_requests en Supabase)."""
+    """Corre un script directamente (sin pasar por sync_requests en Supabase).
+    Devuelve True si terminó con rc=0."""
     script_file = SCRIPT_MAP.get(script_key)
     if not script_file:
         log.warning(f"  ⏭ '{script_key}' sin script definido")
-        return
+        return False
     script_path = SCRIPTS / script_file
     if not script_path.exists():
         log.error(f"  ❌ No existe: {script_path}")
-        return
+        return False
 
     log.info(f"  ▶ {script_key}")
     try:
@@ -305,10 +350,12 @@ def ejecutar_script(script_key):
         log.info(f"  {'✅' if ok else '❌'} {script_key} (rc={result.returncode})")
         if not ok:
             log.error(f"    stderr: {result.stderr[-300:]}")
+        return ok
     except subprocess.TimeoutExpired:
         log.error(f"  ⏱ Timeout: {script_key}")
     except Exception as e:
         log.error(f"  Error {script_key}: {e}")
+    return False
 
 
 def refrescar_mv(fn):
@@ -336,23 +383,52 @@ def _llamar_endpoint(path, timeout, nombre):
         log.warning(f"  ⚠️ {nombre} falló (no crítico): {e}")
 
 
+# Intentos por slot: si un reporte falla, se reintenta en el ciclo siguiente
+# (60s) en vez de esperar 4 horas al próximo horario. Un fallo puntual de NEO
+# (sesión caída, reporte lento) se recupera solo.
+MAX_INTENTOS_SLOT = 3
+_intentos: dict = {}   # script_key -> (slot, intentos_hechos)
+
+
 def check_schedule():
     """Corre EN FILA los reportes cuyo horario venció; refresca vistas al final."""
     due = reportes_pendientes()
     if not due:
         return
-    log.info(f"⏰ Programados ahora ({len(due)}): {', '.join(due)}")
+    log.info(f"⏰ Programados ahora ({len(due)}): {', '.join(k for _, k in due)}")
     corridos = []
-    for key in due:
+    for slot, key in due:
         # Aislamiento por reporte: si UNO falla de forma inesperada, se loguea y
-        # se sigue con el resto. _last_run se marca igual (espera al próximo slot,
-        # no reintenta en bucle cada 60s).
+        # se sigue con el resto.
         try:
-            ejecutar_script(key)
+            ok = ejecutar_script(key)
         except Exception as e:
             log.error(f"  ⚠️ {key}: error inesperado, sigo con el resto: {e}")
-        _last_run[key] = datetime.now()
-        corridos.append(key)
+            ok = False
+
+        if ok:
+            _intentos.pop(key, None)
+            _last_run[key] = datetime.now()
+            corridos.append(key)
+            continue
+
+        # Falló: dejar rastro en sync_status y reintentar en el próximo ciclo.
+        marcar_fallo(key)
+        slot_prev, n = _intentos.get(key, (slot, 0))
+        n = n + 1 if slot_prev == slot else 1
+        _intentos[key] = (slot, n)
+        if n < MAX_INTENTOS_SLOT:
+            log.warning(f"  ↻ {key} falló (intento {n}/{MAX_INTENTOS_SLOT}) — reintento en ~1 min")
+        else:
+            log.error(f"  ⛔ {key} falló {n} veces en el horario {slot:%H:%M} — espero al próximo")
+            _last_run[key] = datetime.now()
+            _intentos.pop(key, None)
+            alertar_telegram(
+                f"🔴 <b>Sync caído: {key}</b>\n\n"
+                f"Falló {n} veces seguidas en el horario de las {slot:%H:%M}.\n"
+                f"Los datos de ese reporte en SOL quedan viejos hasta el próximo horario.\n\n"
+                f"Revisar el log en la Mac: <code>scripts/sync-daemon.log</code>"
+            )
 
     # Tras bajar ítems comprados, recalcular matches de compras.
     if "items_comprados" in corridos:

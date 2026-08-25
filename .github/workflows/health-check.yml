@@ -1,9 +1,10 @@
-name: SOL — Health check 2x/día
+name: SOL — Health check 3x/día
 
 on:
   schedule:
-    # 8am y 4pm hora CR (UTC-6) = 14:00 y 22:00 UTC, lun-sáb
-    - cron: '0 14,22 * * 1-6'
+    # 8:11am, 1:11pm y 4:11pm hora CR (UTC-6) = 14:11, 19:11 y 22:11 UTC, lun-sáb.
+    # Minuto 11 a propósito: en punto GitHub congestiona y atrasa/cancela las corridas.
+    - cron: '11 14,19,22 * * 1-6'
   workflow_dispatch:
 
 jobs:
