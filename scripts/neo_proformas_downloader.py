@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
-from neo_session import relogin_si_hace_falta
+from neo_session import relogin_si_hace_falta, tomar_candado_neo
 load_dotenv(BASE / ".env")
 
 NEO_URL      = "https://neo.neotecnologias.com/NEOBusiness/"
@@ -399,6 +399,9 @@ def descargar_con_reintentos():
 
 
 def main():
+    # Un solo script hablando con NEO a la vez: si hay otro corriendo,
+    # esperamos; si no se libera, salimos con error para reintentar luego.
+    tomar_candado_neo("proformas_cabecera", log)
     log.info("=" * 60)
     log.info("PROFORMAS (cabecera) DOWNLOADER")
     log.info("=" * 60)
