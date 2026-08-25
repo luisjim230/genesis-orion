@@ -209,7 +209,8 @@ def procesar_solicitud(req):
 
     # Antigüedad proveedores y el uploader de asientos tardan más (NEO lento,
     # varios asientos por corrida).
-    script_timeout = {"antiguedad_proveedores": 900, "asientos_upload": 1200}.get(script_key, 600)
+    script_timeout = {"antiguedad_proveedores": 900, "asientos_upload": 1200,
+                      "minimos_maximos": 1200}.get(script_key, 600)
     try:
         result = subprocess.run(
             [PYTHON, str(script_path)] + SCRIPT_EXTRA_ARGS.get(script_key, []),
@@ -300,7 +301,7 @@ SCHEDULE = {
 SCHEDULE_WEEKDAYS = {0, 1, 2, 3, 4, 5}   # 0=Lun ... 5=Sáb (sin domingo)
 
 # Timeout por script (segundos). Antigüedad proveedores tarda más en NEO.
-SCRIPT_TIMEOUTS = {"antiguedad_proveedores": 900}
+SCRIPT_TIMEOUTS = {"antiguedad_proveedores": 900, "minimos_maximos": 1200}
 TIMEOUT_DEFAULT = 600
 
 _last_run: dict = {}  # script_key -> datetime del último run lanzado por el scheduler

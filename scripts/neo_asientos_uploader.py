@@ -31,7 +31,7 @@ from datetime import datetime
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
-from neo_session import relogin_si_hace_falta
+from neo_session import relogin_si_hace_falta, tomar_candado_neo
 
 try:
     from dotenv import load_dotenv
@@ -467,6 +467,10 @@ async def main():
     ap.add_argument("--dry-run", action="store_true", help="Hace todo menos el clic final 'Registrar'")
     ap.add_argument("--headless", action="store_true", help="Sin ventana (por defecto se ve el navegador)")
     args = ap.parse_args()
+    # El uploader usa NEO_USUARIO_2 (sesión propia) y no le pelea la sesión a los
+    # downloaders. Solo cuando cae al usuario principal hay que pedir el candado.
+    if _FALLBACK:
+        tomar_candado_neo("asientos_upload", log)
 
     # Candado: una sola corrida a la vez. Si el daemon dispara dos veces seguidas
     # (varias aprobaciones juntas), la segunda sale sin hacer nada y evita

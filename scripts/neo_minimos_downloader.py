@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
-from neo_session import relogin_si_hace_falta
+from neo_session import relogin_si_hace_falta, tomar_candado_neo
 load_dotenv(BASE / ".env")
 
 NEO_URL      = "https://neo.neotecnologias.com/NEOBusiness/"
@@ -258,6 +258,9 @@ def subir_a_supabase(excel_path):
 # ─── PLAYWRIGHT ───────────────────────────────────────────────────────────────
 
 async def main():
+    # Un solo script hablando con NEO a la vez: si hay otro corriendo,
+    # esperamos; si no se libera, salimos con error para reintentar luego.
+    tomar_candado_neo("minimos_maximos", log)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     log.info("=" * 50)
     log.info(f"NEO → Mínimos y Máximos  [{ts}]")
@@ -445,12 +448,28 @@ async def main():
             log.info("Descargando Excel...")
             dest = DOWNLOAD_DIR / f"minimos_maximos_{date.today().strftime('%Y%m%d_%H%M')}.xlsx"
 
-            # NEO tarda en generar el Excel de este reporte (el más pesado);
-            # con 60s se quedaba corto cuando NEO va lento. 180s da margen.
-            async with page.expect_download(timeout=180000) as dl_info:
-                await iframe.get_by_role("cell", name="Exportar", exact=True).click()
-
-            dl = await dl_info.value
+            # NEO tarda en generar el Excel de este reporte (el más pesado) y a
+            # veces la exportación directamente no arranca: si NEO revalidó la
+            # sesión a mitad de camino, el click a Exportar no dispara nada y el
+            # reporte quedaba sin actualizar hasta el turno siguiente (4 horas).
+            # Reintentamos volviendo a pedir el reporte antes de rendirnos.
+            dl = None
+            for intento in range(1, 4):
+                try:
+                    async with page.expect_download(timeout=120000) as dl_info:
+                        await iframe.get_by_role("cell", name="Exportar", exact=True).click()
+                    dl = await dl_info.value
+                    break
+                except Exception as e:
+                    log.warning(f"  Exportar no arrancó (intento {intento}/3): {str(e).splitlines()[0]}")
+                    if intento == 3:
+                        raise
+                    try:
+                        await iframe.locator("input[value='Refrescar']").first.click()
+                        log.info("  Volviendo a pedir el reporte...")
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(20000)
             await dl.save_as(str(dest))
             log.info(f"✅ Descargado: {dest} ({dest.stat().st_size:,} bytes)")
 

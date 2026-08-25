@@ -11,7 +11,53 @@ a mitad del flujo y el iframe principal viene vacío.
 el botón "Usar aquí" cuando NEO lo ofrece) hasta 3 veces.
 """
 
+import fcntl
+import os
 import re
+import time
+from pathlib import Path
+
+# ─── CANDADO GLOBAL DE NEO ────────────────────────────────────────────────────
+# NEO invalida la sesión cuando ve otra activa con el mismo usuario. El daemon ya
+# corre sus scripts en fila, pero una corrida manual (o el otro set de
+# LaunchAgents) encima de la del daemon rompe las DOS: la que estaba a mitad de
+# camino se queda sin sesión y su exportación muere por timeout.
+# Este candado garantiza que solo un script hable con NEO a la vez.
+LOCK_FILE = Path.home() / "sol-logs" / "neo.lock"
+_lock_fh = None   # se mantiene abierto toda la vida del proceso: el SO suelta el
+                  # candado solo cuando el proceso termina (incluso si crashea).
+
+
+def tomar_candado_neo(nombre, log, espera_max=240):
+    """Espera a que NEO quede libre y toma el candado para este proceso.
+
+    Si no se libera en `espera_max` segundos, corta con SystemExit(1) en vez de
+    entrar igual: el daemon ve el rc=1, reintenta al minuto siguiente y avisa si
+    insiste en fallar. Mejor perder una corrida que romper la que está andando.
+    """
+    global _lock_fh
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _lock_fh = open(LOCK_FILE, "w")
+    inicio = time.time()
+    avisado = False
+    while True:
+        try:
+            fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except (BlockingIOError, OSError):
+            esperado = time.time() - inicio
+            if esperado > espera_max:
+                log.error(f"❌ NEO ocupado por otro script hace más de {espera_max}s — corto para reintentar después.")
+                _lock_fh.close()
+                _lock_fh = None
+                raise SystemExit(1)
+            if not avisado:
+                log.info("  Esperando a que se libere NEO (lo está usando otro script)...")
+                avisado = True
+            time.sleep(5)
+    _lock_fh.write(f"{nombre} pid={os.getpid()}\n")
+    _lock_fh.flush()
+    log.info(f"  🔒 Candado de NEO tomado por {nombre}")
 
 
 async def cerrar_alerta_neo(page, log=None):
