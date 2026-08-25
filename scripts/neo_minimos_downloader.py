@@ -455,13 +455,18 @@ async def main():
             log.info(f"✅ Descargado: {dest} ({dest.stat().st_size:,} bytes)")
 
             # ── 9. SUBIR A SUPABASE ───────────────────────────────────────────
-            subir_a_supabase(dest)
-
-            # Notificación Mac
-            import subprocess
-            subprocess.run(["osascript", "-e",
-                f'display notification "Mínimos y Máximos actualizado en Supabase" with title "SOL ✅" sound name "Purr"'],
-                capture_output=True)
+            # Si la subida aborta (Excel raro, validación de empresa, pocas filas)
+            # hay que salir con error: si no, el daemon lo da por bueno, no reintenta
+            # y los datos quedan viejos sin que salte ninguna alarma.
+            if not subir_a_supabase(dest):
+                log.error("❌ La subida a Supabase no se completó — salgo con error.")
+                exit_code = 1
+            else:
+                # Notificación Mac
+                import subprocess
+                subprocess.run(["osascript", "-e",
+                    f'display notification "Mínimos y Máximos actualizado en Supabase" with title "SOL ✅" sound name "Purr"'],
+                    capture_output=True)
 
         except Exception as e:
             log.error(f"Error: {e}", exc_info=True)
