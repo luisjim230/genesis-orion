@@ -2,8 +2,9 @@
 /**
  * health_check.mjs — Monitoreo automático del sistema SOL.
  *
- * Corre 2×/día (8am y 4pm CR) vía GitHub Actions. Verifica:
- *   1. sync_status: última sincronización <30h para ítems críticos
+ * Corre 3×/día (8am, 1pm y 4pm CR) vía GitHub Actions. Verifica:
+ *   1. sync_status: cada reporte crítico corrió en su horario esperado
+ *      (y no quedó marcado como fallido por el daemon)
  *   2. /api/procesar-match responde OK (env vars OK, RLS OK, upserts OK)
  *   3. neo_items_comprados tiene datos recientes
  *   4. neo_lista_items.ultima_venta tiene ventas de los últimos días
@@ -35,11 +36,24 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !TELEGRAM_BOT_TOKEN || !TELEGRAM_C
   process.exit(1);
 }
 
-// Umbrales relajados: con 2 corridas/día alcanza con ventana de 30h para
-// detectar sync caídos sin generar falsos positivos si hay un delay menor.
+// Backstop absoluto para reportes sin horario declarado abajo.
 const HORAS_SYNC_CRITICO = 30;
 const DIAS_MAX_SIN_VENTAS = 4; // si hace 4+ días sin ventas cargadas, algo pasa
 const REPORTES_CRITICOS = ['items_comprados', 'items_lista_general', 'minimos_maximos'];
+
+// Horarios (hora CR) en que el daemon de la Mac corre cada reporte — mismos
+// valores que SCHEDULE en scripts/sync_daemon.py. Si un horario ya venció hace
+// más de GRACIA_HORAS y sync_status sigue con una hora ANTERIOR a ese horario,
+// esa corrida no pasó → alerta.
+// Antes se miraba solo un umbral plano de 30h: un reporte que corre 3×/día podía
+// estar caído más de un día entero sin que nadie se enterara.
+const SLOTS_ESPERADOS = {
+  minimos_maximos: [[8, 5], [12, 5], [16, 5]],
+  items_lista_general: [[8, 0], [12, 0], [16, 0]],
+  items_comprados: [[10, 0], [16, 0]],
+};
+const GRACIA_HORAS = 2;      // margen: NEO es lento y los reportes corren en fila
+const CR_OFFSET_H = 6;       // Costa Rica = UTC-6 todo el año (sin horario de verano)
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -71,6 +85,32 @@ function horasAtras(iso) {
   return (Date.now() - new Date(iso).getTime()) / 3600_000;
 }
 
+/** Último horario esperado (en ms UTC) que ya venció con la gracia cumplida.
+ *  Salta los domingos, igual que el scheduler del daemon. */
+function ultimoSlotEsperado(slots, ahora = Date.now()) {
+  for (let d = 0; d < 8; d++) {
+    // Fecha calendario en CR del día que estamos mirando.
+    const cr = new Date(ahora - d * 86_400_000 - CR_OFFSET_H * 3_600_000);
+    if (cr.getUTCDay() === 0) continue; // domingo: el daemon no corre
+    const vencidos = slots
+      .map(([h, m]) =>
+        Date.UTC(cr.getUTCFullYear(), cr.getUTCMonth(), cr.getUTCDate(), h + CR_OFFSET_H, m),
+      )
+      .filter((t) => t + GRACIA_HORAS * 3_600_000 <= ahora)
+      .sort((a, b) => b - a);
+    if (vencidos.length) return vencidos[0];
+  }
+  return null;
+}
+
+/** "16:05 del 24/8" — para que la alerta diga qué corrida se saltó. */
+function fmtCR(ms) {
+  const d = new Date(ms - CR_OFFSET_H * 3_600_000);
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm} del ${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+}
+
 const alertas = [];
 
 // 1. Última sincronización de reportes críticos
@@ -80,12 +120,22 @@ try {
   );
   for (const r of rows) {
     const h = horasAtras(r.ultima_sync);
-    if (h > HORAS_SYNC_CRITICO) {
+    const slot = SLOTS_ESPERADOS[r.id] ? ultimoSlotEsperado(SLOTS_ESPERADOS[r.id]) : null;
+    const ultima = r.ultima_sync ? new Date(r.ultima_sync).getTime() : 0;
+
+    if (slot !== null && ultima < slot) {
+      alertas.push(
+        `🔴 <b>${r.id}</b> se saltó la corrida de las ${fmtCR(slot)} — última sync hace <b>${h.toFixed(1)}h</b> (${r.ultima_sync || 'nunca'})`,
+      );
+    } else if (h > HORAS_SYNC_CRITICO) {
       alertas.push(
         `🔴 <b>${r.id}</b> sin sincronizar hace <b>${h.toFixed(1)}h</b> (último: ${r.ultima_sync || 'nunca'})`,
       );
-    } else if (r.exitoso === false) {
-      alertas.push(`⚠️ <b>${r.id}</b> falló en la última sincronización`);
+    }
+    // Independiente de la frescura: el daemon marca exitoso=false cuando el
+    // downloader revienta, aunque ultima_sync siga siendo reciente.
+    if (r.exitoso === false) {
+      alertas.push(`⚠️ <b>${r.id}</b> falló en la última corrida (el daemon la marcó como fallida)`);
     }
   }
 } catch (e) {
