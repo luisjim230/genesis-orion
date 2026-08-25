@@ -423,7 +423,12 @@ async def main():
 
     try:
         excel_path = await descargar()
-        subir_a_supabase(excel_path)
+        # Si la subida aborta (Excel raro, validación de empresa, pocas filas)
+        # hay que salir con error: si no, el daemon lo da por bueno, no reintenta
+        # y los datos quedan viejos sin que salte ninguna alarma.
+        if not subir_a_supabase(excel_path):
+            log.error("❌ La subida a Supabase no se completó — salgo con error.")
+            sys.exit(1)
         log.info("Listo.")
     except Exception as e:
         log.error(f"Error: {e}", exc_info=True)

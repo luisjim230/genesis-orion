@@ -124,6 +124,11 @@ SIN_SYNC_STATUS = {"gmail_facturas", "asientos_estado", "asientos_upload",
                    "items_facturados_rapido"}
 
 
+def _escapar(t):
+    """Escapa lo mínimo para parse_mode=HTML de Telegram."""
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def alertar_telegram(texto):
     """Aviso inmediato por Telegram. No crítico: si falta el token, solo loguea."""
     if not TG_TOKEN or not TG_CHAT:
@@ -325,6 +330,18 @@ def reportes_pendientes():
     return due
 
 
+_ultimo_error: dict = {}   # script_key -> motivo del último fallo (para la alerta)
+
+
+def _motivo(stdout, stderr):
+    """Saca del output las líneas que explican el fallo, para que la alerta de
+    Telegram diga QUÉ pasó sin tener que abrir el log en la Mac."""
+    lineas = [l.strip() for l in ((stdout or "") + "\n" + (stderr or "")).splitlines()
+              if ("❌" in l or "ERROR" in l or "Traceback" in l)]
+    texto = "\n".join(lineas[-4:]) if lineas else ((stderr or stdout or "").strip()[-300:])
+    return texto[:600] or "sin detalle en el output"
+
+
 def ejecutar_script(script_key):
     """Corre un script directamente (sin pasar por sync_requests en Supabase).
     Devuelve True si terminó con rc=0."""
@@ -350,11 +367,16 @@ def ejecutar_script(script_key):
         log.info(f"  {'✅' if ok else '❌'} {script_key} (rc={result.returncode})")
         if not ok:
             log.error(f"    stderr: {result.stderr[-300:]}")
+            _ultimo_error[script_key] = _motivo(result.stdout, result.stderr)
+        else:
+            _ultimo_error.pop(script_key, None)
         return ok
     except subprocess.TimeoutExpired:
         log.error(f"  ⏱ Timeout: {script_key}")
+        _ultimo_error[script_key] = f"timeout de {SCRIPT_TIMEOUTS.get(script_key, TIMEOUT_DEFAULT)}s"
     except Exception as e:
         log.error(f"  Error {script_key}: {e}")
+        _ultimo_error[script_key] = str(e)[:300]
     return False
 
 
@@ -423,11 +445,12 @@ def check_schedule():
             log.error(f"  ⛔ {key} falló {n} veces en el horario {slot:%H:%M} — espero al próximo")
             _last_run[key] = datetime.now()
             _intentos.pop(key, None)
+            motivo = _ultimo_error.get(key, "sin detalle")
             alertar_telegram(
                 f"🔴 <b>Sync caído: {key}</b>\n\n"
                 f"Falló {n} veces seguidas en el horario de las {slot:%H:%M}.\n"
                 f"Los datos de ese reporte en SOL quedan viejos hasta el próximo horario.\n\n"
-                f"Revisar el log en la Mac: <code>scripts/sync-daemon.log</code>"
+                f"<b>Motivo:</b>\n<code>{_escapar(motivo)}</code>"
             )
 
     # Tras bajar ítems comprados, recalcular matches de compras.
