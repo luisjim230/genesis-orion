@@ -32,7 +32,8 @@ jobs:
           fi
 
           # 1) Pedimos el mensaje al endpoint de Vercel.
-          RESP=$(curl -sS -X POST "https://sol.depositojimenez.com/api/metricas-web/alerts/daily")
+          RESP=$(curl -sS -X POST "https://sol.depositojimenez.com/api/metricas-web/alerts/daily" \
+            -H "x-sol-key: ${{ secrets.SUPABASE_SERVICE_KEY }}")
           echo "$RESP" | jq -r 'if .ok then "✓ endpoint OK" else "✗ error: " + (.error // "desconocido") end'
           if [ "$(echo "$RESP" | jq -r '.ok')" != "true" ]; then
             echo "$RESP" | jq .

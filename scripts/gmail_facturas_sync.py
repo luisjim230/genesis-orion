@@ -120,6 +120,7 @@ def subir_a_procesar(archivos):
 
     req = urllib.request.Request(f"{APP_URL}/api/contabilidad/procesar", data=cuerpo, method="POST")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("x-sol-key", SUPA_KEY)  # la ruta /api ya pide identificarse
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read().decode() or "{}")
 

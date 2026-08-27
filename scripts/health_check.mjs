@@ -146,7 +146,7 @@ try {
 try {
   const res = await fetch(`${APP_URL}/api/procesar-match`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-sol-key': SUPABASE_SERVICE_KEY },
     body: '{}',
     redirect: 'follow',
   });
