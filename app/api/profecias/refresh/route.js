@@ -1,9 +1,12 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { sb, jsonError } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 90;
 
 export async function POST() {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const t0 = Date.now();
     const { error } = await sb().rpc('refresh_profecias_panel');
@@ -15,5 +18,7 @@ export async function POST() {
 }
 
 export async function GET() {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   return POST();
 }

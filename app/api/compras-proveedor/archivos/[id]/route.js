@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, handle, BUCKET, HttpError } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,8 @@ export const runtime = 'nodejs'
 // Streamea el PDF desde el bucket privado con el Content-Type correcto.
 // ?download=1 fuerza descarga; por defecto se muestra inline.
 export async function GET(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

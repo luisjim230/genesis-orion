@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 // Acortador de URLs propio.
 // POST con body { target_url, utm_source?, utm_medium?, utm_campaign?, utm_content?,
 //                 product_name?, created_by? }
@@ -29,6 +30,8 @@ function genSlug(len = 6) {
 }
 
 export async function POST(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const target_url = String(body?.target_url || '').trim();

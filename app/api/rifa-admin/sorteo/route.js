@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getClubActor, getClubDb } from '../../../../lib/club-server';
@@ -18,6 +19,8 @@ function fraccionDeSemilla(seed) {
 // participantes elegibles (acciones > 0 y que no hayan ganado antes) y lo
 // registra en rifa_ganadores (queda excluido de sorteos siguientes).
 export async function POST(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
@@ -70,6 +73,8 @@ export async function POST(req) {
 
 // Deshace un ganador (por si hubo un error). Vuelve a quedar elegible.
 export async function DELETE(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

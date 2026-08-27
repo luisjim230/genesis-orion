@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../lib/auth-server'
 import crypto from 'crypto'
 import { getDb, handle, HttpError, validarDevolucion, subirRecibo, registrarHistorial, BUCKET } from './_lib'
 
@@ -7,6 +8,8 @@ export const runtime = 'nodejs'
 // GET /api/devoluciones — lista con filtros.
 // Query params: estado, metodo, moneda, desde, hasta, q (cliente / ref ERP).
 export async function GET(request) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const sp = new URL(request.url).searchParams
     const db = getDb()
@@ -61,6 +64,8 @@ export async function GET(request) {
 
 // POST /api/devoluciones — crear devolución (contador). Multipart form-data.
 export async function POST(request) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const form = await request.formData()
     const file = form.get('recibo')

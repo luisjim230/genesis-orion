@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -13,6 +14,8 @@ function getAdmin() {
 }
 
 export async function POST() {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { error } = await getAdmin()
       .from('ga4_metrics_cache')

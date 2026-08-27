@@ -1,3 +1,4 @@
+import { requireUser } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -13,6 +14,8 @@ function getAdmin() {
 }
 
 export async function GET(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const includeRevoked = searchParams.get('include_revoked') === '1';
@@ -27,6 +30,8 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const device_label = String(body?.device_label || '').trim() || null;
@@ -46,6 +51,8 @@ export async function POST(req) {
 }
 
 export async function PATCH(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const id = body?.id;

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, handle, HttpError, validarDevolucion, subirRecibo, registrarHistorial } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ export const runtime = 'nodejs'
 // al guardar vuelve a 'pendiente'. El PDF anterior se conserva (auditoría); si
 // se adjunta uno nuevo, se sube y se apunta el registro al nuevo.
 export async function PATCH(request, { params }) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

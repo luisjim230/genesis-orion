@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, subirArchivo, HttpError } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,8 @@ const TIPOS = {
 // Sirve para adjuntar el respaldo después, o para reemplazarlo (el archivo
 // viejo nunca se borra: queda en cp_archivos por trazabilidad).
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

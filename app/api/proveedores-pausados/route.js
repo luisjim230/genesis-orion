@@ -1,6 +1,9 @@
+import { requireUser } from '../../../lib/auth-server'
 import { createClient } from '@supabase/supabase-js'
 let _sb; function sb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } }); return _sb; }
 export async function POST(req){
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try{
     const {accion,proveedor,motivo}=await req.json()
     if(accion==='pausar'){await sb().from('proveedores_pausados').upsert({proveedor,motivo:motivo||''});return Response.json({ok:true})}

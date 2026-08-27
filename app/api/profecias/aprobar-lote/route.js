@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { sb, jsonError } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
@@ -5,6 +6,8 @@ export const dynamic = 'force-dynamic';
 // POST aprobar VARIOS SKUs en un solo INSERT batch.
 // Body: { items: [{ codigo_interno, cantidad_aprobada, costo_unitario_estimado? }, ...], notas?, aprobado_por? }
 export async function POST(req) {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const items = Array.isArray(body.items) ? body.items : [];

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,6 +15,8 @@ function getAdmin() {
 
 // DELETE: archiva la campaña (no la borra).
 export async function DELETE(_req, { params }) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { id } = await params;
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
@@ -30,6 +33,8 @@ export async function DELETE(_req, { params }) {
 
 // PATCH: archivar/desarchivar.
 export async function PATCH(req, { params }) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { id } = await params;
     const body = await req.json();

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, bitacora, sanearLineas, aprobadorDe, HttpError } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,8 @@ async function encolarUpload(db) {
 
 // GET /api/contabilidad/asientos/:id  -> asiento + líneas + factura
 export async function GET(_request, { params }) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()
@@ -53,6 +56,8 @@ export async function GET(_request, { params }) {
 //   { accion: 'reintentar' }              -> error -> aprobado, intentos+1
 //   (sin accion)                          -> edita cabecera + reemplaza líneas
 export async function PATCH(request, { params }) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

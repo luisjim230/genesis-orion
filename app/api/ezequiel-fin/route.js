@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
 
@@ -5,6 +6,8 @@ let _sb;
 function getDb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); return _sb; }
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const formData = await req.formData();
     const file     = formData.get('file');

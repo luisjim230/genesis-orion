@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, subirPdf, sugerenciasMatch, HttpError } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -5,6 +6,8 @@ export const runtime = 'nodejs'
 
 // GET /api/compras-proveedor/facturas  -> lista de facturas con estado de conciliación
 export async function GET(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const url = new URL(request.url)
     const proveedorId = url.searchParams.get('proveedor_id')
@@ -26,6 +29,8 @@ export async function GET(request) {
 // POST /api/compras-proveedor/facturas  (multipart: pdf + campos)
 // Sube la factura y devuelve sugerencias de match (sección 8.1 + 8.2).
 export async function POST(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const form = await request.formData()
     const file = form.get('pdf')

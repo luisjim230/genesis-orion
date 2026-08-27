@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 // Endpoint unificado para métricas GA4.
 // Query params:
 //   metric_type    (requerido): summary | active_users_realtime | top_products |
@@ -576,6 +577,8 @@ async function fetchAbandonedCart(client, property, range, traffic) {
 }
 
 export async function GET(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const metric_type = (searchParams.get('metric_type') || '').trim();

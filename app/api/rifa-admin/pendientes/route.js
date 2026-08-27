@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { getClubActor, getClubDb } from '../../../../lib/club-server';
 
@@ -6,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 // Corre el robot ahora mismo (procesa la cola de pendientes sin esperar al cron).
 export async function POST() {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
@@ -17,6 +20,8 @@ export async function POST() {
 
 // Reintenta un pendiente fallido (vuelve a 'pendiente').
 export async function PATCH(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
@@ -33,6 +38,8 @@ export async function PATCH(req) {
 
 // Elimina un pendiente.
 export async function DELETE(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

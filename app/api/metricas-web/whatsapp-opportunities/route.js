@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 // Endpoint que cruza la actividad interna del equipo en GA4 con las ventas reales
 // de NEO (`neo_items_facturados`) para detectar "demanda WhatsApp no convertida":
 // productos que el equipo consultó muchas veces (= clientes preguntan) pero que
@@ -40,6 +41,8 @@ function rowsToObjects(report) {
 }
 
 export async function GET(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const date_range = (searchParams.get('date_range') || '30d').trim();

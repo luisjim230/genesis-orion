@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../../lib/auth-server'
 import {
   getDb, ok, bad, handle, BUCKET, RECEPTOR_EMPRESA,
   parseFacturaXML, raizXML, parseAcuseXML, guardarEstadoHacienda,
@@ -16,6 +17,8 @@ export const maxDuration = 60
 // procesan y el que falló aparece en rechazados. Devuelve
 // { creados, ignorados, rechazados, acuses }.
 export async function POST(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
+
   return handle(async () => {
     const form = await request.formData()
     const files = form.getAll('files').filter((f) => f && typeof f.arrayBuffer === 'function')

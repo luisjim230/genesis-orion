@@ -3,6 +3,7 @@ import { Rubik } from 'next/font/google';
 import Sidebar from './sidebar';
 import MobileNav from './mobile-nav';
 import GA4Script from './components/GA4Script';
+import GuardRuta from './components/GuardRuta';
 import './globals.css';
 
 const rubik = Rubik({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] });
@@ -66,7 +67,7 @@ export default async function RootLayout({ children }) {
             background: 'transparent',
             padding: '32px 36px',
           }}>
-            {children}
+            <GuardRuta>{children}</GuardRuta>
           </main>
         </body>
       )}

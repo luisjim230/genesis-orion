@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, handle, HttpError, BUCKET, contentTypePorNombre, contentDisposition } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -6,6 +7,8 @@ export const runtime = 'nodejs'
 // GET /api/devoluciones/:id/recibo — streamea el recibo de la NC (PDF o imagen)
 // desde el bucket privado. ?download=1 fuerza descarga; por defecto inline.
 export async function GET(request, { params }) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

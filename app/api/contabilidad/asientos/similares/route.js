@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, handle, r2 } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,8 @@ export const dynamic = 'force-dynamic'
 //       de la línea de gasto principal, para no depender solo del centro vacío.
 // Es solo un aviso (no bloquea): devuelve los candidatos.
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const u = new URL(request.url)

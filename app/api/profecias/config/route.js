@@ -1,8 +1,11 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { sb, jsonError } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const { data, error } = await sb().from('profecias_config').select('*').eq('id', 1).single();
     if (error) throw error;
@@ -13,6 +16,8 @@ export async function GET() {
 }
 
 export async function PUT(req) {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const allow = [

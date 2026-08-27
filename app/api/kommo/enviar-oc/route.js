@@ -1,3 +1,4 @@
+import { requireUser } from '../../../../lib/auth-server'
 // app/api/kommo/enviar-oc/route.js
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -52,6 +53,8 @@ function formatearMensaje(proveedor, items, fechaOC) {
 }
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { proveedor, items, telefono, fecha_oc } = await req.json()
     if (!proveedor || !items?.length) return NextResponse.json({ error: 'proveedor e items requeridos' }, { status: 400 })

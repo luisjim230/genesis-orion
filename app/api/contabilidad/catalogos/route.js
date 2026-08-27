@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -6,6 +7,8 @@ export const dynamic = 'force-dynamic'
 // Devuelve todos los catálogos que la UI necesita (comboboxes, reglas, etc.)
 // y el aprobador correspondiente al email logueado (rol + monto_maximo).
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const email = new URL(request.url).searchParams.get('email')

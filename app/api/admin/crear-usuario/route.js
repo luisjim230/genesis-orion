@@ -1,3 +1,4 @@
+import { requireAdmin } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -8,6 +9,8 @@ function supabaseAdmin() {
 }
 
 export async function POST(req) {
+  const _g = await requireAdmin(); if (_g.response) return _g.response;
+
   try {
     const { nombre, email, username, password, rol } = await req.json()
 

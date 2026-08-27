@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, docsDeCompra, HttpError } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -6,6 +7,8 @@ const ESTADOS = ['ABIERTA', 'PAGADA', 'FACTURADA', 'CERRADA']
 
 // GET /api/compras-proveedor/compras/:id  -> detalle completo
 export async function GET(_request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()
@@ -70,6 +73,8 @@ export async function GET(_request, { params }) {
 
 // PATCH /api/compras-proveedor/compras/:id
 export async function PATCH(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const b = await request.json()
@@ -99,6 +104,8 @@ export async function PATCH(request, { params }) {
 
 // DELETE /api/compras-proveedor/compras/:id  (sólo si no tiene pagos)
 export async function DELETE(_request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

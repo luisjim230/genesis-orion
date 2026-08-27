@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import ExcelJS from 'exceljs'
 import { getDb, bad } from '../_lib'
 
@@ -9,6 +10,8 @@ const ENVIADOS = ['aprobado', 'enviando', 'sincronizado', 'conciliado', 'rechaza
 // GET /api/contabilidad/exportar?estado=&desde=&hasta=&proveedor=&incluir_prueba=
 // Devuelve un .xlsx con los asientos enviados.
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   try {
     const db = getDb()
     const u = new URL(request.url)

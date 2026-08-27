@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { getClubActor, getClubDb } from '../../../../lib/club-server';
 
@@ -7,6 +8,8 @@ export const dynamic = 'force-dynamic';
 // Actualizar un producto participante: activar/desactivar y/o cambiar los
 // puntos por unidad. Body: { codigo_interno, activo?, puntos_por_unidad? }
 export async function PATCH(req) {
+  const _g = await requirePermiso('club-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import {
   getDb, ok, bad, handle, cargarContexto, buscarProveedor,
   armarLineasGasto, armarLineasNotaCredito, esNotaCredito,
@@ -13,6 +14,8 @@ const COLS = 'clave,consecutivo,nombre_emisor,cedula_emisor,fecha_emision,total_
 //  - revisadas: las que alguien marcó como "no requiere asiento" (con deshacer).
 // Nunca se borran: acá se revisan, se convierten en gasto o se marcan revisadas.
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const vista = new URL(request.url).searchParams.get('vista') || 'ignoradas'
@@ -47,6 +50,8 @@ export async function GET(request) {
 //   { accion: 'no_requiere', clave, creado_por }  -> marca "revisada, sin asiento"
 //   { accion: 'recuperar', clave }                -> deshace la revisión
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { getClubActor, getClubDb } from '../../../../lib/club-server';
 
@@ -8,6 +9,8 @@ const CAMPOS = ['nombre', 'tier', 'aporte_colones', 'neo_proveedor', 'detecta_cr
 
 // Crea un patrocinador nuevo.
 export async function POST(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
@@ -27,6 +30,8 @@ export async function POST(req) {
 
 // Actualiza campos de un patrocinador.
 export async function PATCH(req) {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

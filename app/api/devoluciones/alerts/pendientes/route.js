@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../../../lib/auth-server'
 import { getDb, handle } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +10,8 @@ export const runtime = 'nodejs'
 // que no pueden consultar la tabla directo (RLS la bloquea para el navegador).
 // Devuelve { ok, count, total_crc, total_usd, atrasadas }.
 export async function GET() {
+  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const { data } = await db.from('devoluciones')

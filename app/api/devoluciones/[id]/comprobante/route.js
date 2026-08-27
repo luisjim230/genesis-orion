@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, handle, HttpError, subirComprobante, registrarHistorial, BUCKET, contentDisposition } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,8 @@ function tipoImagen(nombre) {
 // de la transferencia desde el bucket privado. La puede abrir cualquiera que
 // tenga acceso al módulo (por eso pasa por la API con service_role).
 export async function GET(request, { params }) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()
@@ -43,6 +46,8 @@ export async function GET(request, { params }) {
 // POST /api/devoluciones/:id/comprobante — sube (o reemplaza) la imagen del
 // comprobante de la transferencia. Multipart form-data con campo `comprobante`.
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const form = await request.formData()

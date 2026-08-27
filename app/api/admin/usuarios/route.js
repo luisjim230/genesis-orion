@@ -1,3 +1,4 @@
+import { requireAdmin } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -14,6 +15,8 @@ function getAdmin() {
 }
 
 export async function GET(req) {
+  const _g = await requireAdmin(); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url)
     const username = searchParams.get('username')
@@ -36,6 +39,8 @@ export async function GET(req) {
 }
 
 export async function PATCH(req) {
+  const _g = await requireAdmin(); if (_g.response) return _g.response;
+
   try {
     const body = await req.json()
     const { id, nueva_password, ...campos } = body
@@ -74,6 +79,8 @@ export async function PATCH(req) {
 }
 
 export async function DELETE(req) {
+  const _g = await requireAdmin(); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

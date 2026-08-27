@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../../../lib/auth-server'
 import { getDb, handle, fmtMoneda } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ export const runtime = 'nodejs'
 // Lo consume el workflow telegram-devoluciones-daily.yml (mismo patrón que
 // métricas-web). Devuelve { ok, message, hay_pendientes }.
 export async function POST() {
+  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const { data } = await db.from('devoluciones')

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ const SCRIPT = 'asientos_estado'
 // Devuelve cuándo se cargaron por última vez los estados de NEO y el estado de
 // la última solicitud manual (si la hay).
 export async function GET() {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const [ult, sol, cnt] = await Promise.all([
@@ -29,6 +32,8 @@ export async function GET() {
 // Encola una descarga manual: el daemon de la M1 la corre serializada con el
 // resto (sin chocar la sesión de NEO). No duplica si ya hay una en curso.
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

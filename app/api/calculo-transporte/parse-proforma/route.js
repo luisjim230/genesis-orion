@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { extractText, getDocumentProxy } from 'unpdf'
@@ -17,6 +18,8 @@ function getDb() {
 }
 
 export async function POST(request) {
+  const _g = await requirePermiso('calculo-transporte'); if (_g.response) return _g.response;
+
   try {
     const formData = await request.formData()
     const file = formData.get('file')

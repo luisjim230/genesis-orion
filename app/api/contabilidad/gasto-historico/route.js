@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,8 @@ export const dynamic = 'force-dynamic'
 // (desde v_movimientos_contables_validos), más estadística del proveedor
 // (promedio y desviación de sus facturas) para detectar montos inusuales.
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const u = new URL(request.url)
