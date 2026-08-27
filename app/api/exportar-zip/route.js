@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import JSZip from 'jszip'
 
 // ── XML templates (mismo formato NEO que exportar-excel) ─────────────────────
@@ -66,6 +67,8 @@ async function generarExcelProveedor(items, nombreProveedor) {
  * Devuelve: ZIP con un .xlsx por proveedor
  */
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { proveedores } = await req.json()
 

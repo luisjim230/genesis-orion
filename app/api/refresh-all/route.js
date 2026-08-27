@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../lib/auth-server'
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,8 @@ async function correrTarea(t) {
 }
 
 export async function POST() {
+  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+
   const t0 = Date.now();
   const resultados = await Promise.all(TAREAS.map(correrTarea));
   const okCount = resultados.filter(r => r.ok).length;
@@ -58,4 +61,6 @@ export async function POST() {
   });
 }
 
-export async function GET() { return POST(); }
+export async function GET() {
+  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+ return POST(); }

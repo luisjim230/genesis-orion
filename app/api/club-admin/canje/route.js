@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { getClubActor, getClubDb } from '../../../../lib/club-server';
 
@@ -8,6 +9,8 @@ export const dynamic = 'force-dynamic';
 // vista club_saldos recalcula). Valida saldo suficiente antes de insertar.
 // Body: { cedula, premio, puntos, nota? }
 export async function POST(req) {
+  const _g = await requirePermiso('club-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

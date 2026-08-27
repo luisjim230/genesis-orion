@@ -1,3 +1,4 @@
+import { requireUser } from '../../../../lib/auth-server'
 // Endpoint que envía a GA4 un evento manual con traffic_type=internal usando
 // el Measurement Protocol. Se usa desde /marcar-interno cuando un empleado
 // quiere registrar su navegador como "interno" para que GA4 deje de contarlo
@@ -14,6 +15,8 @@
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const client_id = String(body?.client_id || '').trim();

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../../lib/auth-server'
 import { getDb, ok, handle, recompute, HttpError } from '../../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -5,6 +6,8 @@ export const dynamic = 'force-dynamic'
 // DELETE /api/compras-proveedor/facturas/:id/links/:linkId
 // Desvincula un pago de la factura. La compra vuelve a recalcularse.
 export async function DELETE(_request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id, linkId } = await params
     const db = getDb()

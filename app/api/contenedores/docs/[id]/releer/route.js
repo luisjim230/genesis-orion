@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import { getDb, ok, handle, HttpError, leerDocumento, compararConEnvio } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +10,8 @@ export const maxDuration = 300
 // (faltaba la clave, se cayó la conexión) o cuando leyó algo mal.
 // Las líneas de mercadería que Luis corrigió a mano NO se tocan.
 export async function POST(_request, { params }) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

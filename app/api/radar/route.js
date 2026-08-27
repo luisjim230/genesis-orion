@@ -1,8 +1,11 @@
+import { requireUser } from '../../../lib/auth-server'
 // app/api/radar/route.js
 // POST: Dispara el workflow de RADAR en GitHub Actions
 // GET: Retorna el estado del último run
 
 export async function POST(request) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const body = await request.json().catch(() => ({}));
     const fuente = body.fuente || 'todas';
@@ -41,6 +44,8 @@ export async function POST(request) {
 }
 
 export async function GET() {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const token = process.env.GITHUB_TOKEN;
     if (!token) {

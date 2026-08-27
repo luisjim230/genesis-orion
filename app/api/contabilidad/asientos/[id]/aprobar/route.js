@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, bitacora, r2, HttpError } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -6,6 +7,8 @@ export const dynamic = 'force-dynamic'
 // Valida rol, monto máximo, imputabilidad y cuadre, pasa a 'aprobado'
 // (la cola del robot) y deja rastro en la bitácora.
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,8 @@ function diasEntre(desde, hasta) {
 // GET /api/compras-proveedor/reportes?proveedor_id=
 // Devuelve saldo documental total, desglose por proveedor y aging.
 export async function GET(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const url = new URL(request.url)
     const proveedorId = url.searchParams.get('proveedor_id')

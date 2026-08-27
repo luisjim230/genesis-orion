@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,8 @@ export const dynamic = 'force-dynamic'
 // el orden del menú más adelante. Nunca debe romper la navegación: ante
 // cualquier error responde ok igual y no propaga.
 export async function POST(request) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { email, modulo } = await request.json()
     if (!email || !modulo) return Response.json({ ok: false }, { status: 200 })

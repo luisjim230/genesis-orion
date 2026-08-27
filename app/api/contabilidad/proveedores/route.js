@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import {
   getDb, ok, bad, handle, cargarContexto, armarLineasGasto,
   sanearLineas, bitacora, HttpError,
@@ -12,6 +13,8 @@ export const dynamic = 'force-dynamic'
 //   { accion:'nuevo', asiento_id, actor }
 //     -> crea el proveedor con la cédula y el nombre del XML (por_clasificar).
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

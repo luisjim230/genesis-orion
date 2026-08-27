@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { autoCancelarVencidas } from '../../lib/procesar-match.js'
 import { DIAS_LIMITE_OC } from '../../../lib/transito.js'
@@ -6,6 +7,8 @@ import { DIAS_LIMITE_OC } from '../../../lib/transito.js'
 // service key (RLS no la frena) y es idempotente: si no hay nada vencido
 // devuelve 0 sin tocar la base.
 export async function POST() {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const res = await autoCancelarVencidas()
     if (res.cancelados > 0) console.log('[auto-cancelar-oc]', res)

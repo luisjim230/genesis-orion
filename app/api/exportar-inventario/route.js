@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
@@ -43,6 +44,8 @@ function calcularAlertas(items, transitoMap, dias) {
 }
 
 export async function POST(request) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { dias = 36 } = await request.json().catch(() => ({}));
 

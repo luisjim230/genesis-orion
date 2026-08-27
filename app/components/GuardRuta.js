@@ -1,0 +1,92 @@
+'use client';
+// Candado de pantalla, para TODA la app.
+//
+// Antes el sidebar solo escondía el link de los módulos sin permiso, pero
+// escribiendo la dirección a mano (ej. /contabilidad) la pantalla se abría
+// igual: solo 7 de 44 pantallas chequeaban permiso. Este componente vive en el
+// layout, mira en qué ruta está el usuario, la traduce al módulo que le
+// corresponde y bloquea si no lo tiene concedido. Así alcanza con dar de alta
+// el módulo en nav-modules.js para que quede protegido.
+//
+// Es la capa de comodidad (mensaje lindo en pantalla). Quien de verdad guarda
+// los datos es la base (RLS) y el guard de las APIs: aunque alguien saltee esto,
+// no recibe información.
+
+import { usePathname } from 'next/navigation';
+import { useAuth } from '../../lib/useAuth';
+import { ALL_NAV_FLAT } from '../nav-modules';
+
+// Módulos con permiso propio que no están en el menú.
+const RUTAS_EXTRA = [
+  { href: '/rotacion', key: 'rotacion' },
+  { href: '/vendedores', key: 'vendedores' },
+  { href: '/contabilidad', key: 'contabilidad' },
+];
+
+// Rutas que NO exigen permiso de módulo: son públicas o le sirven a cualquiera
+// que ya esté logueado.
+const LIBRES = ['/login', '/club', '/rifa', '/marcar-interno', '/s/'];
+
+const RUTAS = [...ALL_NAV_FLAT.map(i => ({ href: i.href, key: i.key })), ...RUTAS_EXTRA]
+  // Primero las más largas, para que /finanzas/bancos gane sobre /finanzas.
+  .sort((a, b) => b.href.length - a.href.length);
+
+export function moduloDeRuta(pathname) {
+  if (!pathname) return null;
+  if (pathname === '/') return 'dashboard';
+  const m = RUTAS.find(r => r.href !== '/' && (pathname === r.href || pathname.startsWith(r.href + '/')));
+  return m ? m.key : null;
+}
+
+const caja = {
+  minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 32, textAlign: 'center',
+};
+const tarjeta = {
+  background: '#fff', borderRadius: 16, padding: '32px 28px', maxWidth: 420,
+  boxShadow: '0 8px 30px rgba(0,0,0,.08)',
+};
+
+export default function GuardRuta({ children }) {
+  const pathname = usePathname();
+  const { user, perfil, loading, puedeVer } = useAuth();
+
+  if (LIBRES.some(p => pathname === p || pathname?.startsWith(p))) return children;
+
+  const modulo = moduloDeRuta(pathname);
+  if (!modulo) return children; // ruta sin módulo asociado: la maneja la propia pantalla
+
+  if (loading) {
+    return <div style={caja}><div style={{ color: '#64748b' }}>Cargando…</div></div>;
+  }
+
+  if (!user) {
+    return (
+      <div style={caja}>
+        <div style={tarjeta}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20, color: '#0f172a' }}>Tenés que iniciar sesión</h2>
+          <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 14 }}>Entrá con tu usuario para ver esta pantalla.</p>
+          <a href="/login" style={{ display: 'inline-block', background: '#ED6E2E', color: '#fff', padding: '10px 20px', borderRadius: 10, textDecoration: 'none', fontWeight: 600 }}>Ir al login</a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!puedeVer(modulo)) {
+    return (
+      <div style={caja}>
+        <div style={tarjeta}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🚫</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20, color: '#0f172a' }}>No tenés acceso a este módulo</h2>
+          <p style={{ margin: '0 0 4px', color: '#64748b', fontSize: 14 }}>
+            {perfil?.nombre ? `${perfil.nombre}, este` : 'Este'} módulo no está habilitado para tu usuario.
+          </p>
+          <p style={{ margin: 0, color: '#94a3b8', fontSize: 13 }}>Si lo necesitás, pedíselo a un administrador.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+}

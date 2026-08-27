@@ -1,5 +1,8 @@
+import { requireUser } from '../../../lib/auth-server'
 import ExcelJS from 'exceljs'
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const {resultados}=await req.json()
     const wb=new ExcelJS.Workbook()

@@ -1,9 +1,12 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/compras-proveedor/alertas?resuelta=false
 export async function GET(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const url = new URL(request.url)
     const resuelta = url.searchParams.get('resuelta')

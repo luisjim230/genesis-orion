@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import {
   getDb, ok, bad, handle, HttpError,
   compararConEnvio, CAMPOS_APLICABLES, recalcularEstimado,
@@ -11,6 +12,8 @@ export const runtime = 'nodejs'
 // Aplica al envío SOLO los campos que Luis marcó. Si él editó el valor antes
 // de aplicar, manda el suyo en `valores` y ese es el que se guarda.
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const body = await request.json().catch(() => ({}))

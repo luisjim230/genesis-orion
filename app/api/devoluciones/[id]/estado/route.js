@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, handle, HttpError, registrarHistorial } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,8 @@ export const runtime = 'nodejs'
 // anular) para blindar contra doble procesamiento: si no afecta filas, se avisa
 // que ya fue procesada.
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('devoluciones'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const body = await request.json().catch(() => ({}))

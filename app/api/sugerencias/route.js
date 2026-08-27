@@ -1,8 +1,11 @@
+import { requireUser } from '../../../lib/auth-server'
 import { createClient } from '@supabase/supabase-js'
 import { ejecutarMatch } from '../../lib/procesar-match.js'
 import { calcularTransito, normCodigo } from '../../../lib/transito.js'
 let _supabase; function supabase() { if (!_supabase) _supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY); return _supabase; }
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const { dias } = await req.json()
     // Ejecutar match antes de calcular tránsito para reflejar compras recientes

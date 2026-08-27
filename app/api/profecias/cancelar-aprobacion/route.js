@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { sb, jsonError } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
@@ -5,6 +6,8 @@ export const dynamic = 'force-dynamic';
 // POST cancelar UNA o VARIAS aprobaciones (devolverlas a pendiente).
 // Body: { id?, ids?: [], motivo? }
 export async function POST(req) {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const ids = Array.isArray(body.ids) && body.ids.length

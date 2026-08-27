@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -13,6 +14,8 @@ function getAdmin() {
 }
 
 export async function GET(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 200);
@@ -36,6 +39,8 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const required = ['base_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'final_url'];

@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
@@ -16,6 +17,8 @@ function limpiar(val) {
 }
 
 export async function POST(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
+
   try {
     const formData = await request.formData();
     const file = formData.get('file');

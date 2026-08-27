@@ -1,9 +1,12 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, bad, handle } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
 
 // PATCH /api/compras-proveedor/proveedores/:id
 export async function PATCH(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const b = await request.json()

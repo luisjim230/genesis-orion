@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -16,6 +17,8 @@ function getDb() {
 
 // GET: devuelve las dos listas (sin peso / por revisar) + contador de alertas.
 export async function GET() {
+  const _g = await requirePermiso('calculo-transporte'); if (_g.response) return _g.response;
+
   try {
     const db = getDb()
     const [sinPeso, porRevisar, alertas] = await Promise.all([
@@ -38,6 +41,8 @@ export async function GET() {
 
 // POST: upsert del peso asignado manualmente.
 export async function POST(request) {
+  const _g = await requirePermiso('calculo-transporte'); if (_g.response) return _g.response;
+
   try {
     const body = await request.json()
     const codigo = (body.codigo_interno || '').trim()

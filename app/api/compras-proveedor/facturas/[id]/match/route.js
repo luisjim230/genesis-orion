@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, recompute, HttpError } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -5,6 +6,8 @@ export const dynamic = 'force-dynamic'
 // POST /api/compras-proveedor/facturas/:id/match
 // body: [{pago_id, monto_aplicado}, ...]  ó  { links: [...] }
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const body = await request.json()

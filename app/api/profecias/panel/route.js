@@ -1,8 +1,11 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { sb, jsonError, fetchAll } from '../_lib.js';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
+  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
+
   try {
     const url = new URL(req.url);
     const filtros = {

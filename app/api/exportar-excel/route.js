@@ -1,3 +1,4 @@
+import { requireUser } from '../../../lib/auth-server'
 import JSZip from 'jszip'
 
 // styles.xml from the original working NEO file - exact copy
@@ -24,6 +25,8 @@ function escapeXml(s) {
 }
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     const {items, proveedor} = await req.json()
     const lastRow = items.length + 1

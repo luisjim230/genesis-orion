@@ -1,9 +1,12 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/compras-proveedor/proveedores  -> lista de proveedores
 export async function GET() {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { data, error } = await getDb()
       .from('cp_proveedores')
@@ -16,6 +19,8 @@ export async function GET() {
 
 // POST /api/compras-proveedor/proveedores  -> crea proveedor
 export async function POST(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const b = await request.json()
     if (!b?.nombre?.trim()) return bad('El nombre es obligatorio.')

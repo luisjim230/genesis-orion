@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../../lib/auth-server'
 import { getDb, ok, bad, handle, recompute, subirPdf, HttpError } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -5,6 +6,8 @@ export const runtime = 'nodejs'
 
 // POST /api/compras-proveedor/compras/:id/pagos  (multipart: pdf + campos)
 export async function POST(request, { params }) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, crearAsientoConLineas, modoPruebaActivo } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,8 @@ const ENVIADOS = ['aprobado', 'enviando', 'sincronizado', 'conciliado', 'error']
 
 // GET /api/contabilidad/asientos?vista=bandeja|enviados&estado=&proveedor=&desde=&hasta=
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const u = new URL(request.url)
@@ -47,6 +50,8 @@ export async function GET(request) {
 
 // POST /api/contabilidad/asientos  -> crea asiento manual/plantilla (borrador)
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const b = await request.json()
     if (!b?.fecha) return bad('La fecha es obligatoria.')

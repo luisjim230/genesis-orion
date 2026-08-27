@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 // API de configuración del Panel de Incomodidad.
 // Todo el acceso de escritura va por acá con el service_role key (bypassa RLS).
 //   GET   -> { config, cuentas, gastos_nuevos }
@@ -20,6 +21,8 @@ function getDb() {
 }
 
 export async function GET() {
+  const _g = await requirePermiso('incomodidad'); if (_g.response) return _g.response;
+
   try {
     const db = getDb()
     const [cfg, cuentas, gastos] = await Promise.all([
@@ -41,6 +44,8 @@ export async function GET() {
 }
 
 export async function PATCH(req) {
+  const _g = await requirePermiso('incomodidad'); if (_g.response) return _g.response;
+
   try {
     const db = getDb()
     const body = await req.json()

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, handle } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ const SCRIPT = 'gmail_facturas'
 // Estado de la sincronización de facturas por correo: última corrida y si hay
 // una en curso. Sirve para el botón "Sincronizar correo ahora".
 export async function GET() {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const [sol, ult] = await Promise.all([
@@ -28,6 +31,8 @@ export async function GET() {
 // Encola una corrida del robot que lee el correo (gmail_facturas). El daemon de
 // la M1 la corre serializada con el resto. No duplica si ya hay una en curso.
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

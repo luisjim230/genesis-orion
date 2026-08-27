@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, esAdmin, bitacoraCatalogo } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ const ENVIADOS = ['aprobado', 'enviando', 'sincronizado', 'conciliado', 'rechaza
 // Devuelve { rows, conciliacion_activa }. El diagnóstico/semáforo sale de la
 // vista v_conta_conciliacion (no se calcula en el front).
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const u = new URL(request.url)
@@ -57,6 +60,8 @@ export async function GET(request) {
 //   { accion:'vaciar_descartados_90', actor }   -> borra descartados con +90 días
 // Ambas solo admin.
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, subirArchivo, docsDeCompra } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,8 @@ const PAGE_SIZE = 50
 //   venta       -> sin respaldo de la venta al cliente
 //   cotizacion  -> sin cotización del proveedor
 export async function GET(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const url = new URL(request.url)
     const estado = url.searchParams.get('estado')
@@ -58,6 +61,8 @@ export async function GET(request) {
 // cliente (`venta_file`) y la cotización del proveedor (`cotizacion_file`),
 // en PDF o foto.
 export async function POST(request) {
+  const _g = await requirePermiso('compras-proveedor'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const ct = request.headers.get('content-type') || ''
     let b = {}

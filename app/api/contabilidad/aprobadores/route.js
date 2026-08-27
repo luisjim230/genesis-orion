@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, esAdmin, bitacoraCatalogo } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -7,6 +8,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // GET /api/contabilidad/aprobadores?actor=email  (solo admin)
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const actor = new URL(request.url).searchParams.get('actor')
     if (!(await esAdmin(actor))) return bad('Solo un admin puede ver los aprobadores.', 403)
@@ -19,6 +22,8 @@ export async function GET(request) {
 // POST /api/contabilidad/aprobadores
 //   { actor, accion: 'crear'|'editar'|'toggle', ... }   (solo admin)
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

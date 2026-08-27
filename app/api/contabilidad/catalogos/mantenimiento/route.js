@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, bad, handle } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,8 @@ async function esAdmin(db, email) {
 // { actor, recurso: 'proveedor'|'centro'|'cuenta'|'plantilla', accion?, ...campos }
 // Solo rol admin puede escribir en catálogos.
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json()

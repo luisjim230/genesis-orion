@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import {
   getDb, ok, bad, handle, HttpError, BUCKET, MAX_BYTES,
   esPdf, esExcel, extensionValida, mimePorNombre, sha256, subirArchivo,
@@ -10,6 +11,8 @@ export const maxDuration = 300
 
 // GET /api/contenedores/docs?envio_id=...   (o ?sin_asignar=1)
 export async function GET(request) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const sp = new URL(request.url).searchParams
     const db = getDb()
@@ -36,6 +39,8 @@ export async function GET(request) {
 // IA falla, el documento queda marcado y se reintenta con "Leer de nuevo".
 // Nunca pisa lo que Luis cargó a mano: devuelve las diferencias para que decida.
 export async function POST(request) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const esJson = (request.headers.get('content-type') || '').includes('application/json')

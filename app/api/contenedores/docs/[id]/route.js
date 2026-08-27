@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../../lib/auth-server'
 import { getDb, ok, handle, HttpError, BUCKET, compararConEnvio, recalcularEstimado } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -5,6 +6,8 @@ export const runtime = 'nodejs'
 
 // GET /api/contenedores/docs/:id → documento + comparativo contra su envío
 export async function GET(_request, { params }) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()
@@ -31,6 +34,8 @@ export async function GET(_request, { params }) {
 // PATCH /api/contenedores/docs/:id  { envio_id }
 // Asigna (o reasigna) el documento a un envío y arrastra su mercadería.
 export async function PATCH(request, { params }) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const body = await request.json().catch(() => ({}))
@@ -65,6 +70,8 @@ export async function PATCH(request, { params }) {
 // Se lleva el archivo y las líneas que salieron de él, salvo las que Luis
 // editó a mano (esas quedan como mercadería manual del envío).
 export async function DELETE(_request, { params }) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const { id } = await params
     const db = getDb()

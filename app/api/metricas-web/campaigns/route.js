@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,6 +28,8 @@ export function toSlug(input) {
 }
 
 export async function GET(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get('include_archived') === '1';
@@ -41,6 +44,8 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const _g = await requirePermiso('metricas-web'); if (_g.response) return _g.response;
+
   try {
     const body = await req.json();
     const name = String(body?.name || '').trim();

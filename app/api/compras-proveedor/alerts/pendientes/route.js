@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../../../lib/auth-server'
 import { getDb, ok, handle, docsDeCompra } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,8 @@ function dias(desde, hasta) {
 //   sin_factura / monto_sin_factura  -> ya se pagó y falta la factura del proveedor
 //   docs_faltantes                   -> compras a las que les falta algún respaldo
 export async function GET() {
+  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const { data } = await db

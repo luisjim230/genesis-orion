@@ -1,3 +1,4 @@
+import { requireUser } from '../../../../lib/auth-server'
 // app/api/neo/encolar-oc/route.js
 import { createClient } from '@supabase/supabase-js'
 
@@ -38,6 +39,8 @@ async function buildXlsxBuffer(items) {
 }
 
 export async function POST(request) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   try {
     let { proveedor, items, creadoPor } = await request.json()
     if (!proveedor || !String(proveedor).trim() || String(proveedor).trim().toLowerCase() === 'sin nombre') {

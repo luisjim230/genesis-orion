@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../lib/auth-server'
 import { NextResponse } from 'next/server';
 import { getClubActor, getClubDb } from '../../../lib/club-server';
 
@@ -7,6 +8,8 @@ export const dynamic = 'force-dynamic';
 // Datos del panel admin de la Rifa: ranking por acciones, registros, patrocinadores,
 // config (perillas), ganadores y KPIs. Todo desde el servidor con service role.
 export async function GET() {
+  const _g = await requirePermiso('rifa-admin'); if (_g.response) return _g.response;
+
   const actor = await getClubActor();
   if (!actor) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 

@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, esAdmin, bitacoraCatalogo, modoPruebaActivo } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -6,6 +7,8 @@ function claveUi(email) { return 'ui:' + String(email || '').toLowerCase() }
 
 // GET /api/contabilidad/config?email=  -> { modo_prueba, ui_prefs }
 export async function GET(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const email = new URL(request.url).searchParams.get('email')
     let ui = {}
@@ -21,6 +24,8 @@ export async function GET(request) {
 //   { actor, modo_prueba: bool }            -> cambia el flag global (solo admin)
 //   { actor, ui_prefs: {...} }              -> guarda prefs de UI del propio usuario
 export async function POST(request) {
+  const _g = await requirePermiso('contabilidad'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const db = getDb()
     const b = await request.json().catch(() => ({}))

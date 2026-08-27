@@ -1,5 +1,8 @@
+import { requireUser } from '../../../lib/auth-server'
 // app/api/mercado/route.js
 export async function GET(request) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   const { searchParams } = new URL(request.url);
   const fuente = searchParams.get('fuente');
   try {

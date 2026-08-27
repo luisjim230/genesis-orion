@@ -1,15 +1,20 @@
+import { requireUser } from '../../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 let _sb; function sb() { if (!_sb) _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } }); return _sb; }
 
 export async function GET() {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   const { data, error } = await sb().from('kommo_proveedores').select('*').order('nombre_proveedor')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data || [])
 }
 
 export async function POST(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   const { nombre_proveedor, whatsapp, notas } = await req.json()
   if (!nombre_proveedor) return NextResponse.json({ error: 'nombre requerido' }, { status: 400 })
   const { data, error } = await sb().from('kommo_proveedores').upsert({ nombre_proveedor, whatsapp, notas, actualizado_en: new Date().toISOString() }, { onConflict: 'nombre_proveedor' }).select().single()
@@ -18,6 +23,8 @@ export async function POST(req) {
 }
 
 export async function DELETE(req) {
+  const _g = await requireUser(); if (_g.response) return _g.response;
+
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
   const { error } = await sb().from('kommo_proveedores').delete().eq('id', id)

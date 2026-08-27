@@ -1,3 +1,4 @@
+import { requirePermiso } from '../../../../lib/auth-server'
 import { getDb, ok, bad, handle, HttpError, BUCKET, MAX_BYTES, extensionValida, rutaStorage } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,8 @@ export const runtime = 'nodejs'
 // bucket. Hace falta porque el body de una función de Vercel tope en 4.5 MB y
 // las proformas con fotos adentro pesan bastante más.
 export async function POST(request) {
+  const _g = await requirePermiso('contenedores'); if (_g.response) return _g.response;
+
   return handle(async () => {
     const body = await request.json().catch(() => ({}))
     const nombre = (body.nombre || '').toString().trim()

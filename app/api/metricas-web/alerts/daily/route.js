@@ -1,3 +1,4 @@
+import { requireUserOrMachine } from '../../../../../lib/auth-server'
 // Endpoint de alerta diaria.
 // Pensado para ser disparado por Vercel Cron a las 9am Costa Rica (15 UTC).
 // Genera un resumen del día anterior + top oportunidades WhatsApp y lo
@@ -174,12 +175,16 @@ async function authorize(req) {
 }
 
 export async function POST(req) {
+  const _g = await requireUserOrMachine(req); if (_g.response) return _g.response;
+
   const authz = await authorize(req);
   if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   return runDaily();
 }
 
 export async function GET(req) {
+  const _g = await requireUserOrMachine(req); if (_g.response) return _g.response;
+
   // Vercel Cron usa GET por default
   const authz = await authorize(req);
   if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
