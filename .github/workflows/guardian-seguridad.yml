@@ -1,0 +1,38 @@
+name: SOL — Guardián de seguridad
+
+# Intenta entrar a SOL como un extraño, todos los días, y avisa por Telegram si
+# entra. Nace del 27/8/2026, cuando se descubrió que contabilidad, planilla,
+# bancos y usuarios estaban abiertos a internet sin login — y nadie se enteró
+# hasta que un empleado lo comentó de pasada. Depender de que a alguien se le
+# ocurra pedir una revisión no es un control.
+
+on:
+  schedule:
+    # 6:37am hora CR (UTC-6) = 12:37 UTC, lunes a sábado. Antes de que abra la
+    # oficina, así el aviso llega con el día entero por delante.
+    # Minuto 37 a propósito: en punto GitHub congestiona y atrasa las corridas.
+    - cron: '37 12 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  guardian:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Intentar entrar sin credenciales
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY:  ${{ secrets.SUPABASE_ANON_KEY }}
+          APP_URL:            https://sol.depositojimenez.com
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/guardian_seguridad.mjs
