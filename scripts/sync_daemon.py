@@ -249,6 +249,7 @@ def procesar_solicitud(req):
             url = f"{APP_URL}/api/procesar-match"
             req_http = urllib.request.Request(url, data=b'{}', method="POST")
             req_http.add_header("Content-Type", "application/json")
+            req_http.add_header("x-sol-key", SUPA_KEY)  # las rutas /api ya piden identificarse
             with urllib.request.urlopen(req_http, timeout=120) as r:
                 body = r.read().decode()
                 log.info(f"  🔄 procesar-match: {body[:200]}")
@@ -263,6 +264,7 @@ def procesar_solicitud(req):
             url = f"{APP_URL}/api/refresh-all"
             req_http = urllib.request.Request(url, data=b'{}', method="POST")
             req_http.add_header("Content-Type", "application/json")
+            req_http.add_header("x-sol-key", SUPA_KEY)  # las rutas /api ya piden identificarse
             with urllib.request.urlopen(req_http, timeout=300) as r:
                 body = r.read().decode()
                 log.info(f"  🔁 refresh-all: {body[:200]}")
