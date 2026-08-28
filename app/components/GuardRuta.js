@@ -12,7 +12,8 @@
 // los datos es la base (RLS) y el guard de las APIs: aunque alguien saltee esto,
 // no recibe información.
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useAuth } from '../../lib/useAuth';
 import { ALL_NAV_FLAT } from '../nav-modules';
 
@@ -49,12 +50,30 @@ const tarjeta = {
 
 export default function GuardRuta({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, perfil, loading, puedeVer } = useAuth();
 
-  if (LIBRES.some(p => pathname === p || pathname?.startsWith(p))) return children;
+  const libre = LIBRES.some(p => pathname === p || pathname?.startsWith(p));
+  const modulo = libre ? null : moduloDeRuta(pathname);
 
-  const modulo = moduloDeRuta(pathname);
+  // La mitad del equipo tiene el Dashboard desactivado a propósito. Como la
+  // dirección de entrada de SOL es justamente el Dashboard, esa gente entraba
+  // y se topaba con un cartel de "no tenés acceso": para ellos era, en los
+  // hechos, no poder entrar. En vez de bloquear, se los manda a la primera
+  // pantalla que sí tengan.
+  const inicioAlternativo = (!loading && user && modulo === 'dashboard' && !puedeVer('dashboard'))
+    ? (ALL_NAV_FLAT.find(i => i.href !== '/' && !i.adminOnly && !i.bovedaOnly && puedeVer(i.key))?.href || null)
+    : null;
+
+  useEffect(() => {
+    if (inicioAlternativo) router.replace(inicioAlternativo);
+  }, [inicioAlternativo, router]);
+
+  if (libre) return children;
   if (!modulo) return children; // ruta sin módulo asociado: la maneja la propia pantalla
+  if (inicioAlternativo) {
+    return <div style={caja}><div style={{ color: '#64748b' }}>Abriendo tu pantalla de inicio…</div></div>;
+  }
 
   if (loading) {
     return <div style={caja}><div style={{ color: '#64748b' }}>Cargando…</div></div>;

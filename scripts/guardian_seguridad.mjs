@@ -30,6 +30,7 @@
 const {
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_KEY,
   APP_URL = 'https://sol.depositojimenez.com',
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID,
@@ -41,6 +42,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 const anon = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
+const SERVICE_KEY = SUPABASE_SERVICE_KEY;
 const huecos = [];
 const rotos = [];
 
@@ -133,6 +135,26 @@ for (const fn of ['refresh_mv_items_por_vend_mes', 'refresh_profecias_panel', 'b
     method: 'POST', headers: { ...anon, 'Content-Type': 'application/json' }, body: '{}',
   });
   if (r.ok) huecos.push(`Cualquiera puede disparar <code>${fn}</code> sin login (barre cientos de miles de filas)`);
+}
+
+// ── 6.5 Pantallas vacías: los admin TIENEN que ver los datos ────────────────
+// El 28/8/2026 el dueño vio la posición de bancos en cero y creyó que se habían
+// borrado. Los datos estaban: la base se los filtraba porque su usuario no tenía
+// ficha, y porque varias tablas estaban gateadas con un módulo que no era el de
+// la pantalla. Un candado que esconde datos a quien SÍ debe verlos es tan grave
+// como uno que no cierra, y se nota tarde. Por eso se chequea al revés también:
+// que cada admin lea de verdad las tablas que sostienen las pantallas de plata.
+if (SERVICE_KEY) {
+  const svc = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+  const r = await pedir(`${SUPABASE_URL}/rest/v1/rpc/sol_diagnostico_pantallas`, {
+    method: 'POST', headers: { ...svc, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  if (r.ok) {
+    const filas = await r.json().catch(() => []);
+    for (const f of filas || []) {
+      rotos.push(`<b>${f.nombre}</b> (${f.rol}) no ve <code>${f.tabla}</code>, que sí tiene datos`);
+    }
+  }
 }
 
 // ── 7. Lo que TIENE que seguir funcionando ──────────────────────────────────
