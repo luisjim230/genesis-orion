@@ -157,6 +157,35 @@ if (SERVICE_KEY) {
   }
 }
 
+// ── 6.7 El login tiene que dejar entrar ─────────────────────────────────────
+// El 28/8/2026 media empresa se quedó afuera con "Usuario no encontrado": la
+// pantalla de login iba a buscar el correo a una ruta que había pasado a exigir
+// permiso de administrador, y la llama ANTES de que exista sesión. Nadie se
+// enteró hasta que una empleada no pudo trabajar.
+//
+// No hacen falta contraseñas para detectarlo: se manda un usuario real con una
+// contraseña a propósito incorrecta. La respuesta sana es 401 "usuario o
+// contraseña incorrectos" — eso prueba que el login ENCONTRÓ al usuario y llegó
+// a validar. Un 404, un 500 o un "no encontrado" significa que el camino se
+// rompió otra vez.
+{
+  const USUARIOS = ['valeria', 'mauricio', 'marcela', 'evelyn', 'ronny', 'ventas', 'asistenteconta'];
+  for (const u of USUARIOS) {
+    const r = await pedir(`${APP_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: u, password: 'contrasena-invalida-de-prueba' }),
+    }, 25000);
+    let cuerpo = '';
+    try { cuerpo = JSON.stringify(await r.json()); } catch { /* sin cuerpo */ }
+    if (r.status !== 401) {
+      rotos.push(`El login de <b>${u}</b> devolvió ${r.status || r._err} (debería ser 401): entrar con nombre de usuario está roto`);
+    } else if (/no encontrado|not found/i.test(cuerpo)) {
+      rotos.push(`El login de <b>${u}</b> responde "usuario no encontrado": no puede traducir el usuario a su correo`);
+    }
+  }
+}
+
 // ── 7. Lo que TIENE que seguir funcionando ──────────────────────────────────
 const VIVOS = [
   [`${APP_URL}/login`, 'la pantalla de login', {}],
@@ -186,7 +215,13 @@ async function telegram(texto) {
 const hoy = new Date().toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica' });
 
 if (huecos.length === 0 && rotos.length === 0) {
-  console.log(`✅ ${hoy}: SOL cerrado. ${TABLAS.length} tablas, ${RUTAS.length} rutas y 3 procesos pesados probados sin login: ninguno dejó pasar.`);
+  console.log(
+    `✅ ${hoy}: SOL sano.\n` +
+    `   · Sin login: ${TABLAS.length} tablas, ${RUTAS.length} rutas y 3 procesos pesados probados — ninguno dejó pasar.\n` +
+    `   · Login con nombre de usuario: 7 usuarios probados — todos llegan a validar.\n` +
+    `   · Pantallas: nadie con permiso se queda viendo una lista vacía.\n` +
+    `   · Login, Club y Rifa: en pie.`
+  );
   process.exit(0);
 }
 
