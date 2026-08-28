@@ -30,7 +30,9 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
-  const _g = await requireUser(); if (_g.response) return _g.response;
+  // Sin sesión a propósito: lo usa /marcar-interno, la página que un empleado
+  // abre en su celular para marcarlo como dispositivo interno. No devuelve
+  // datos — solo registra el dispositivo. El GET y el PATCH sí piden sesión.
 
   try {
     const body = await req.json();
