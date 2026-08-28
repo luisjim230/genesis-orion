@@ -19,13 +19,22 @@
 
 6. **Advertir sobre rotación de secrets** cuando el usuario pegue una service key, token, o contraseña en el chat — y recordárselo al final de la tarea.
 
-7. **Siempre incluir `git checkout <rama>` antes de cualquier `git pull`** en comandos que se le den al usuario. El usuario no sabe que `git pull` solo actualiza la rama donde está parado. Si los cambios que el usuario tiene que correr están en una rama de feature (ej. `claude/xxx`), el comando DEBE ser:
+7. **La terminal del usuario es zsh, NO bash.** Dos diferencias rompen comandos
+   en silencio y ya pasó:
+   - Un patrón como `/Library/LaunchAgents/*.plist` que no encuentra nada
+     **aborta el comando entero** (`no matches found`). Nunca usar globs sueltos:
+     usar `find ... 2>/dev/null`.
+   - `for x in $VAR` **no separa por líneas ni espacios** cuando la variable trae
+     varias rutas: las trata como una sola. Usar `find ... | while IFS= read -r x`.
+   Antes de mandar un comando con globs o loops, revisar estos dos puntos.
+
+8. **Siempre incluir `git checkout <rama>` antes de cualquier `git pull`** en comandos que se le den al usuario. El usuario no sabe que `git pull` solo actualiza la rama donde está parado. Si los cambios que el usuario tiene que correr están en una rama de feature (ej. `claude/xxx`), el comando DEBE ser:
    ```
    cd <ruta> && git checkout <rama-feature> && git pull origin <rama-feature> && <comando-a-correr>
    ```
    Nunca asumir que el usuario está en la rama correcta. Nunca darle `git pull` sin checkout previo. Si la rama no existe local, `git checkout -B <rama> origin/<rama>` la crea y traquea en un solo paso.
 
-8. **Mergear PRs automáticamente sin preguntar.** Cuando Claude termina una feature en una rama `claude/xxx`, debe:
+9. **Mergear PRs automáticamente sin preguntar.** Cuando Claude termina una feature en una rama `claude/xxx`, debe:
    - Crear el PR contra `main` con `mcp__github__create_pull_request`
    - Mergearlo inmediatamente con `mcp__github__merge_pull_request` (squash merge por defecto)
    - Reportar al usuario "ya está mergeado, esperá el deploy de Vercel"
@@ -34,9 +43,18 @@
 ## Contexto del proyecto
 
 - **Repo:** genesis-orion (Next.js + Supabase). Dominio prod: `sol.depositojimenez.com`. Sitio público trackeado: `depositojimenezcr.com` (Nidux).
-- **Sync NEO → Supabase** corre en la Mac del usuario vía LaunchAgents:
-  - `com.rojimo.neosync.*` → corre `~/Documents/neo-sync/main.py` y `autoupload.py`
-  - `com.sol.sync-daemon` + `com.sol.neo-*` → corre scripts del repo en `scripts/`
+- **Sync NEO → Supabase** corre en las Macs del usuario. Hay DOS Macs y las dos
+  tienen clonado el repo:
+  - **M1** — usuario `agentedepositojimenez`, equipo `AgenteDJ`.
+    Repo en `/Users/agentedepositojimenez/genesis-orion`, `.env` en `scripts/.env`.
+  - **M2** — usuario `luisjimenez`, equipo `MacBook-Air`.
+    Repo en `/Users/luisjimenez/genesis-orion`, y además `~/neo-sync/` con su
+    propio `.env`. Tiene el LaunchAgent `com.sol.telegram-report`.
+  - Los LaunchAgents NO siguen un patrón de nombre fijo: hay que buscarlos por
+    CONTENIDO, no por nombre. Los nombres viejos que decía este archivo
+    (`com.rojimo.neosync.*`, `com.sol.sync-daemon`, `com.sol.neo-*`) y la ruta
+    `~/Documents/neo-sync` NO existen — asumirlos hizo fallar tres comandos
+    seguidos el 27/8/2026.
 - Ambos sets necesitan `SUPABASE_SERVICE_ROLE_KEY` en su `.env` para evitar bloqueo de RLS al escribir en `neo_items_comprados`, `neo_minimos_maximos`, etc.
 
 ### Telegram (notificaciones internas)
