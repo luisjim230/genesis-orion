@@ -9,8 +9,8 @@ export const runtime = 'nodejs'
 // siguen pendientes de pagar. Lo consumen el dashboard y el módulo de Tareas,
 // que no pueden consultar la tabla directo (RLS la bloquea para el navegador).
 // Devuelve { ok, count, total_crc, total_usd, atrasadas }.
-export async function GET() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+export async function GET(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
   return handle(async () => {
     const db = getDb()

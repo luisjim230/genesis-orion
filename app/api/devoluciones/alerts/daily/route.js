@@ -8,8 +8,8 @@ export const runtime = 'nodejs'
 // Arma el resumen de devoluciones pendientes de pagar para mandar por Telegram.
 // Lo consume el workflow telegram-devoluciones-daily.yml (mismo patrón que
 // métricas-web). Devuelve { ok, message, hay_pendientes }.
-export async function POST() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+export async function POST(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
   return handle(async () => {
     const db = getDb()

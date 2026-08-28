@@ -45,8 +45,8 @@ async function correrTarea(t) {
   }
 }
 
-export async function POST() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+export async function POST(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
   const t0 = Date.now();
   const resultados = await Promise.all(TAREAS.map(correrTarea));
@@ -61,6 +61,4 @@ export async function POST() {
   });
 }
 
-export async function GET() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
- return POST(); }
+export async function GET(request) { return POST(request); }

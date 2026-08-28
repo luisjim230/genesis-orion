@@ -2,8 +2,8 @@ import { requireUserOrMachine } from '../../../lib/auth-server'
 import { NextResponse } from 'next/server'
 import { ejecutarMatch } from '../../lib/procesar-match.js'
 
-export async function POST() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+export async function POST(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
   try {
     const res = await ejecutarMatch()
