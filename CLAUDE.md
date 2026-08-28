@@ -47,9 +47,17 @@
   tienen clonado el repo:
   - **M1** — usuario `agentedepositojimenez`, equipo `AgenteDJ`.
     Repo en `/Users/agentedepositojimenez/genesis-orion`, `.env` en `scripts/.env`.
+    LaunchAgents: `com.sol.sync-daemon`, `com.sol.oc-uploader`,
+    `com.sol.resumen-consultas`, `com.sol.neo-asientos-estado`.
+    **Es la que corre el sync de NEO.**
   - **M2** — usuario `luisjimenez`, equipo `MacBook-Air`.
     Repo en `/Users/luisjimenez/genesis-orion`, y además `~/neo-sync/` con su
-    propio `.env`. Tiene el LaunchAgent `com.sol.telegram-report`.
+    propio `.env`. LaunchAgents: `com.sol.telegram-report`,
+    `com.sol.telegram-pendientes` (los reportes de la mañana).
+    OJO: su `scripts/.env` NO traía `SUPABASE_SERVICE_ROLE_KEY` — los reportes
+    andaban solo porque la base estaba abierta a cualquiera. Se copió la llave
+    desde `~/neo-sync/.env` el 27/8/2026. Ante un reporte que falla en M2,
+    revisar primero que las dos `.env` tengan la misma llave.
   - Los LaunchAgents NO siguen un patrón de nombre fijo: hay que buscarlos por
     CONTENIDO, no por nombre. Los nombres viejos que decía este archivo
     (`com.rojimo.neosync.*`, `com.sol.sync-daemon`, `com.sol.neo-*`) y la ruta
