@@ -33,29 +33,35 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true); setError(null);
 
-    let emailToUse = credential.trim();
-
-    // Si no tiene @, asumir que es username → buscar email real
-    if (!emailToUse.includes('@')) {
-      try {
-        const res = await fetch(`/api/admin/usuarios?username=${encodeURIComponent(emailToUse.toLowerCase())}`);
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          setError('Usuario no encontrado.');
-          setLoading(false);
-          return;
-        }
-        emailToUse = data[0].email;
-      } catch {
-        setError('Error al buscar usuario.');
+    // Se puede entrar con nombre de usuario o con correo: el servidor resuelve
+    // cuál es cuál y valida la contraseña de una sola vez. Antes la pantalla
+    // pedía el correo a /api/admin/usuarios, y cuando esa ruta pasó a exigir
+    // permiso de administrador, entrar con usuario dejó de funcionar.
+    let sesion;
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: credential.trim(), password: pass }),
+      });
+      sesion = await res.json();
+      if (!res.ok || !sesion?.access_token) {
+        setError(sesion?.error || 'Usuario o contraseña incorrectos.');
         setLoading(false);
         return;
       }
+    } catch {
+      setError('No se pudo conectar. Revisá tu internet y probá de nuevo.');
+      setLoading(false);
+      return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password: pass });
+    const { error } = await supabase.auth.setSession({
+      access_token: sesion.access_token,
+      refresh_token: sesion.refresh_token,
+    });
     if (error) {
-      setError('Credenciales incorrectas. Verificá tu usuario y contraseña.');
+      setError('No se pudo iniciar la sesión. Probá de nuevo.');
       setLoading(false);
       return;
     }
