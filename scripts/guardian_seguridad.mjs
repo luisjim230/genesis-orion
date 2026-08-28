@@ -157,6 +157,27 @@ if (SERVICE_KEY) {
   }
 }
 
+// ── 6.6 Pantallas que tardan de más ─────────────────────────────────────────
+// El 28/8/2026 el punto de equilibrio "no calculaba". No era el cálculo: las
+// políticas se evaluaban una vez por fila sobre las 786k ventas y la consulta
+// nunca terminaba. Una pantalla que tarda 30 segundos está rota igual que una
+// que da error, pero no avisa. Se mide lo que sostiene los números pesados.
+if (SERVICE_KEY) {
+  const svc = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+  const PESADAS = [
+    ['incomodidad_equilibrio', 'punto de equilibrio'],
+    ['per_estado_resultados', 'estado de resultados'],
+    ['incomodidad_gasto_fijo', 'gasto fijo'],
+  ];
+  for (const [vista, humano] of PESADAS) {
+    const arranque = Date.now();
+    const r = await pedir(`${SUPABASE_URL}/rest/v1/${vista}?select=*&limit=1`, { headers: svc }, 30000);
+    const seg = Math.round((Date.now() - arranque) / 100) / 10;
+    if (!r.ok) rotos.push(`El <b>${humano}</b> no responde (${r.status || r._err})`);
+    else if (seg > 8) rotos.push(`El <b>${humano}</b> tardó ${seg}s en responder: la pantalla se va a ver colgada`);
+  }
+}
+
 // ── 6.7 El login tiene que dejar entrar ─────────────────────────────────────
 // El 28/8/2026 media empresa se quedó afuera con "Usuario no encontrado": la
 // pantalla de login iba a buscar el correo a una ruta que había pasado a exigir
@@ -220,6 +241,7 @@ if (huecos.length === 0 && rotos.length === 0) {
     `   · Sin login: ${TABLAS.length} tablas, ${RUTAS.length} rutas y 3 procesos pesados probados — ninguno dejó pasar.\n` +
     `   · Login con nombre de usuario: 7 usuarios probados — todos llegan a validar.\n` +
     `   · Pantallas: nadie con permiso se queda viendo una lista vacía.\n` +
+    `   · Números pesados (equilibrio, estado de resultados): responden a tiempo.\n` +
     `   · Login, Club y Rifa: en pie.`
   );
   process.exit(0);
