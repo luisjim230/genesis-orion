@@ -19,8 +19,8 @@ function dias(desde, hasta) {
 //   solicitudes / monto_solicitudes  -> compras pedidas que nadie pagó todavía
 //   sin_factura / monto_sin_factura  -> ya se pagó y falta la factura del proveedor
 //   docs_faltantes                   -> compras a las que les falta algún respaldo
-export async function GET() {
-  const _g = await requireUserOrMachine(undefined); if (_g.response) return _g.response;
+export async function GET(request) {
+  const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
   return handle(async () => {
     const db = getDb()
