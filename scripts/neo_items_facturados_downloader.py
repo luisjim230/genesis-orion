@@ -100,6 +100,38 @@ def supa_request(method, path, data=None, prefer="resolution=merge-duplicates,re
     return None
 
 
+def supa_count(path):
+    """Cuántas filas hay ya cargadas que matcheen `path`. None si falla la consulta.
+
+    Usa `count=estimated` (estimación del planner para conjuntos grandes, conteo
+    exacto para los chicos): alcanza para comparar órdenes de magnitud y no
+    dispara Disk IO barriendo la tabla.
+    """
+    url = f"{SUPA_URL}/rest/v1/{path}&select=factura&limit=1"
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("apikey", SUPA_KEY)
+    req.add_header("Authorization", f"Bearer {SUPA_KEY}")
+    req.add_header("Prefer", "count=estimated")
+    req.add_header("Range-Unit", "items")
+    req.add_header("Range", "0-0")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            content_range = r.headers.get("Content-Range", "")
+    except Exception as e:
+        log.warning(f"Supabase count {path}: {e}")
+        return None
+    cuenta = content_range.split("/")[-1]
+    return int(cuenta) if cuenta.isdigit() else None
+
+
+def marcar_sync_status(exito):
+    ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    supa_request("PATCH", "sync_status?id=eq.items_facturados", {
+        "ultima_sync": ahora, "exitoso": exito, "updated_at": ahora,
+    })
+    log.info("  sync_status actualizado")
+
+
 # ─── NORMALIZACIÓN ────────────────────────────────────────────────────────────
 
 def norm(s):
@@ -293,14 +325,45 @@ def subir_a_supabase(excel_path):
     df = df.drop_duplicates(subset=["factura", "codigo_interno", "bodega"], keep="last")
 
     total = len(df)
-    if total < 5:
-        log.error(f"❌ Solo {total} filas — posible error. Abortando.")
-        return False
 
-    # Metadatos
     hoy = date.today()
     fecha_carga = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     periodo = f"{hoy.year}-{str(hoy.month).zfill(2)}"
+
+    # ── Guardia anti-descarga-rota (relativa, no un mínimo fijo) ──────────────
+    # Antes se exigía un mínimo fijo de 5 filas y eso rompe el día 1 del mes: el
+    # rango que se le pide a NEO es "1° del mes → hoy", así que a las 7am del 1°
+    # el reporte trae 2 líneas REALES y el script las tomaba por descarga rota
+    # (abortó los 3 intentos del slot y disparó la alerta de sync caído el
+    # 1/9/2026). Pocas filas no es sinónimo de error.
+    # Lo que sí hay que atajar es un export truncado (NEO exporta la grilla a
+    # medio cargar cuando vence el timeout de 90s): eso borraría el período y lo
+    # dejaría incompleto. Se detecta comparando contra lo que YA hay cargado del
+    # mismo período: dentro de un mes las líneas solo se acumulan, así que una
+    # caída brusca es descarga rota, no realidad.
+    previas = supa_count(f"{TABLA}?periodo_reporte=eq.{periodo}")
+    if previas is None:
+        log.warning("  ⚠ no se pudo contar lo ya cargado del período — sigo sin comparar")
+        previas = 0
+
+    if total == 0:
+        if previas == 0:
+            log.info(f"  Sin líneas facturadas todavía en {periodo} — nada que cargar, "
+                     f"no se toca la tabla.")
+            marcar_sync_status(True)
+            return True
+        log.error(f"❌ 0 filas pero {periodo} ya tenía {previas:,} cargadas — descarga rota. "
+                  f"Abortando (no se toca la tabla).")
+        return False
+
+    if previas >= 20 and total < previas * 0.5:
+        log.error(f"❌ Solo {total:,} filas contra {previas:,} ya cargadas de {periodo} — "
+                  f"descarga truncada. Abortando (no se toca la tabla).")
+        return False
+
+    log.info(f"  Validación OK: {total:,} filas ({periodo} tenía {previas:,})")
+
+    # Metadatos
     df["fecha_carga"]     = fecha_carga
     df["periodo_reporte"] = periodo
     df["mes"]             = periodo  # requerido por mv_items_por_vend_mes y RPCs
@@ -401,11 +464,7 @@ def subir_a_supabase(excel_path):
             log.warning(f"  ⚠ refresh de vista materializada falló (status={refresh_status})")
 
     # Actualizar sync_status
-    ahora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    supa_request("PATCH", "sync_status?id=eq.items_facturados", {
-        "ultima_sync": ahora, "exitoso": exito, "updated_at": ahora,
-    })
-    log.info("  sync_status actualizado")
+    marcar_sync_status(exito)
 
     return exito
 
