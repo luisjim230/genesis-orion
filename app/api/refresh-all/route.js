@@ -61,4 +61,5 @@ export async function POST(request) {
   });
 }
 
-export async function GET(request) { return POST(request); }
+// Sin handler GET: un refresco forzado no debe poder dispararse desde una
+// navegación del navegador o un <img> (CSRF). El daemon y los crons usan POST.

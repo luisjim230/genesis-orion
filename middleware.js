@@ -20,6 +20,62 @@ const CLUB_HOST = (process.env.CLUB_DOMAIN || 'club.depositojimenez.com').toLowe
 // Configurable por env var RIFA_DOMAIN.
 const RIFA_HOST = (process.env.RIFA_DOMAIN || 'rifa.depositojimenez.com').toLowerCase();
 
+// ────────────────────────────────────────────────────────────────────────────
+// GUARD DE /api — segunda capa de defensa (la primera es requirePermiso /
+// requireUserOrMachine dentro de cada route, ver lib/auth-server.js).
+//
+// Cubre cualquier ruta que hoy o mañana se olvide del guard. Verifica el JWT
+// de la sesión LOCALMENTE con getClaims (JWKS, llaves asimétricas ES256), sin
+// llamar a GoTrue por request, así no reaparece el rate limit / 504 que motivó
+// dejar /api sin candado en el middleware.
+//
+// Reglas:
+//  - Rutas públicas explícitas (login, página /marcar-interno) → pasan.
+//  - Llamada de máquina (header x-sol-key o Authorization: Bearer <llave>) →
+//    pasa al route, que valida la llave contra Supabase (esLlamadaDeMaquina).
+//    Una llave falsa no sirve: el route la rechaza igual.
+//  - Todo lo demás → sesión de SOL válida o 401.
+// ────────────────────────────────────────────────────────────────────────────
+const API_PUBLICAS = new Set([
+  '/api/login',                          // así entra la gente a SOL
+  '/api/metricas-web/mark-internal',     // página pública /marcar-interno
+  '/api/metricas-web/internal-devices',  // página pública /marcar-interno
+]);
+
+function apiNoAutorizado() {
+  return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+}
+
+function traeLlaveDeMaquina(req) {
+  const key = req.headers.get('x-sol-key')
+    || (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  return !!key && key.length >= 40;
+}
+
+// ¿La request trae una sesión de SOL válida? Verificación local del JWT.
+async function tieneSesionValida(req) {
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { cookies: { getAll() { return req.cookies.getAll(); }, setAll() { /* solo lectura */ } } }
+    );
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return false;
+    const { data, error } = await supabase.auth.getClaims(session.access_token);
+    return !error && !!data?.claims?.sub;
+  } catch {
+    return false;
+  }
+}
+
+async function guardApi(req, pathname) {
+  const pasar = () => NextResponse.next({ request: { headers: req.headers } });
+  if (API_PUBLICAS.has(pathname)) return pasar();
+  if (traeLlaveDeMaquina(req)) return pasar();
+  return (await tieneSesionValida(req)) ? pasar() : apiNoAutorizado();
+}
+
 export async function middleware(req) {
   // ────────────────────────────────────────────────────────────────────────
   // CHECK ESPECIAL: dominio del acortador.
@@ -155,9 +211,13 @@ export async function middleware(req) {
     return NextResponse.next({ request: { headers: h } });
   }
 
+  // /api: sesión (o llave de máquina) obligatoria, con excepciones explícitas.
+  if (pathname.startsWith('/api')) {
+    return guardApi(req, pathname);
+  }
+
   if (
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
     pathname.startsWith('/marcar-interno') ||
     pathname.startsWith('/s/')
   ) {
