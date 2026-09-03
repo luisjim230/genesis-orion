@@ -10,7 +10,7 @@
 //
 // Variables de entorno:
 //   GA4_MEASUREMENT_ID         (G-237EPSVR3Z)
-//   GA4_MEASUREMENT_API_SECRET (jnTUBYNNRO2xlLAs71hg_A)
+//   GA4_MEASUREMENT_API_SECRET (solo en variables de entorno; rotar si se filtró)
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
@@ -21,7 +21,7 @@ export async function POST(req) {
     if (!client_id) return NextResponse.json({ error: 'client_id requerido' }, { status: 400 });
 
     const measurementId = process.env.GA4_MEASUREMENT_ID || 'G-237EPSVR3Z';
-    const apiSecret = process.env.GA4_MEASUREMENT_API_SECRET || 'jnTUBYNNRO2xlLAs71hg_A';
+    const apiSecret = process.env.GA4_MEASUREMENT_API_SECRET; // sin fallback hardcodeado
 
     if (!measurementId || !apiSecret) {
       return NextResponse.json({

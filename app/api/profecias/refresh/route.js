@@ -17,8 +17,5 @@ export async function POST() {
   }
 }
 
-export async function GET() {
-  const _g = await requirePermiso('profecias'); if (_g.response) return _g.response;
-
-  return POST();
-}
+// Sin handler GET: el refresco de la vista no debe dispararse desde una
+// navegación del navegador o un <img> (CSRF). La app lo llama con POST.
