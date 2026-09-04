@@ -99,7 +99,12 @@ function ProfeciasInner() {
     setRefrescando(true);
     setRefreshMsg(null);
     try {
-      const r = await fetch('/api/refresh-all', { method: 'POST' });
+      // force: lo pidió una persona a mano, se saltea el throttle.
+      const r = await fetch('/api/refresh-all', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Error');
       const fallidas = (j.detalle || []).filter(d => !d.ok).map(d => d.rpc);
