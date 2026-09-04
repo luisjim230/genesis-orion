@@ -19,11 +19,15 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
   const [verRevisadas, setVerRevisadas] = useState(false)
   const [marcando, setMarcando] = useState(null)
   const [descartar, setDescartar] = useState(null) // { id }
+  const [modoSel, setModoSel] = useState(false)           // selección múltiple (SOLO para descartar)
+  const [seleccion, setSeleccion] = useState([])          // ids marcados
+  const [descartarLote, setDescartarLote] = useState(false)
   const [sincronizando, setSincronizando] = useState(false)
   const [syncMsg, setSyncMsg] = useState(null)
   const [resumenColapsado, setResumenColapsado] = useState(!!cat?.ui_prefs?.resumen_colapsado)
   const [listaColapsada, setListaColapsada] = useState(!!cat?.ui_prefs?.lista_colapsada)
   const fileRef = useRef(null)
+  const ultimoTocado = useRef(null) // para marcar rangos con Shift
 
   // Guardar preferencias de UI por usuario (en la base, no en el navegador)
   const guardarPref = useCallback((patch) => {
@@ -126,6 +130,43 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
       await cargar(); await cargarIgnoradas()
     } catch (e) { alert(e.message) }
   }, [email, selId, cargar, cargarIgnoradas])
+
+  // ── Selección múltiple: EXISTE SOLO PARA DESCARTAR ─────────────────────────
+  // A propósito no hay ninguna acción en lote que cree, edite ni apruebe
+  // asientos: mientras el modo está activo, el editor de la derecha se esconde.
+  const salirSeleccion = useCallback(() => {
+    setModoSel(false); setSeleccion([]); ultimoTocado.current = null
+  }, [])
+
+  const toggleSel = useCallback((id, shift) => {
+    setSeleccion((prev) => {
+      const set = new Set(prev)
+      const idx = lista.findIndex((a) => a.id === id)
+      const prevIdx = ultimoTocado.current == null ? -1 : lista.findIndex((a) => a.id === ultimoTocado.current)
+      if (shift && idx >= 0 && prevIdx >= 0) {
+        const [ini, fin] = idx < prevIdx ? [idx, prevIdx] : [prevIdx, idx]
+        const marcar = !set.has(id)
+        for (let i = ini; i <= fin; i++) { if (marcar) set.add(lista[i].id); else set.delete(lista[i].id) }
+      } else if (set.has(id)) set.delete(id)
+      else set.add(id)
+      ultimoTocado.current = id
+      return [...set]
+    })
+  }, [lista])
+
+  const confirmarDescarteLote = useCallback(async (motivo) => {
+    try {
+      const r = await api('/asientos/descartar-lote', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: seleccion, motivo, actor: email }),
+      })
+      setDescartarLote(false)
+      salirSeleccion()
+      setSyncMsg(`🗑️ ${r.descartados} borrador${r.descartados === 1 ? '' : 'es'} descartado${r.descartados === 1 ? '' : 's'}.`)
+      setTimeout(() => setSyncMsg(null), 6000)
+      await cargar(); await cargarIgnoradas()
+    } catch (e) { alert(e.message) }
+  }, [seleccion, email, salirSeleccion, cargar, cargarIgnoradas])
 
   const recargarDetalle = useCallback(async () => {
     if (selId) { try { setDetalle(await api(`/asientos/${selId}`)) } catch { /* */ } }
@@ -272,8 +313,33 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
           <div style={{ background: 'white', border: `1px solid ${C.borde}`, borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ padding: '8px 12px', background: C.crema, fontSize: 12, fontWeight: 700, color: C.vino, borderBottom: `1px solid ${C.borde}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>Borradores ({lista.length})</span>
-              <button onClick={toggleLista} title="Colapsar la lista" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gris, fontSize: 14 }}>◂</button>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {lista.length > 0 && (
+                  <button onClick={() => (modoSel ? salirSeleccion() : setModoSel(true))}
+                    title="Marcar varios borradores y descartarlos todos juntos"
+                    style={{ background: modoSel ? C.naranja + '18' : 'white', border: `1px solid ${modoSel ? C.naranja : C.bordeFuerte}`, borderRadius: 7, padding: '3px 8px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', color: C.vino, fontFamily: 'inherit' }}>
+                    {modoSel ? 'Salir' : '☑ Seleccionar'}
+                  </button>
+                )}
+                <button onClick={toggleLista} title="Colapsar la lista" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gris, fontSize: 14 }}>◂</button>
+              </span>
             </div>
+            {modoSel && (
+              <div style={{ padding: '8px 12px', background: 'white', borderBottom: `1px solid ${C.borde}`, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.vino, flex: 1, minWidth: 84 }}>
+                  {seleccion.length} marcada{seleccion.length === 1 ? '' : 's'}
+                </span>
+                <button onClick={() => setSeleccion(lista.map((a) => a.id))} style={miniBtn}>Todas</button>
+                <button onClick={() => setSeleccion([])} style={miniBtn}>Ninguna</button>
+                <button onClick={() => setDescartarLote(true)} disabled={!seleccion.length}
+                  style={{ ...btn(C.rojo), padding: '6px 11px', fontSize: 12, opacity: seleccion.length ? 1 : 0.45, cursor: seleccion.length ? 'pointer' : 'not-allowed' }}>
+                  🗑️ Descartar {seleccion.length || ''}
+                </button>
+                <div style={{ width: '100%', fontSize: 11, color: C.grisClaro, lineHeight: 1.45 }}>
+                  Esta selección <b>solo descarta</b> (no crea ni aprueba asientos). Shift+clic marca un rango.
+                </div>
+              </div>
+            )}
             {loading ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>Cargando…</div>
               : lista.length === 0 ? <div style={{ padding: 20, color: C.gris, fontSize: 13 }}>No hay borradores. Soltá una factura arriba.</div>
               : (
@@ -281,14 +347,23 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                   {lista.map((a) => {
                     const esNC = a.factura?.tipo_documento === 'NotaCreditoElectronica'
                     const morado = '#7c3aed'
+                    const marcado = modoSel && seleccion.includes(a.id)
                     return (
-                    <div key={a.id} onClick={() => setSelId(a.id)}
+                    <div key={a.id}
+                      onClick={(e) => (modoSel ? toggleSel(a.id, e.shiftKey) : setSelId(a.id))}
                       style={{
                         padding: '9px 10px 9px 12px', borderBottom: `1px solid ${C.borde}`, cursor: 'pointer',
-                        background: a.id === selId ? (esNC ? morado + '22' : C.naranja + '18') : (esNC ? morado + '0d' : 'white'),
-                        borderLeft: `4px solid ${esNC ? morado : (a.id === selId ? C.naranja : 'transparent')}`,
+                        userSelect: modoSel ? 'none' : 'auto',
+                        background: marcado ? C.rojo + '14'
+                          : (!modoSel && a.id === selId) ? (esNC ? morado + '22' : C.naranja + '18')
+                          : (esNC ? morado + '0d' : 'white'),
+                        borderLeft: `4px solid ${marcado ? C.rojo : esNC ? morado : (!modoSel && a.id === selId) ? C.naranja : 'transparent'}`,
                         display: 'flex', gap: 6, alignItems: 'flex-start',
                       }}>
+                      {modoSel && (
+                        <input type="checkbox" checked={marcado} readOnly tabIndex={-1} aria-label="Marcar para descartar"
+                          style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0, accentColor: C.rojo, cursor: 'pointer' }} />
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {esNC && (
                           <div style={{ fontSize: 10, fontWeight: 800, color: 'white', background: morado, borderRadius: 5, padding: '2px 7px', display: 'inline-block', letterSpacing: 0.4, marginBottom: 4 }}>
@@ -312,8 +387,10 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
                           <span style={{ fontSize: 13, fontWeight: 600, color: esNC ? morado : C.vino, fontVariantNumeric: 'tabular-nums' }}>{esNC ? '− ' : ''}{fmtCRC(a.total_debe, a.moneda)}</span>
                         </div>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); setDescartar({ id: a.id }) }} title="Descartar este borrador"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.grisClaro, fontSize: 14, padding: '0 2px' }} aria-label="Descartar borrador">✕</button>
+                      {!modoSel && (
+                        <button onClick={(e) => { e.stopPropagation(); setDescartar({ id: a.id }) }} title="Descartar este borrador"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.grisClaro, fontSize: 14, padding: '0 2px' }} aria-label="Descartar borrador">✕</button>
+                      )}
                     </div>
                     )
                   })}
@@ -322,9 +399,20 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
           </div>
         )}
 
-        {/* Detalle: visor + editor */}
+        {/* Detalle: visor + editor. En modo selección se esconde a propósito:
+            la selección múltiple es solo para descartar, nunca para aprobar. */}
         <div>
-          {!detalle ? (
+          {modoSel ? (
+            <div style={{ padding: '34px 24px', textAlign: 'center', background: 'white', borderRadius: 12, border: `1px dashed ${C.bordeFuerte}` }}>
+              <div style={{ fontSize: 28, marginBottom: 6 }}>☑️</div>
+              <div style={{ fontWeight: 700, color: C.vino, fontSize: 15 }}>Modo selección</div>
+              <div style={{ fontSize: 12.5, color: C.gris, marginTop: 6, lineHeight: 1.6 }}>
+                Marcá en la lista los borradores que no son gasto y descartalos todos de una.<br />
+                Acá <b>no se aprueba ni se crea nada</b>: para revisar o montar un asiento, salí del modo.
+              </div>
+              <button onClick={salirSeleccion} style={{ ...btn(C.petroleo), marginTop: 14 }}>Salir del modo selección</button>
+            </div>
+          ) : !detalle ? (
             <div style={{ padding: 40, textAlign: 'center', color: C.gris, background: 'white', borderRadius: 12, border: `1px solid ${C.borde}` }}>
               Elegí un borrador de la lista.
             </div>
@@ -367,6 +455,10 @@ export default function BandejaTab({ cat, email, onMontarManual, recargarCat }) 
 
       {descartar && (
         <DescartarModal onClose={() => setDescartar(null)} onConfirmar={(motivo) => confirmarDescarte(descartar.id, motivo)} />
+      )}
+
+      {descartarLote && (
+        <DescartarModal cantidad={seleccion.length} onClose={() => setDescartarLote(false)} onConfirmar={confirmarDescarteLote} />
       )}
     </div>
   )
@@ -619,9 +711,10 @@ function AmarrePanel({ detalle, cat, email, onListo }) {
 }
 
 // ── Modal de descarte con motivo ─────────────────────────────────────────────
-function DescartarModal({ onClose, onConfirmar }) {
-  const RAPIDOS = ['Estaba probando', 'Factura equivocada', 'Duplicada', 'No es gasto']
-  const [motivo, setMotivo] = useState('')
+function DescartarModal({ onClose, onConfirmar, cantidad = 0 }) {
+  const RAPIDOS = ['No es gasto', 'Estaba probando', 'Factura equivocada', 'Duplicada']
+  const varios = cantidad > 1
+  const [motivo, setMotivo] = useState(varios ? 'No es gasto' : '')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose() }
@@ -631,8 +724,12 @@ function DescartarModal({ onClose, onConfirmar }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '60px 16px' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', borderRadius: 14, padding: '20px 22px', width: '100%', maxWidth: 440 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: C.vino, marginBottom: 4 }}>Descartar el borrador</div>
-        <div style={{ fontSize: 12.5, color: C.gris, marginBottom: 12 }}>No se borra: queda consultable y podés recuperarlo desde Enviados. ¿Por qué lo descartás?</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.vino, marginBottom: 4 }}>
+          {varios ? `Descartar ${cantidad} borradores` : 'Descartar el borrador'}
+        </div>
+        <div style={{ fontSize: 12.5, color: C.gris, marginBottom: 12 }}>
+          No se borra{varios ? 'n' : ''}: queda{varios ? 'n' : ''} consultable{varios ? 's' : ''} y podés recuperarlo{varios ? 's' : ''} desde Enviados. ¿Por qué {varios ? 'los' : 'lo'} descartás?
+        </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {RAPIDOS.map((r) => (
             <button key={r} onClick={() => setMotivo(r)}
@@ -643,7 +740,9 @@ function DescartarModal({ onClose, onConfirmar }) {
         <input autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (podés escribir el tuyo)"
           style={{ width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 8, border: `1px solid ${C.bordeFuerte}`, fontSize: 13, outline: 'none' }} />
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <button onClick={confirmar} disabled={busy} style={btn(C.vino)}>{busy ? 'Descartando…' : 'Descartar'}</button>
+          <button onClick={confirmar} disabled={busy} style={btn(C.vino)}>
+            {busy ? 'Descartando…' : varios ? `Descartar ${cantidad}` : 'Descartar'}
+          </button>
           <button onClick={onClose} style={{ background: 'white', color: C.gris, border: `1px solid ${C.bordeFuerte}`, borderRadius: 9, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
         </div>
       </div>
@@ -652,4 +751,5 @@ function DescartarModal({ onClose, onConfirmar }) {
 }
 
 const xBtn = { background: 'none', border: 'none', cursor: 'pointer', color: C.gris, fontSize: 14 }
+const miniBtn = { background: 'white', border: `1px solid ${C.bordeFuerte}`, borderRadius: 7, padding: '5px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', color: C.gris, fontFamily: 'inherit' }
 function btn(bg) { return { background: bg, color: 'white', border: 'none', borderRadius: 9, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }
