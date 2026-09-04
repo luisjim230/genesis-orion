@@ -15,18 +15,22 @@ function sb() {
 }
 
 // Refresca todas las vistas/tablas derivadas del catálogo NEO.
-// Se usa tanto desde los botones "Recalcular" del UI como desde el cron
-// diario. Cada RPC se ejecuta en paralelo y los errores se reportan por
-// separado sin abortar al resto: la idea es que un solo botón sincronice
-// inventario, consumo, ventas e indicadores BI en un único click.
+// Se usa desde el botón "Recalcular" del UI y desde el daemon de la Mac,
+// que lo llama después de cada sync exitoso.
 //
-// Va con p_force: true. Los RPC ahora traen un throttle propio (ver
-// supabase/migrations/20260819_disk_io_throttle_refresh.sql) que ignora las
-// llamadas repetidas — necesario porque reconstruir estas vistas barre las
-// 786k filas de neo_items_facturados y era el grueso del Disk IO de Supabase.
-// Acá el usuario pidió el recálculo explícitamente, así que se saltea el
-// throttle. El force solo lo acepta la base si viene con service key (este
-// route corre en el servidor); desde el navegador se ignora.
+// UNA POR VEZ, NO EN PARALELO. Cada RPC barre las 786k filas de
+// neo_items_facturados; lanzarlas las 4 juntas multiplicaba el Disk IO y
+// dejaba a Supabase sin aire para atender a la app: el 4/9/2026 SOL quedó
+// "cargando" 10 minutos con las 4 corriendo a la vez y hubo que matarlas a
+// mano. En fila tardan lo mismo en total, pero entre una y otra la base
+// sigue respondiendo.
+//
+// El p_force (saltear el throttle de
+// supabase/migrations/20260819_disk_io_throttle_refresh.sql) ahora es opt-in:
+// solo cuando una persona apretó "Recalcular". El daemon llama sin force
+// después de cada sync — varias veces por día — y ahí el throttle es
+// justamente lo que evita reconstruir todo de nuevo al pedo. El force solo lo
+// acepta la base si viene con service key; desde el navegador se ignora.
 const TAREAS = [
   { nombre: 'profecias_panel', rpc: 'refresh_profecias_panel' },
   { nombre: 'mv_consumo_mensual', rpc: 'refresh_mv_consumo_mensual' },
@@ -34,10 +38,10 @@ const TAREAS = [
   { nombre: 'bi_resumen_producto', rpc: 'bi_recalcular_resumen' },
 ];
 
-async function correrTarea(t) {
+async function correrTarea(t, force) {
   const t0 = Date.now();
   try {
-    const { data, error } = await sb().rpc(t.rpc, { p_force: true });
+    const { data, error } = await sb().rpc(t.rpc, { p_force: force });
     if (error) return { ...t, ok: false, ms: Date.now() - t0, error: error.message };
     return { ...t, ok: true, ms: Date.now() - t0, resultado: data ?? null };
   } catch (e) {
@@ -48,12 +52,18 @@ async function correrTarea(t) {
 export async function POST(request) {
   const _g = await requireUserOrMachine(request); if (_g.response) return _g.response;
 
+  // force solo si el llamador lo pide explícitamente (botón "Recalcular").
+  const body = await request.json().catch(() => ({}));
+  const force = body?.force === true;
+
   const t0 = Date.now();
-  const resultados = await Promise.all(TAREAS.map(correrTarea));
+  const resultados = [];
+  for (const t of TAREAS) resultados.push(await correrTarea(t, force));
   const okCount = resultados.filter(r => r.ok).length;
   return Response.json({
     ok: okCount === TAREAS.length,
     ms: Date.now() - t0,
+    force,
     total: TAREAS.length,
     exitosas: okCount,
     fallidas: TAREAS.length - okCount,
