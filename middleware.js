@@ -241,7 +241,25 @@ export async function middleware(req) {
       },
     }
   );
-  const { data: { session } } = await supabase.auth.getSession();
+  // Techo de tiempo para Supabase Auth. Sin esto, si GoTrue tarda (rate limit,
+  // o el disco de Supabase throttleado como el 4/9/2026), el middleware queda
+  // colgado, se pasa del límite de 25s de Vercel y la app ENTERA responde 504:
+  // pantalla gris para todo el equipo, en TODAS las pantallas a la vez.
+  //
+  // Ante demora dejamos pasar a propósito. No abre ninguna puerta: la página en
+  // sí no trae datos, cada /api valida su propia sesión y la base tiene RLS.
+  // El costo de dejar pasar es nulo; el de colgarse es la empresa parada.
+  const TECHO_AUTH_MS = 3000;
+  let session = null;
+  try {
+    const r = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('auth-lento')), TECHO_AUTH_MS)),
+    ]);
+    session = r?.data?.session ?? null;
+  } catch {
+    return res; // Auth no contestó a tiempo: que siga, la app se defiende sola.
+  }
   if (!session) return NextResponse.redirect(new URL('/login', req.url));
   return res;
 }
