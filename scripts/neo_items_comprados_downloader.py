@@ -255,18 +255,50 @@ async def descargar():
         # Re-obtener iframe (puede haber cambiado al navegar) y esperar que el formulario aparezca
         iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
         log.info("  Esperando que el formulario del reporte cargue...")
-        for _ in range(15):  # hasta 15s
+        listo = False
+        for _ in range(60):  # hasta 60s: en horario pico NEO tarda más de 15s
             try:
                 count_in = await iframe.locator("input[type='text']").count()
                 if count_in >= 4:  # formulario tiene varios inputs (fechas, etc)
                     log.info(f"  Formulario listo (inputs={count_in})")
+                    listo = True
                     break
             except Exception:
                 pass
             await page.wait_for_timeout(1000)
 
+        # Si a los 60s el formulario sigue sin aparecer, un segundo intento:
+        # volver a entrar al reporte suele destrabar el iframe a medio render.
+        if not listo:
+            log.warning("  El formulario no apareció en 60s — reintento entrando de nuevo al reporte")
+            try:
+                iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+                await iframe.get_by_role("link", name=" Ítems comprados").click()
+                await esperar_red(page)
+                await page.wait_for_timeout(3000)
+                iframe = page.locator('iframe[name="IFRAMEPRINCIPAL"]').content_frame
+                for _ in range(30):
+                    count_in = await iframe.locator("input[type='text']").count()
+                    if count_in >= 4:
+                        log.info(f"  Formulario listo en el reintento (inputs={count_in})")
+                        listo = True
+                        break
+                    await page.wait_for_timeout(1000)
+            except Exception as e:
+                log.warning(f"  El reintento tampoco levantó el formulario: {e}")
+
         # ── Setear rango de fechas (últimos 30 días) ───────────────────────────
-        await setear_fechas(iframe, f_inicio, f_fin)
+        # Si no se pueden poner las fechas, NEO exporta SU rango por defecto: un
+        # Excel con otro período que no tiene nada que ver con los últimos 30
+        # días. Antes se seguía igual y el archivo malo llegaba hasta la carga
+        # (el 4/9/2026 bajó 299 filas en vez de 1.399 y solo lo frenó el safety
+        # check de la subida, por casualidad). Cortamos acá: mejor perder la
+        # corrida y que el daemon reintente, que pisar el histórico con basura.
+        if not await setear_fechas(iframe, f_inicio, f_fin):
+            raise RuntimeError(
+                "No pude poner el rango de fechas en NEO (el formulario no cargó bien). "
+                "Corto para no exportar el período equivocado."
+            )
 
         # ── Refrescar para que NEO cargue el rango nuevo ───────────────────────
         try:
