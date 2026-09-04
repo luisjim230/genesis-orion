@@ -51,7 +51,7 @@ const tarjeta = {
 export default function GuardRuta({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, perfil, loading, puedeVer } = useAuth();
+  const { user, perfil, loading, error, reintentar, puedeVer } = useAuth();
 
   const libre = LIBRES.some(p => pathname === p || pathname?.startsWith(p));
   const modulo = libre ? null : moduloDeRuta(pathname);
@@ -77,6 +77,27 @@ export default function GuardRuta({ children }) {
 
   if (loading) {
     return <div style={caja}><div style={{ color: '#64748b' }}>Cargando…</div></div>;
+  }
+
+  // La base no contestó. Antes esto dejaba a SOL en "Cargando…" para siempre;
+  // ahora se avisa y se puede reintentar sin recargar. Va ANTES del cartel de
+  // permisos: sin perfil cargado, "no tenés acceso" sería mentira.
+  if (error && !perfil) {
+    return (
+      <div style={caja}>
+        <div style={tarjeta}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>📡</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20, color: '#0f172a' }}>No pude cargar tu usuario</h2>
+          <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 14 }}>
+            La base no respondió. No es un problema de permisos: probá de nuevo en unos segundos.
+          </p>
+          <button onClick={reintentar}
+            style={{ background: '#ED6E2E', color: '#fff', padding: '10px 20px', borderRadius: 10, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
