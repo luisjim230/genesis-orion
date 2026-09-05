@@ -85,7 +85,7 @@ export default function TabSolicitudes({ solicitudes, empleados, perfil, recarga
   }
 
   async function guardar() {
-    if (!form.empleado_nombre || !form.fecha_inicio) return
+    if (!form.empleado_id || !form.fecha_inicio) return
     if (!esPorHoras && !form.fecha_fin) return
     if (esPorHoras && (!form.hora_inicio || !form.hora_fin)) return
     setSaving(true)
@@ -185,10 +185,9 @@ export default function TabSolicitudes({ solicitudes, empleados, perfil, recarga
             <div>
               <label style={S.label}>Empleado</label>
               <select style={{ ...S.input, cursor: 'pointer' }} value={form.empleado_id} onChange={e => seleccionarEmpleado(e.target.value)}>
-                <option value="">— Escribir manualmente o seleccionar —</option>
+                <option value="">— Elegí un empleado del directorio —</option>
                 {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
-              <input style={{ ...S.input, marginTop: 6 }} value={form.empleado_nombre} onChange={e => setForm({ ...form, empleado_nombre: e.target.value })} placeholder="Nombre completo" />
             </div>
             <div>
               <label style={S.label}>Puesto</label>
@@ -234,7 +233,7 @@ export default function TabSolicitudes({ solicitudes, empleados, perfil, recarga
           </div>
           <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             {editandoId && <button onClick={cancelarForm} style={{ ...S.btn('#6b7280', true), padding: '10px 24px', fontSize: '0.9em' }}>Cancelar</button>}
-            <button onClick={guardar} disabled={saving || !form.empleado_nombre || !form.fecha_inicio || (!esPorHoras && !form.fecha_fin) || (esPorHoras && (!form.hora_inicio || !form.hora_fin))}
+            <button onClick={guardar} disabled={saving || !form.empleado_id || !form.fecha_inicio || (!esPorHoras && !form.fecha_fin) || (esPorHoras && (!form.hora_inicio || !form.hora_fin))}
               style={{ ...S.btn(GOLD, false), opacity: saving ? 0.6 : 1, padding: '10px 32px', fontSize: '0.9em' }}>
               {saving ? 'Guardando...' : editandoId ? 'Guardar Cambios' : 'Guardar Solicitud'}
             </button>
